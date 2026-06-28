@@ -1,0 +1,447 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  OWNER
+  CASHIER
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  CREDIT
+  TRANSFER
+}
+
+enum SaleType {
+  QUICK
+  INVOICED
+  TABLE
+}
+
+enum TableSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashRegisterStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  OPENING
+  INCOME
+  EXPENSE
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy   User   @relation(fields: [createdById], references: [id])
+  createdById String
+
+  @@index([name])
+}
+
+// Necessary for Next auth
+model Account {
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String? // @db.Text
+  access_token             String? // @db.Text
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String? // @db.Text
+  session_state            String?
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refresh_token_expires_in Int?
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  passwordHash  String?   @map("password_hash")
+  document      String?
+  role          UserRole  @default(OWNER)
+  isActive      Boolean   @default(false) @map("is_active")
+  canManageCash Boolean   @default(true) @map("can_manage_cash")
+  businessId    String?   @map("business_id")
+  emailVerified DateTime?
+  image         String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  accounts                Account[]
+  sessions                Session[]
+  posts                   Post[]
+  auditLogs               AuditLog[]
+  inventoryMovements      InventoryMovement[]
+  sales                   Sale[]
+  cashRegisters           CashRegister[]
+  cashMovements           CashMovement[]
+  tableSessions           TableSession[]
+  tableOrders             TableOrder[]
+  emailVerificationCodes  EmailVerificationCode[]
+  passwordResetTokens     PasswordResetToken[]
+
+  @@index([businessId])
+}
+
+model Business {
+  id               String  @id @default(cuid())
+  name             String
+  document         String  @unique
+  address          String?
+  phone            String?
+  taxes            Json    @default("[]") @map("taxes")
+  plan             String  @default("MVP") @map("plan")
+  autoTax          Boolean @default(false) @map("auto_tax")
+  maxCashRegisters Int     @default(1) @map("max_cash_registers")
+  logoUrl          String? @map("logo_url")
+  users              User[]
+  auditLogs          AuditLog[]
+  products           Product[]
+  inventoryMovements InventoryMovement[]
+  sales              Sale[]
+  customers          Customer[]
+  cashRegisters      CashRegister[]
+  cashMovements      CashMovement[]
+  tableSessions      TableSession[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model Product {
+  id         String    @id @default(cuid())
+  businessId String    @map("business_id")
+  name       String
+  price      Float
+  cost       Float?    @map("cost")
+  unit       String    @default("und") @map("unit")
+  taxRate    Float?    @map("tax_rate")
+  stock      Int       @default(0)
+  trackStock Boolean   @default(true) @map("track_stock")
+  isActive   Boolean   @default(true) @map("is_active")
+  category   String?   @map("category")
+  lotNumber  String?   @map("lot_number")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  business           Business            @relation(fields: [businessId], references: [id])
+  inventoryMovements InventoryMovement[]
+  saleItems          SaleItem[]
+  tableOrderItems    TableOrderItem[]
+
+  @@index([businessId])
+  @@map("products")
+}
+
+model InventoryMovement {
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
+  productId  String   @map("product_id")
+  userId     String   @map("user_id")
+  quantity   Int
+  reason     String
+  note       String?
+  stockAfter Int      @map("stock_after")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([productId])
+  @@map("inventory_movements")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
+  userId     String   @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  detail     Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model EmailVerificationCode {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  code      String
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verification_codes")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model PendingRegistration {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  code             String
+  expiresAt        DateTime @map("expires_at")
+  businessName     String   @map("business_name")
+  businessDocument String   @map("business_document")
+  ownerName        String   @map("owner_name")
+  ownerDocument    String   @map("owner_document")
+  passwordHash     String   @map("password_hash")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("pending_registrations")
+}
+
+model Customer {
+  id         String    @id @default(cuid())
+  businessId String    @map("business_id")
+  name       String
+  document   String?
+  email      String?
+  phone      String?
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  business    Business     @relation(fields: [businessId], references: [id])
+  sales       Sale[]
+  tableGuests TableGuest[]
+
+  @@index([businessId])
+  @@map("customers")
+}
+
+model Sale {
+  id            String        @id @default(cuid())
+  businessId    String        @map("business_id")
+  userId        String        @map("user_id")
+  customerId    String?       @map("customer_id")
+  saleType      SaleType      @default(QUICK) @map("sale_type")
+  invoiceNumber String?       @map("invoice_number")
+  status        SaleStatus    @default(COMPLETED)
+  paymentMethod PaymentMethod @default(CASH) @map("payment_method")
+  subtotal      Float
+  taxAmount     Float         @default(0) @map("tax_amount")
+  taxLines      Json?         @map("tax_lines")
+  total         Float
+  note          String?
+  voidedAt      DateTime?     @map("voided_at")
+  voidReason    String?       @map("void_reason")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  tableSessionId String?       @map("table_session_id")
+
+  business     Business      @relation(fields: [businessId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  tableSession TableSession? @relation(fields: [tableSessionId], references: [id])
+  items        SaleItem[]
+
+  @@index([businessId])
+  @@index([userId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id        String  @id @default(cuid())
+  saleId    String  @map("sale_id")
+  productId String  @map("product_id")
+  name      String
+  unit      String  @default("und")
+  price     Float
+  quantity  Int
+  subtotal  Float
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@map("sale_items")
+}
+
+model CashRegister {
+  id             String             @id @default(cuid())
+  businessId     String             @map("business_id")
+  userId         String             @map("user_id")
+  status         CashRegisterStatus @default(OPEN)
+  openingBalance Float              @map("opening_balance")
+  openedAt       DateTime           @default(now()) @map("opened_at")
+  closedAt       DateTime?          @map("closed_at")
+  closingBalance Float?             @map("closing_balance")
+  closingNote    String?            @map("closing_note")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  business  Business       @relation(fields: [businessId], references: [id])
+  user      User           @relation(fields: [userId], references: [id])
+  movements CashMovement[]
+
+  @@index([businessId])
+  @@map("cash_registers")
+}
+
+model CashMovement {
+  id             String           @id @default(cuid())
+  cashRegisterId String           @map("cash_register_id")
+  businessId     String           @map("business_id")
+  userId         String           @map("user_id")
+  type           CashMovementType
+  amount         Float
+  description    String
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id])
+  business     Business     @relation(fields: [businessId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([cashRegisterId])
+  @@index([businessId])
+  @@map("cash_movements")
+}
+
+model TableSession {
+  id         String             @id @default(cuid())
+  businessId String             @map("business_id")
+  userId     String             @map("user_id")
+  name       String
+  status     TableSessionStatus @default(OPEN)
+  openedAt   DateTime           @default(now()) @map("opened_at")
+  closedAt   DateTime?          @map("closed_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  business Business      @relation(fields: [businessId], references: [id])
+  user     User          @relation(fields: [userId], references: [id])
+  guests   TableGuest[]
+  orders   TableOrder[]
+  sales    Sale[]
+
+  @@index([businessId])
+  @@map("table_sessions")
+}
+
+model TableGuest {
+  id             String    @id @default(cuid())
+  tableSessionId String    @map("table_session_id")
+  customerId     String?   @map("customer_id")
+  name           String
+  description    String?
+  document       String?
+  phone          String?
+  addedAt        DateTime  @default(now()) @map("added_at")
+
+  tableSession TableSession @relation(fields: [tableSessionId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id])
+  orders       TableOrder[]
+
+  @@index([tableSessionId])
+  @@map("table_guests")
+}
+
+model TableOrder {
+  id             String   @id @default(cuid())
+  tableGuestId   String   @map("table_guest_id")
+  tableSessionId String   @map("table_session_id")
+  userId         String?  @map("user_id")
+  subtotal       Float
+  taxAmount      Float    @default(0) @map("tax_amount")
+  taxLines       Json?    @map("tax_lines")
+  total          Float
+  note           String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tableGuest   TableGuest      @relation(fields: [tableGuestId], references: [id], onDelete: Cascade)
+  tableSession TableSession    @relation(fields: [tableSessionId], references: [id], onDelete: Cascade)
+  user         User?           @relation(fields: [userId], references: [id])
+  items        TableOrderItem[]
+
+  @@index([tableGuestId])
+  @@index([tableSessionId])
+  @@index([userId])
+  @@map("table_orders")
+}
+
+model TableOrderItem {
+  id           String @id @default(cuid())
+  tableOrderId String @map("table_order_id")
+  productId    String @map("product_id")
+  name         String
+  unit         String @default("und")
+  price        Float
+  quantity     Int
+  subtotal     Float
+
+  tableOrder TableOrder @relation(fields: [tableOrderId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([tableOrderId])
+  @@map("table_order_items")
+}
