@@ -1,6 +1,6 @@
 import "~/styles/globals.css";
 
-import { type Metadata } from "next";
+import { type Metadata, type Viewport } from "next";
 import { Geist } from "next/font/google";
 import { Toaster } from "sonner";
 
@@ -11,7 +11,21 @@ import { TRPCReactProvider } from "~/trpc/react";
 export const metadata: Metadata = {
   title: "BILLIFY",
   description: "Punto de venta y facturación para pequeños negocios",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
+  manifest: "/manifest.webmanifest",
+  icons: [
+    { rel: "icon", url: "/favicon.ico" },
+    { rel: "apple-touch-icon", url: "/apple-touch-icon.png" },
+  ],
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "BILLIFY",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#020617",
+  viewportFit: "cover",
 };
 
 const geist = Geist({
