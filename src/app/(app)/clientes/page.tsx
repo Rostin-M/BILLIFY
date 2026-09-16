@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { auth } from "~/server/auth";
-import { HydrateClient } from "~/trpc/server";
-import { api } from "~/trpc/server";
+import { api, HydrateClient } from "~/trpc/server";
 import { CustomerManager } from "./_components/CustomerManager";
 import { PageLayout } from "~/app/_components/PageLayout";
 

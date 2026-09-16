@@ -11,16 +11,19 @@ import { SkeletonListRows } from "~/app/_components/Skeletons";
 type Customer = {
   id: string;
   name: string;
+  alias: string | null;
   document: string | null;
   email: string | null;
   phone: string | null;
   isActive: boolean;
   createdAt: Date;
   _count: { sales: number };
+  debt: number;
 };
 
 type EditForm = {
   name: string;
+  alias: string;
   document: string;
   email: string;
   phone: string;
@@ -36,6 +39,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 function emptyForm(c?: Customer): EditForm {
   return {
     name: c?.name ?? "",
+    alias: c?.alias ?? "",
     document: c?.document ?? "",
     email: c?.email ?? "",
     phone: c?.phone ?? "",
@@ -48,6 +52,8 @@ export function CustomerManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [form, setForm] = useState<EditForm>(emptyForm());
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
 
   const { data: customers = [], isPending } = api.customer.list.useQuery();
   const { data: historyData, isPending: historyLoading } = api.customer.history.useQuery(
@@ -74,6 +80,19 @@ export function CustomerManager() {
 
   const setActive = api.customer.setActive.useMutation({
     onSuccess: async () => utils.customer.list.invalidate(),
+  });
+
+  const addPayment = api.customer.addPayment.useMutation({
+    onSuccess: async (data) => {
+      toast.success(data.message);
+      setPayingId(null);
+      setPaymentAmount("");
+      await Promise.all([
+        utils.customer.list.invalidate(),
+        historyId ? utils.customer.history.invalidate({ customerId: historyId }) : Promise.resolve(),
+      ]);
+    },
+    onError: (err) => toast.error(err.message),
   });
 
   function startEdit(c: Customer) {
@@ -143,16 +162,16 @@ export function CustomerManager() {
         )}
 
         {/* Lista */}
-        {isPending ? (
-          <SkeletonListRows count={4} />
-        ) : customers.length === 0 ? (
+        {isPending && <SkeletonListRows count={4} />}
+        {!isPending && customers.length === 0 && (
           <EmptyState
             icon={Users}
             title="Sin clientes registrados"
             description="Agrega tu primer cliente para registrar historial de compras."
             onAction={{ label: "+ Nuevo cliente", onClick: () => setShowCreate(true) }}
           />
-        ) : (
+        )}
+        {!isPending && customers.length > 0 && (
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
             {customers.map((c) => (
               <li key={c.id} className="py-3">
@@ -178,39 +197,65 @@ export function CustomerManager() {
                       <button
                         type="submit"
                         disabled={updateCustomer.isPending}
-                        className="flex-1 rounded-lg bg-violet-600 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
+                        className="min-h-11 flex-1 rounded-lg bg-violet-600 text-sm font-semibold text-white disabled:opacity-60"
                       >
                         {updateCustomer.isPending ? "Guardando..." : "Guardar"}
                       </button>
                       <button
                         type="button"
                         onClick={() => setEditingId(null)}
-                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 dark:border-white/10"
+                        className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 dark:border-white/10"
                       >
                         Cancelar
                       </button>
                     </div>
                   </form>
                 ) : (
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className={`text-sm font-medium ${c.isActive ? "text-slate-800 dark:text-slate-100" : "text-slate-400 line-through dark:text-slate-500"}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className={`break-words text-sm font-medium ${c.isActive ? "text-slate-800 dark:text-slate-100" : "text-slate-400 line-through dark:text-slate-500"}`}>
                           {c.name}
                         </p>
+                        {c.alias && (
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            &quot;{c.alias}&quot;
+                          </span>
+                        )}
                         <span className="text-xs text-slate-400 dark:text-slate-500">
                           {c._count.sales} {c._count.sales === 1 ? "venta" : "ventas"}
                         </span>
+                        {c.debt > 0.01 && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                            Debe {formatCOP(c.debt)}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
                         {[c.document, c.phone, c.email].filter(Boolean).join(" · ") || "Sin datos de contacto"}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
+                      {c.debt > 0.01 && (
+                        <button
+                          onClick={() => {
+                            setPayingId(payingId === c.id ? null : c.id);
+                            setPaymentAmount("");
+                            setHistoryId(c.id);
+                          }}
+                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                            payingId === c.id
+                              ? "border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-300"
+                              : "border-slate-200 text-slate-500 hover:border-amber-200 hover:text-amber-600 dark:border-white/10 dark:text-slate-400"
+                          }`}
+                        >
+                          Abonar
+                        </button>
+                      )}
                       {c._count.sales > 0 && (
                         <button
-                          onClick={() => setHistoryId(historyId === c.id ? null : c.id)}
-                          className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                          onClick={() => { setHistoryId(historyId === c.id ? null : c.id); setPayingId(null); }}
+                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                             historyId === c.id
                               ? "border-violet-300 bg-violet-100 text-violet-700 dark:border-violet-500/40 dark:bg-violet-900/20 dark:text-violet-300"
                               : "border-slate-200 text-slate-500 hover:border-violet-200 hover:text-violet-600 dark:border-white/10 dark:text-slate-400"
@@ -221,14 +266,14 @@ export function CustomerManager() {
                       )}
                       <button
                         onClick={() => startEdit(c)}
-                        className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-violet-200 hover:text-violet-600 dark:border-white/10 dark:text-slate-400"
+                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 hover:border-violet-200 hover:text-violet-600 dark:border-white/10 dark:text-slate-400"
                       >
                         Editar
                       </button>
                       <button
                         onClick={() => setActive.mutate({ customerId: c.id, isActive: !c.isActive })}
                         disabled={setActive.isPending}
-                        className={`rounded-full px-3 py-1 text-xs font-medium transition disabled:opacity-50 ${
+                        className={`rounded-full px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
                           c.isActive
                             ? "bg-emerald-100 text-emerald-700 hover:bg-red-100 hover:text-red-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-red-500/20 dark:hover:text-red-300"
                             : "bg-red-100 text-red-700 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300"
@@ -240,34 +285,107 @@ export function CustomerManager() {
                   </div>
                 )}
 
+                {/* Formulario de abono */}
+                {payingId === c.id && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-900/10">
+                    <p className="mb-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                      Deuda actual: {formatCOP(c.debt)}
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={paymentAmount}
+                        onChange={(e) => setPaymentAmount(e.target.value)}
+                        placeholder="Monto a abonar"
+                        className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        onClick={() => addPayment.mutate({ customerId: c.id, amount: Number(paymentAmount) })}
+                        disabled={!paymentAmount || Number(paymentAmount) <= 0 || addPayment.isPending}
+                        className="min-h-11 flex-1 rounded-lg bg-amber-600 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
+                      >
+                        {addPayment.isPending ? "Guardando..." : "Abonar"}
+                      </button>
+                      <button
+                        onClick={() => addPayment.mutate({ customerId: c.id, amount: c.debt })}
+                        disabled={addPayment.isPending}
+                        className="min-h-11 flex-1 rounded-lg bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        Pagar deuda completa
+                      </button>
+                      <button
+                        onClick={() => setPayingId(null)}
+                        className="min-h-11 rounded-lg border border-amber-200 px-3 text-sm text-amber-700 hover:bg-amber-100 dark:border-amber-500/30 dark:text-amber-300"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Historial expandible */}
                 {historyId === c.id && (
                   <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
-                    {historyLoading ? (
+                    {historyLoading && (
                       <p className="text-xs text-slate-400">Cargando historial...</p>
-                    ) : !historyData || historyData.sales.length === 0 ? (
+                    )}
+                    {!historyLoading && (!historyData || (historyData.sales.length === 0 && historyData.payments.length === 0)) && (
                       <p className="text-xs text-slate-400">Sin ventas registradas.</p>
-                    ) : (
+                    )}
+                    {!historyLoading && historyData && (historyData.sales.length > 0 || historyData.payments.length > 0) && (
                       <>
-                        <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                          Total comprado: {formatCOP(historyData.totalSpent)}
-                        </p>
+                        <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          <span>Total comprado: {formatCOP(historyData.totalSpent)}</span>
+                          {historyData.creditTotal > 0 && (
+                            <span className={historyData.debt > 0.01 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}>
+                              Deuda: {formatCOP(Math.max(historyData.debt, 0))}
+                            </span>
+                          )}
+                        </div>
                         <ul className="space-y-1.5">
-                          {historyData.sales.map((s) => (
-                            <li key={s.id} className="flex items-center justify-between text-xs">
-                              <div>
-                                <span className="font-medium text-slate-700 dark:text-slate-200">
-                                  {s.invoiceNumber ?? "Venta rápida"}
+                          {[
+                            ...historyData.sales.map((s) => ({
+                              key: `sale-${s.id}`,
+                              date: s.createdAt,
+                              label: s.invoiceNumber ?? "Venta rápida",
+                              detail: `${formatDate(s.createdAt)} · ${PAYMENT_LABELS[s.paymentMethod] ?? s.paymentMethod}`,
+                              amount: s.total,
+                              kind: "sale" as const,
+                            })),
+                            ...historyData.payments.map((p) => ({
+                              key: `payment-${p.id}`,
+                              date: p.createdAt,
+                              label: "Abono a deuda",
+                              detail: `${formatDate(p.createdAt)}${p.user?.name ? ` · ${p.user.name}` : ""}`,
+                              amount: p.amount,
+                              kind: "payment" as const,
+                            })),
+                          ]
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            .map((entry) => (
+                              <li key={entry.key} className="flex items-center justify-between text-xs">
+                                <div>
+                                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                                    {entry.label}
+                                  </span>
+                                  <span className="ml-2 text-slate-400 dark:text-slate-500">{entry.detail}</span>
+                                </div>
+                                <span
+                                  className={`font-semibold ${
+                                    entry.kind === "payment"
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-slate-700 dark:text-slate-200"
+                                  }`}
+                                >
+                                  {entry.kind === "payment" ? "− " : ""}
+                                  {formatCOP(entry.amount)}
                                 </span>
-                                <span className="ml-2 text-slate-400 dark:text-slate-500">
-                                  {formatDate(s.createdAt)} · {PAYMENT_LABELS[s.paymentMethod] ?? s.paymentMethod}
-                                </span>
-                              </div>
-                              <span className="font-semibold text-slate-700 dark:text-slate-200">
-                                {formatCOP(s.total)}
-                              </span>
-                            </li>
-                          ))}
+                              </li>
+                            ))}
                         </ul>
                       </>
                     )}
@@ -285,10 +403,10 @@ export function CustomerManager() {
 function CustomerFields({
   form,
   handleField,
-}: {
+}: Readonly<{
   form: EditForm;
   handleField: (f: keyof EditForm) => (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
+}>) {
   return (
     <>
       <label className="block space-y-1 text-sm">
@@ -300,6 +418,15 @@ function CustomerFields({
           value={form.name}
           onChange={handleField("name")}
           placeholder="Nombre completo"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900 dark:text-white"
+        />
+      </label>
+      <label className="block space-y-1 text-sm">
+        <span className="text-slate-700 dark:text-slate-300">Alias</span>
+        <input
+          value={form.alias}
+          onChange={handleField("alias")}
+          placeholder="Ej: Don Pedro, el de la tienda"
           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900 dark:text-white"
         />
       </label>

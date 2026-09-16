@@ -8,7 +8,7 @@ const sizeMap: Record<LogoSize, number> = {
   lg: 128,
 };
 
-export function Logo({ size = "md", className }: { size?: LogoSize; className?: string }) {
+export function Logo({ size = "md", className }: Readonly<{ size?: LogoSize; className?: string }>) {
   const px = sizeMap[size];
   return (
     <Image

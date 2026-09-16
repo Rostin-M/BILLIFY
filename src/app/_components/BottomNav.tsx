@@ -19,7 +19,7 @@ const SHORT_LABELS: Record<string, string> = {
 
 type Props = { role: UserRole };
 
-export function BottomNav({ role }: Props) {
+export function BottomNav({ role }: Readonly<Props>) {
   const pathname = usePathname();
   const items = getBottomNavItems(role);
 

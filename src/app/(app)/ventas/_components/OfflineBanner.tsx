@@ -10,7 +10,7 @@ type Props = {
   onManualSync: () => void;
 };
 
-export function OfflineBanner({ isOnline, pendingCount, isSyncing, syncErrors, onManualSync }: Props) {
+export function OfflineBanner({ isOnline, pendingCount, isSyncing, syncErrors, onManualSync }: Readonly<Props>) {
   if (isOnline && pendingCount === 0 && syncErrors.length === 0) return null;
 
   return (

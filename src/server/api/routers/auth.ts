@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
+import { randomInt } from "crypto";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
@@ -25,7 +26,7 @@ export const registerOwnerSchema = z.object({
 });
 
 function generateCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(randomInt(100000, 1000000));
 }
 
 function addMinutes(date: Date, minutes: number): Date {

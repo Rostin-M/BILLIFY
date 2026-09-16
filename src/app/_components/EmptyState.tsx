@@ -7,7 +7,7 @@ type Props = {
   onAction?: { label: string; onClick: () => void };
 };
 
-export function EmptyState({ icon: Icon, title, description, onAction }: Props) {
+export function EmptyState({ icon: Icon, title, description, onAction }: Readonly<Props>) {
   return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">

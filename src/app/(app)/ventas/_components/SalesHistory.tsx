@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import type { BusinessInfoForPdf, TaxLine } from "~/lib/pdf/FacturaPDF";
 
@@ -19,7 +20,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 type Props = { isOwner: boolean; business: BusinessInfoForPdf };
 
-export function SalesHistory({ isOwner, business }: Props) {
+export function SalesHistory({ isOwner, business }: Readonly<Props>) {
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -32,12 +33,12 @@ export function SalesHistory({ isOwner, business }: Props) {
     onSuccess: async (data) => {
       setVoidingId(null);
       setVoidReason("");
-      alert(data.message);
+      toast.success(data.message);
       await utils.sale.list.invalidate();
       await utils.product.search.invalidate();
     },
     onError: (err) => {
-      alert(err.message);
+      toast.error(err.message);
     },
   });
 

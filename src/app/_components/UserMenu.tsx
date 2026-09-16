@@ -1,14 +1,14 @@
 "use client";
 
 import { signOut } from "next-auth/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { KeyRound, LogOut } from "lucide-react";
 import { api } from "~/trpc/react";
 
 type Props = { name: string | null; role: string };
 
-export function UserMenu({ name, role }: Props) {
+export function UserMenu({ name, role }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [current, setCurrent] = useState("");
@@ -31,6 +31,15 @@ export function UserMenu({ name, role }: Props) {
     : "?";
 
   const mismatch = next.length > 0 && confirm.length > 0 && next !== confirm;
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
 
   function openModal() {
     setOpen(false);
@@ -75,7 +84,7 @@ export function UserMenu({ name, role }: Props) {
 
         {open && (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+            <div className="fixed inset-0 z-30" aria-hidden="true" onClick={() => setOpen(false)} />
             <div className="absolute right-0 top-full z-40 mt-1.5 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
               <div className="border-b border-slate-100 px-3 py-2 dark:border-white/10">
                 <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{name}</p>

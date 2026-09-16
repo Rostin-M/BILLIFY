@@ -13,8 +13,8 @@ export function CashOpenForm() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const amount = parseFloat(openingBalance);
-    if (isNaN(amount) || amount < 0) return;
+    const amount = Number.parseFloat(openingBalance);
+    if (Number.isNaN(amount) || amount < 0) return;
     openRegister.mutate({ openingBalance: amount });
   }
 
@@ -54,9 +54,9 @@ export function CashOpenForm() {
                 autoFocus
               />
             </div>
-            {openingBalance && !isNaN(parseFloat(openingBalance)) && (
+            {openingBalance && !Number.isNaN(Number.parseFloat(openingBalance)) && (
               <p className="text-xs text-slate-400">
-                {formatCOP(parseFloat(openingBalance))}
+                {formatCOP(Number.parseFloat(openingBalance))}
               </p>
             )}
           </label>
@@ -69,7 +69,7 @@ export function CashOpenForm() {
 
           <button
             type="submit"
-            disabled={!openingBalance || isNaN(parseFloat(openingBalance)) || openRegister.isPending}
+            disabled={!openingBalance || Number.isNaN(Number.parseFloat(openingBalance)) || openRegister.isPending}
             className="w-full rounded-xl bg-violet-600 py-3 text-base font-bold text-white shadow transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {openRegister.isPending ? "Abriendo..." : "Abrir caja"}

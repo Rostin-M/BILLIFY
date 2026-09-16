@@ -10,7 +10,7 @@ type Props = {
   onClose?: () => void;
 };
 
-export function CajaPdfActions({ business, register, fileName, onClose }: Props) {
+export function CajaPdfActions({ business, register, fileName, onClose }: Readonly<Props>) {
   const [instance] = usePDF({
     document: <CierreCajaPDF business={business} register={register} />,
   });

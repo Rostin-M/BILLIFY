@@ -21,7 +21,7 @@ const CONSUMIDOR_FINAL: SelectedCustomer = {
   document: "222222222",
 };
 
-export function CustomerSelector({ value, onChange }: Props) {
+export function CustomerSelector({ value, onChange }: Readonly<Props>) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -75,7 +75,7 @@ export function CustomerSelector({ value, onChange }: Props) {
         </div>
         <button
           onClick={() => onChange(null)}
-          className="text-violet-400 hover:text-red-500 dark:hover:text-red-400"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg text-violet-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
           aria-label="Quitar cliente"
         >
           ×
@@ -133,6 +133,7 @@ export function CustomerSelector({ value, onChange }: Props) {
                   >
                     <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
                       {c.name}
+                      {c.alias && <span className="ml-1 font-normal text-slate-400">&quot;{c.alias}&quot;</span>}
                     </span>
                     {(c.document ?? c.phone) && (
                       <span className="text-xs text-slate-400 dark:text-slate-500">

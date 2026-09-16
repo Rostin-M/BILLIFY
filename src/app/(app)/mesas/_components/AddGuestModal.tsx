@@ -6,7 +6,7 @@ import { api } from "~/trpc/react";
 type CustomerResult = { id: string; name: string; document: string | null; phone: string | null };
 type Props = { sessionId: string; onClose: () => void; onSuccess: () => void };
 
-export function AddGuestModal({ sessionId, onClose, onSuccess }: Props) {
+export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>) {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerResult | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -55,7 +55,13 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Props) {
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold text-slate-800 dark:text-white">Agregar cliente a la mesa</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+          >
+            ✕
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -72,7 +78,14 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Props) {
                     <span className="ml-2 text-xs text-violet-500 dark:text-violet-400">Doc: {selectedCustomer.document}</span>
                   )}
                 </div>
-                <button type="button" onClick={clearCustomer} className="text-violet-400 hover:text-red-500">×</button>
+                <button
+                  type="button"
+                  onClick={clearCustomer}
+                  aria-label="Quitar cliente"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg text-violet-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                >
+                  ×
+                </button>
               </div>
             ) : (
               <div className="relative">

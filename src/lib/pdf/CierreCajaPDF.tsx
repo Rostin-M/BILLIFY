@@ -91,10 +91,10 @@ export type RegisterForPdf = {
 export function CierreCajaPDF({
   business,
   register,
-}: {
+}: Readonly<{
   business: { name: string; document: string; logoUrl?: string | null };
   register: RegisterForPdf;
-}) {
+}>) {
   const manualMovements = register.movements.filter((m) => m.type !== "OPENING");
 
   return (

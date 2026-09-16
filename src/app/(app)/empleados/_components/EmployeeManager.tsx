@@ -144,27 +144,27 @@ export function EmployeeManager() {
           </form>
         )}
 
-        {loadingList ? (
-          <SkeletonListRows count={3} />
-        ) : employees?.length === 0 ? (
+        {loadingList && <SkeletonListRows count={3} />}
+        {!loadingList && employees?.length === 0 && (
           <EmptyState
             icon={UserCog}
             title="Sin cajeros registrados"
             description="Crea una cuenta de cajero para tu equipo de trabajo."
             onAction={{ label: "+ Nuevo empleado", onClick: () => setShowForm(true) }}
           />
-        ) : (
+        )}
+        {!loadingList && employees && employees.length > 0 && (
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
             {employees?.map((emp) => (
               <li
                 key={emp.id}
                 className="flex items-center justify-between gap-3 py-3"
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{emp.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{emp.email}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{emp.name}</p>
+                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">{emp.email}</p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-wrap justify-end items-center gap-2">
                   <button
                     onClick={() =>
                       setCashManagement.mutate({
@@ -174,7 +174,7 @@ export function EmployeeManager() {
                     }
                     disabled={setCashManagement.isPending}
                     title={emp.canManageCash ? "Puede gestionar caja — clic para revocar" : "Sin acceso a caja — clic para permitir"}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       emp.canManageCash
                         ? "bg-violet-100 text-violet-700 hover:bg-slate-100 hover:text-slate-600 dark:bg-violet-500/20 dark:text-violet-300 dark:hover:bg-white/10 dark:hover:text-slate-300"
                         : "bg-slate-100 text-slate-500 hover:bg-violet-100 hover:text-violet-700 dark:bg-white/10 dark:text-slate-400 dark:hover:bg-violet-500/20 dark:hover:text-violet-300"
@@ -190,7 +190,7 @@ export function EmployeeManager() {
                       })
                     }
                     disabled={setActive.isPending}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
                       emp.isActive
                         ? "bg-emerald-100 text-emerald-700 hover:bg-red-100 hover:text-red-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-red-500/20 dark:hover:text-red-300"
                         : "bg-red-100 text-red-700 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300"

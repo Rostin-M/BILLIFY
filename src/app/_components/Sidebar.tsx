@@ -19,7 +19,7 @@ type Props = {
   onToggle: () => void;
 };
 
-export function Sidebar({ role, collapsed, onToggle }: Props) {
+export function Sidebar({ role, collapsed, onToggle }: Readonly<Props>) {
   const pathname = usePathname();
   const allItems = getNavItemsForRole(role);
   const commonItems = allItems.filter((i) => COMMON_HREFS.has(i.href));

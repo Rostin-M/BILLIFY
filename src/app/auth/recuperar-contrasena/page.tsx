@@ -54,7 +54,7 @@ export default function RecuperarContrasenaPage() {
 
       <div className="mb-8 flex flex-col items-center text-center">
         <Logo size="lg" className="logo-glow" />
-        <h1 className="mt-3 font-bold text-white" style={{ fontSize: "2rem", letterSpacing: "0.25em" }}>
+        <h1 className="mt-3 text-[2rem] font-bold tracking-[0.25em] text-white">
           BILLIFY
         </h1>
       </div>

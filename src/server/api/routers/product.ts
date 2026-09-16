@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
@@ -14,11 +15,61 @@ const productSchema = z.object({
   trackStock: z.boolean().default(true),
   category: z.string().trim().optional(),
   lotNumber: z.string().trim().optional(),
+  barcode: z.string().trim().optional(),
   expiresAt: z.coerce
     .date()
     .refine((d) => d > new Date(), "La fecha de vencimiento debe ser en el futuro")
     .optional(),
 });
+
+type ProductInput = z.infer<typeof productSchema>;
+
+function productData(input: ProductInput) {
+  return {
+    name: input.name,
+    price: input.price,
+    cost: input.cost ?? null,
+    unit: input.unit,
+    taxRate: input.taxRate ?? null,
+    stock: input.trackStock ? input.stock : 0,
+    trackStock: input.trackStock,
+    category: input.category ?? null,
+    lotNumber: input.lotNumber ?? null,
+    barcode: input.barcode ?? null,
+    expiresAt: input.expiresAt ?? null,
+  };
+}
+
+function productAuditDetail(input: ProductInput) {
+  return {
+    name: input.name,
+    price: input.price,
+    cost: input.cost,
+    unit: input.unit,
+    stock: input.stock,
+    category: input.category,
+    lotNumber: input.lotNumber,
+    expiresAt: input.expiresAt,
+  };
+}
+
+async function assertBarcodeAvailable(
+  db: PrismaClient,
+  businessId: string,
+  barcode: string,
+  excludeId?: string,
+) {
+  const duplicate = await db.product.findFirst({
+    where: { businessId, barcode, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { id: true },
+  });
+  if (duplicate) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Ya existe un producto con ese código de barras.",
+    });
+  }
+}
 
 export const productRouter = createTRPCRouter({
   // Disponible para OWNER y CASHIER — solo productos activos, usado en inventario y venta
@@ -35,6 +86,7 @@ export const productRouter = createTRPCRouter({
         stock: true,
         trackStock: true,
         category: true,
+        barcode: true,
       },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     });
@@ -58,6 +110,7 @@ export const productRouter = createTRPCRouter({
         category: true,
         lotNumber: true,
         expiresAt: true,
+        barcode: true,
       },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
     });
@@ -70,20 +123,12 @@ export const productRouter = createTRPCRouter({
   create: ownerProcedure.input(productSchema).mutation(async ({ ctx, input }) => {
     const { businessId, id: ownerId } = ctx.session.user;
 
+    if (input.barcode) {
+      await assertBarcodeAvailable(ctx.db, businessId, input.barcode);
+    }
+
     const product = await ctx.db.product.create({
-      data: {
-        businessId,
-        name: input.name,
-        price: input.price,
-        cost: input.cost ?? null,
-        unit: input.unit,
-        taxRate: input.taxRate ?? null,
-        stock: input.trackStock ? input.stock : 0,
-        trackStock: input.trackStock,
-        category: input.category ?? null,
-        lotNumber: input.lotNumber ?? null,
-        expiresAt: input.expiresAt ?? null,
-      },
+      data: { businessId, ...productData(input) },
     });
 
     await ctx.db.auditLog.create({
@@ -93,16 +138,7 @@ export const productRouter = createTRPCRouter({
         action: "CREATE_PRODUCT",
         entityType: "Product",
         entityId: product.id,
-        detail: {
-          name: input.name,
-          price: input.price,
-          cost: input.cost,
-          unit: input.unit,
-          stock: input.stock,
-          category: input.category,
-          lotNumber: input.lotNumber,
-          expiresAt: input.expiresAt,
-        },
+        detail: productAuditDetail(input),
       },
     });
 
@@ -126,20 +162,13 @@ export const productRouter = createTRPCRouter({
         });
       }
 
+      if (input.barcode) {
+        await assertBarcodeAvailable(ctx.db, businessId, input.barcode, input.id);
+      }
+
       await ctx.db.product.update({
         where: { id: input.id },
-        data: {
-          name: input.name,
-          price: input.price,
-          cost: input.cost ?? null,
-          unit: input.unit,
-          taxRate: input.taxRate ?? null,
-          stock: input.trackStock ? input.stock : 0,
-          trackStock: input.trackStock,
-          category: input.category ?? null,
-          lotNumber: input.lotNumber ?? null,
-          expiresAt: input.expiresAt ?? null,
-        },
+        data: productData(input),
       });
 
       await ctx.db.auditLog.create({
@@ -149,16 +178,7 @@ export const productRouter = createTRPCRouter({
           action: "UPDATE_PRODUCT",
           entityType: "Product",
           entityId: input.id,
-          detail: {
-            name: input.name,
-            price: input.price,
-            cost: input.cost,
-            unit: input.unit,
-            stock: input.stock,
-            category: input.category,
-            lotNumber: input.lotNumber,
-            expiresAt: input.expiresAt,
-          },
+          detail: productAuditDetail(input),
         },
       });
 

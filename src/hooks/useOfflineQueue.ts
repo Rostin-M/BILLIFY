@@ -54,6 +54,7 @@ export function useOfflineQueue(syncFn: SyncFn) {
         await syncFnRef.current({
           items: sale.items,
           paymentMethod: sale.paymentMethod,
+          customerId: sale.customerId,
           note: sale.note,
         });
         await removePendingSale(sale.localId);

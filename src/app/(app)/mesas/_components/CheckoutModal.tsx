@@ -31,7 +31,7 @@ function guestTotal(guest: Guest) {
   return guest.orders.reduce((s, o) => s + o.total, 0);
 }
 
-export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSuccess }: Props) {
+export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSuccess }: Readonly<Props>) {
   const { data: session } = useSession();
   const cashierName = session?.user?.name ?? "Cajero";
 
@@ -142,6 +142,17 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
     });
   }
 
+  let confirmLabel: string;
+  if (checkout.isPending) {
+    confirmLabel = "Procesando...";
+  } else if (keepGuests) {
+    confirmLabel = "Cobrar y mantener en mesa";
+  } else if (allIncluded) {
+    confirmLabel = "Confirmar y cerrar mesa";
+  } else {
+    confirmLabel = "Cobrar seleccionados";
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
@@ -153,7 +164,13 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
               <span className="ml-2 text-xs text-violet-500 dark:text-violet-400">· cobra: {cashierName}</span>
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+          >
+            ✕
+          </button>
         </div>
 
         <div className="space-y-4 p-5">
@@ -187,8 +204,9 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                       className="h-4 w-4 shrink-0 cursor-pointer accent-violet-600"
                       title="Desmarcar para cobrar después"
                     />
-                    <div
-                      className="min-w-0 flex-1 cursor-pointer select-none"
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
                       onClick={() => toggleGroupSelect(guest.id)}
                     >
                       <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
@@ -196,13 +214,14 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                         {guest.description && <span className="ml-1 text-xs font-normal text-slate-400">· {guest.description}</span>}
                       </p>
                       <p className="text-xs text-slate-400">{guest.orders.length} ronda{guest.orders.length !== 1 ? "s" : ""}</p>
-                    </div>
-                    <span
-                      className="cursor-pointer select-none font-semibold text-slate-800 dark:text-slate-100"
+                    </button>
+                    <button
+                      type="button"
+                      className="shrink-0 font-semibold text-slate-800 dark:text-slate-100"
                       onClick={() => toggleGroupSelect(guest.id)}
                     >
                       {fmt(total)}
-                    </span>
+                    </button>
                     {grp && (
                       <select
                         value={grp.paymentMethod}
@@ -320,13 +339,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
               disabled={noOrders || checkout.isPending || activeGroups.length === 0}
               className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {checkout.isPending
-                ? "Procesando..."
-                : keepGuests
-                  ? "Cobrar y mantener en mesa"
-                  : allIncluded
-                    ? "Confirmar y cerrar mesa"
-                    : "Cobrar seleccionados"}
+              {confirmLabel}
             </button>
             <button
               onClick={onClose}

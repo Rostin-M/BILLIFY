@@ -16,7 +16,7 @@ type Props = {
   defaultEmail?: string | null;
 };
 
-export function FacturaPdfActions({ saleId, business, sale, fileName, onClose, logoUrl, defaultEmail }: Props) {
+export function FacturaPdfActions({ saleId, business, sale, fileName, onClose, logoUrl, defaultEmail }: Readonly<Props>) {
   const businessWithLogo = { ...business, logoUrl: logoUrl ?? business.logoUrl };
   const [instance] = usePDF({ document: <FacturaPDF business={businessWithLogo} sale={sale} /> });
 

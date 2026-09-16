@@ -10,7 +10,7 @@ type Props = { isOwner: boolean; business: { name: string; document: string; log
 const formatCOP = (v: number) =>
   v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
-function OtherRegisters({ excludeRegisterId }: { excludeRegisterId?: string }) {
+function OtherRegisters({ excludeRegisterId }: Readonly<{ excludeRegisterId?: string }>) {
   const { data: others = [] } = api.cashRegister.listActive.useQuery(undefined, {
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
@@ -71,7 +71,7 @@ function OtherRegisters({ excludeRegisterId }: { excludeRegisterId?: string }) {
   );
 }
 
-export function CashRegisterView({ isOwner, business }: Props) {
+export function CashRegisterView({ isOwner, business }: Readonly<Props>) {
   const { data: activeRegister, isPending } = api.cashRegister.getActive.useQuery(undefined, {
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,

@@ -68,15 +68,12 @@ function LoginForm() {
         </div>
 
         {/* Nombre */}
-        <h1
-          className="animate-text-in mt-3 font-bold text-white"
-          style={{ fontSize: "2rem", letterSpacing: "0.25em" }}
-        >
+        <h1 className="animate-text-in mt-3 text-[2rem] font-bold tracking-[0.25em] text-white">
           BILLIFY
         </h1>
 
         {/* Copyright */}
-        <p className="animate-copy-in mt-1 text-xs text-slate-500" style={{ letterSpacing: "0.05em" }}>
+        <p className="animate-copy-in mt-1 text-xs tracking-[0.05em] text-slate-500">
           © {new Date().getFullYear()} BILLIFY · Todos los derechos reservados
         </p>
       </div>

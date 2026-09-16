@@ -9,7 +9,7 @@ type SessionData = RouterOutputs["tableSession"]["listActive"][number];
 type Business = { name: string; document: string; logoUrl?: string | null };
 type Props = { business: Business };
 
-export function MesasClient({ business }: Props) {
+export function MesasClient({ business }: Readonly<Props>) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
 
@@ -48,24 +48,26 @@ export function MesasClient({ business }: Props) {
     <div className="space-y-4">
       {/* Nueva mesa */}
       {showCreate ? (
-        <form onSubmit={handleCreate} className="flex gap-2 items-center rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-900/10">
+        <form onSubmit={handleCreate} className="flex flex-col gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-900/10 sm:flex-row sm:items-center">
           <input
             autoFocus
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Nombre de la mesa..."
-            className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+            className="min-h-11 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
           />
-          <button
-            type="submit"
-            disabled={createSession.isPending}
-            className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-50"
-          >
-            {createSession.isPending ? "Abriendo..." : "Abrir mesa"}
-          </button>
-          <button type="button" onClick={() => setShowCreate(false)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-500 hover:bg-white dark:border-white/10">
-            Cancelar
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={createSession.isPending}
+              className="min-h-11 flex-1 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-50 sm:flex-none"
+            >
+              {createSession.isPending ? "Abriendo..." : "Abrir mesa"}
+            </button>
+            <button type="button" onClick={() => setShowCreate(false)} className="min-h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-500 hover:bg-white dark:border-white/10">
+              Cancelar
+            </button>
+          </div>
           {createSession.error && (
             <p className="text-xs text-red-500">{createSession.error.message}</p>
           )}

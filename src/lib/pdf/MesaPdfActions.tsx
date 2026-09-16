@@ -12,7 +12,7 @@ type Props = {
   onClose?: () => void;
 };
 
-export function MesaPdfActions({ business, mesa, fileName, onClose }: Props) {
+export function MesaPdfActions({ business, mesa, fileName, onClose }: Readonly<Props>) {
   const [loading, setLoading] = useState(false);
 
   async function generate(action: "download" | "print") {

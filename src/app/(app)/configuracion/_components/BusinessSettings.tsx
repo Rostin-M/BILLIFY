@@ -30,7 +30,7 @@ type BusinessData = {
   logoUrl: string | null;
 };
 
-function LogoSection({ logoUrl, onLogoChange }: { logoUrl: string | null; onLogoChange: () => void }) {
+function LogoSection({ logoUrl, onLogoChange }: Readonly<{ logoUrl: string | null; onLogoChange: () => void }>) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -77,6 +77,8 @@ function LogoSection({ logoUrl, onLogoChange }: { logoUrl: string | null; onLogo
       setUploading(false);
     }
   };
+
+  const uploadButtonLabel = logoUrl ? "Cambiar logo" : "Subir logo";
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
@@ -132,7 +134,7 @@ function LogoSection({ logoUrl, onLogoChange }: { logoUrl: string | null; onLogo
             disabled={uploading}
             className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 disabled:opacity-50 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
           >
-            {uploading ? "Subiendo..." : logoUrl ? "Cambiar logo" : "Subir logo"}
+            {uploading ? "Subiendo..." : uploadButtonLabel}
           </button>
           {logoUrl && (
             <button
@@ -172,7 +174,7 @@ function parseTaxes(raw: unknown): [TaxFormItem, TaxFormItem, TaxFormItem] {
   return [get(0), get(1), get(2)];
 }
 
-function BusinessSettingsForm({ initial }: { initial: BusinessData }) {
+function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) {
   const utils = api.useUtils();
   const [logoUrl, setLogoUrl] = useState<string | null>(initial.logoUrl);
   const [form, setForm] = useState<SettingsForm>({
@@ -222,11 +224,11 @@ function BusinessSettingsForm({ initial }: { initial: BusinessData }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const maxReg = parseInt(form.maxCashRegisters, 10);
-    if (isNaN(maxReg)) return;
+    const maxReg = Number.parseInt(form.maxCashRegisters, 10);
+    if (Number.isNaN(maxReg)) return;
 
     const taxes = form.taxes
-      .map((t) => ({ name: t.name.trim(), rate: parseFloat(t.rate) || 0, enabled: t.enabled }))
+      .map((t) => ({ name: t.name.trim(), rate: Number.parseFloat(t.rate) || 0, enabled: t.enabled }))
       .filter((t) => t.name.length > 0);
 
     updateSettings.mutate({
@@ -334,29 +336,34 @@ function BusinessSettingsForm({ initial }: { initial: BusinessData }) {
           {/* Slots — solo cuando autoTax está activo */}
           {form.autoTax && (
             <div className="space-y-3">
-              <div className="grid grid-cols-[5rem_1fr_7rem] gap-2 px-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+              <div className="hidden gap-2 px-1 text-xs font-medium text-slate-500 dark:text-slate-400 sm:grid sm:grid-cols-[5rem_1fr_7rem]">
                 <span className="text-center">Activo</span>
                 <span>Nombre</span>
                 <span>Tasa (%)</span>
               </div>
               {form.taxes.map((taxItem, i) => (
-                <div key={i} className="grid grid-cols-[5rem_1fr_7rem] items-center gap-2">
-                  <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2 py-2 dark:border-white/10">
+                <div
+                  key={i}
+                  className="flex flex-col gap-2 rounded-xl border border-slate-100 p-2 dark:border-white/5 sm:grid sm:grid-cols-[5rem_1fr_7rem] sm:items-center sm:gap-2 sm:border-0 sm:p-0"
+                >
+                  <div className="flex items-center gap-2 sm:contents">
+                    <label className="flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2 py-2 dark:border-white/10">
+                      <input
+                        type="checkbox"
+                        checked={taxItem.enabled}
+                        onChange={handleTaxEnabled(i)}
+                        className="h-4 w-4 rounded accent-violet-600"
+                      />
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{i + 1}</span>
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={taxItem.enabled}
-                      onChange={handleTaxEnabled(i)}
-                      className="h-4 w-4 rounded accent-violet-600"
+                      value={taxItem.name}
+                      onChange={handleTaxText(i, "name")}
+                      disabled={!taxItem.enabled}
+                      placeholder={`Impuesto ${i + 1}`}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 dark:border-white/15 dark:bg-slate-900 dark:disabled:bg-slate-900/50"
                     />
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{i + 1}</span>
-                  </label>
-                  <input
-                    value={taxItem.name}
-                    onChange={handleTaxText(i, "name")}
-                    disabled={!taxItem.enabled}
-                    placeholder={`Impuesto ${i + 1}`}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 dark:border-white/15 dark:bg-slate-900 dark:disabled:bg-slate-900/50"
-                  />
+                  </div>
                   <div className="relative">
                     <input
                       type="number"
@@ -388,7 +395,7 @@ function BusinessSettingsForm({ initial }: { initial: BusinessData }) {
           <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
             Número máximo de cajas simultáneas permitidas para este negocio.
           </p>
-          <label className="space-y-1 text-sm" style={{ maxWidth: 160 }}>
+          <label className="max-w-40 space-y-1 text-sm">
             <span className="text-slate-700 dark:text-slate-300">Máximo de cajas</span>
             <input
               type="number"

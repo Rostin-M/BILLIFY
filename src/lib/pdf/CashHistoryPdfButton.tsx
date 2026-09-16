@@ -10,7 +10,7 @@ type Props = {
   openedAt: Date;
 };
 
-export function CashHistoryPdfButton({ registerId, business, openedAt }: Props) {
+export function CashHistoryPdfButton({ registerId, business, openedAt }: Readonly<Props>) {
   const [enabled, setEnabled] = useState(false);
 
   const { data, isPending } = api.cashRegister.getReport.useQuery(

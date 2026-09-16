@@ -9,7 +9,7 @@ type Props = {
   children: React.ReactNode;
 };
 
-export function NavShell({ role, children }: Props) {
+export function NavShell({ role, children }: Readonly<Props>) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (

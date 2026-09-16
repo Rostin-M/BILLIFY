@@ -15,7 +15,7 @@ export default function Loading() {
       <div className="absolute bottom-8 right-8 flex flex-col items-end gap-2">
 
         {/* Contenedor del logo con órbita */}
-        <div className="relative" style={{ width: 96, height: 96 }}>
+        <div className="relative h-24 w-24">
 
           {/* Estela (cola de cometa) */}
           <span className="orbit-trail-2" aria-hidden="true" />
@@ -34,16 +34,10 @@ export default function Loading() {
 
         {/* Texto de marca */}
         <div className="flex flex-col items-end gap-0.5 pr-0.5">
-          <p
-            className="font-bold tracking-[0.3em] text-slate-300"
-            style={{ fontSize: "0.7rem" }}
-          >
+          <p className="text-[0.7rem] font-bold tracking-[0.3em] text-slate-300">
             BILLIFY
           </p>
-          <p
-            className="animate-loading-text tracking-widest text-slate-600"
-            style={{ fontSize: "0.58rem", letterSpacing: "0.2em" }}
-          >
+          <p className="animate-loading-text text-[0.58rem] tracking-[0.2em] text-slate-600">
             Cargando...
           </p>
         </div>

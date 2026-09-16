@@ -18,6 +18,8 @@ function generateInvoiceNumber(year: number, sequence: number): string {
   return `F-${year}-${String(sequence).padStart(5, "0")}`;
 }
 
+type TaxLine = { name: string; rate: number; amount: number };
+
 export const saleRouter = createTRPCRouter({
   create: businessProcedure
     .input(
@@ -32,10 +34,10 @@ export const saleRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
 
-      if (input.paymentMethod === "CREDIT" && !input.note?.trim()) {
+      if (input.paymentMethod === "CREDIT" && !input.customerId) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Las ventas a crédito requieren una nota (ej. nombre del cliente o detalle del crédito).",
+          message: "Las ventas a crédito requieren seleccionar un cliente registrado.",
         });
       }
 
@@ -67,7 +69,6 @@ export const saleRouter = createTRPCRouter({
         return { productId: item.productId, name: product.name, unit: product.unit, price: product.price, quantity: item.quantity, subtotal: itemSubtotal };
       });
 
-      type TaxLine = { name: string; rate: number; amount: number };
       const taxConfigs = (business?.taxes as Array<{ name: string; rate: number; enabled: boolean }>) ?? [];
       const autoTax = business?.autoTax ?? false;
       const activeTaxes = autoTax ? taxConfigs.filter((t) => t.enabled && t.rate > 0) : [];
@@ -248,8 +249,6 @@ export const saleRouter = createTRPCRouter({
           message: "Solo se pueden enviar por correo las ventas con número de factura.",
         });
       }
-
-      type TaxLine = { name: string; rate: number; amount: number };
 
       const pdfBuffer = await generateFacturaPdfBuffer(
         { name: business.name, document: business.document, address: business.address, phone: business.phone, logoUrl: business.logoUrl },

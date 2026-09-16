@@ -10,7 +10,7 @@ const fmt = (v: number) => v.toLocaleString("es-CO", { style: "currency", curren
 
 type Props = { guestId: string; guestName: string; onClose: () => void; onSuccess: () => void };
 
-export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Props) {
+export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readonly<Props>) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
@@ -78,7 +78,13 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Props)
           <h2 className="font-semibold text-slate-800 dark:text-white">
             Agregar pedido — <span className="text-violet-600 dark:text-violet-400">{guestName}</span>
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+          >
+            ✕
+          </button>
         </div>
 
         <div className="flex flex-col gap-4 p-5 lg:flex-row">
@@ -98,23 +104,36 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Props)
                 {filtered.map((p: Product) => {
                   const inCart = cart.find((i) => i.productId === p.id);
                   const outOfStock = p.trackStock && p.stock === 0;
+
+                  let tileClass: string;
+                  if (outOfStock) {
+                    tileClass = "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50 dark:border-white/5 dark:bg-white/5";
+                  } else if (inCart) {
+                    tileClass = "border-violet-300 bg-violet-50 dark:border-violet-500/50 dark:bg-violet-900/20";
+                  } else {
+                    tileClass = "border-slate-200 bg-white hover:border-violet-200 dark:border-white/10 dark:bg-white/5";
+                  }
+
+                  let stockLabel: string;
+                  if (outOfStock) {
+                    stockLabel = "Sin stock";
+                  } else if (p.trackStock) {
+                    stockLabel = `${p.stock} disp.`;
+                  } else {
+                    stockLabel = "∞";
+                  }
+
                   return (
                     <button
                       key={p.id}
                       onClick={() => addToCart(p)}
                       disabled={outOfStock}
-                      className={`flex flex-col rounded-xl border p-2.5 text-left text-sm transition active:scale-95 ${
-                        outOfStock
-                          ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50 dark:border-white/5 dark:bg-white/5"
-                          : inCart
-                            ? "border-violet-300 bg-violet-50 dark:border-violet-500/50 dark:bg-violet-900/20"
-                            : "border-slate-200 bg-white hover:border-violet-200 dark:border-white/10 dark:bg-white/5"
-                      }`}
+                      className={`flex flex-col rounded-xl border p-2.5 text-left text-sm transition active:scale-95 ${tileClass}`}
                     >
                       <span className="font-medium text-slate-800 dark:text-slate-100 line-clamp-2">{p.name}</span>
                       <span className="mt-0.5 font-bold text-violet-600 dark:text-violet-400">{fmt(p.price)}</span>
                       <span className={`text-xs mt-0.5 ${outOfStock ? "text-red-500" : "text-slate-400"}`}>
-                        {outOfStock ? "Sin stock" : p.trackStock ? `${p.stock} disp.` : "∞"}
+                        {stockLabel}
                       </span>
                       {inCart && <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">× {inCart.quantity}</span>}
                     </button>
@@ -135,9 +154,9 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Props)
                     <li key={item.productId} className="flex items-center justify-between gap-1">
                       <span className="truncate text-sm text-slate-700 dark:text-slate-200 flex-1">{item.name}</span>
                       <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => updateQty(item.productId, -1)} className="flex h-6 w-6 items-center justify-center rounded bg-slate-200 text-xs dark:bg-white/10">−</button>
+                        <button onClick={() => updateQty(item.productId, -1)} className="flex h-8 w-8 items-center justify-center rounded bg-slate-200 text-sm transition active:scale-95 dark:bg-white/10">−</button>
                         <span className="w-4 text-center text-sm font-semibold">{item.quantity}</span>
-                        <button onClick={() => updateQty(item.productId, 1)} className="flex h-6 w-6 items-center justify-center rounded bg-slate-200 text-xs dark:bg-white/10">+</button>
+                        <button onClick={() => updateQty(item.productId, 1)} className="flex h-8 w-8 items-center justify-center rounded bg-slate-200 text-sm transition active:scale-95 dark:bg-white/10">+</button>
                       </div>
                       <span className="text-xs text-slate-500 w-16 text-right">{fmt(item.price * item.quantity)}</span>
                     </li>

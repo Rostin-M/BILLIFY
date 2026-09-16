@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useOfflineQueue } from "~/hooks/useOfflineQueue";
 import { api } from "~/trpc/react";
 import { OfflineBanner } from "./OfflineBanner";
+import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
+import { CustomerSelector } from "./CustomerSelector";
+
+type SelectedCustomer = { id?: string; name: string; document?: string; email?: string | null; isGuestWithDoc?: boolean };
 
 type CartItem = {
   productId: string;
@@ -19,10 +23,12 @@ type Product = {
   stock: number;
   trackStock: boolean;
   category: string | null;
+  barcode: string | null;
 };
 
 const QUICK_CART_KEY = "billify_quick_cart";
 const QUICK_PAYMENT_KEY = "billify_quick_payment";
+const QUICK_CUSTOMER_KEY = "billify_quick_customer";
 
 function loadLS<T>(key: string, fallback: T): T {
   try {
@@ -35,17 +41,20 @@ function loadLS<T>(key: string, fallback: T): T {
 
 type TaxConfig = { name: string; rate: number; enabled: boolean };
 
-export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }) {
+export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: boolean }>) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "CREDIT" | "TRANSFER">("CASH");
+  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(QUICK_CART_KEY, []));
     setPaymentMethod(loadLS<"CASH" | "CARD" | "CREDIT" | "TRANSFER">(QUICK_PAYMENT_KEY, "CASH"));
+    setSelectedCustomer(loadLS<SelectedCustomer | null>(QUICK_CUSTOMER_KEY, null));
     setHydrated(true);
   }, []);
 
@@ -58,6 +67,11 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
     if (!hydrated) return;
     localStorage.setItem(QUICK_PAYMENT_KEY, JSON.stringify(paymentMethod));
   }, [paymentMethod, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(QUICK_CUSTOMER_KEY, JSON.stringify(selectedCustomer));
+  }, [selectedCustomer, hydrated]);
 
   const { data: products = [], isLoading } = api.product.search.useQuery();
   const utils = api.useUtils();
@@ -74,7 +88,7 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
   });
 
   const syncFn = useCallback(
-    async (sale: { items: { productId: string; quantity: number }[]; paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER"; note?: string }) => {
+    async (sale: { items: { productId: string; quantity: number }[]; paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER"; customerId?: string; note?: string }) => {
       await createSale.mutateAsync({ ...sale, saleType: "QUICK" });
       await utils.sale.list.invalidate();
     },
@@ -93,8 +107,10 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
   function clearCart() {
     setCart([]);
     setPaymentMethod("CASH");
+    setSelectedCustomer(null);
     localStorage.removeItem(QUICK_CART_KEY);
     localStorage.removeItem(QUICK_PAYMENT_KEY);
+    localStorage.removeItem(QUICK_CUSTOMER_KEY);
     setShowClearConfirm(false);
   }
 
@@ -117,6 +133,17 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
         { productId: product.id, name: product.name, price: product.price, quantity: 1 },
       ];
     });
+  }
+
+  function handleBarcodeDetected(code: string) {
+    setShowScanner(false);
+    const product = products.find((p: Product) => p.barcode === code);
+    if (!product) {
+      showMessage("error", `Ningún producto tiene el código ${code}.`);
+      return;
+    }
+    addToCart(product);
+    showMessage("success", `${product.name} agregado al carrito.`);
   }
 
   function updateQty(productId: string, delta: number) {
@@ -144,12 +171,15 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
   const taxAmount = activeTaxes.reduce((sum, t) => sum + subtotal * (t.rate / 100), 0);
   const total = subtotal + taxAmount;
 
+  const creditRequiresCustomer = paymentMethod === "CREDIT" && !selectedCustomer?.id;
+
   async function confirmSale() {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || creditRequiresCustomer) return;
 
     const saleData = {
       items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
       paymentMethod,
+      customerId: selectedCustomer?.id,
     };
 
     if (!isOnline) {
@@ -184,13 +214,26 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
       <div className="flex h-full flex-col gap-4 lg:flex-row">
         {/* Panel izquierdo: catálogo */}
         <div className="flex flex-col gap-3 lg:w-3/5">
-          <input
-            type="search"
-            placeholder="Buscar producto..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
-          />
+          <div className="flex gap-2">
+            <input
+              type="search"
+              placeholder="Buscar producto..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
+            />
+            <button
+              type="button"
+              onClick={() => setShowScanner(true)}
+              className="shrink-0 rounded-xl border border-violet-300 bg-white px-4 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
+            >
+              📷
+            </button>
+          </div>
+
+          {showScanner && (
+            <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
+          )}
 
           {isLoading ? (
             <p className="text-center text-slate-400 dark:text-slate-500">Cargando productos...</p>
@@ -269,10 +312,10 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
                         {formatCOP(item.price * item.quantity)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
                         onClick={() => updateQty(item.productId, -1)}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-200 text-slate-700 transition hover:bg-slate-300 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
                       >
                         −
                       </button>
@@ -281,13 +324,13 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
                       </span>
                       <button
                         onClick={() => updateQty(item.productId, 1)}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-200 text-slate-700 transition hover:bg-slate-300 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
                       >
                         +
                       </button>
                       <button
                         onClick={() => removeFromCart(item.productId)}
-                        className="ml-1 flex h-7 w-7 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                        className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
                       >
                         ×
                       </button>
@@ -324,6 +367,16 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
                     </button>
                   ))}
                 </div>
+                {paymentMethod === "CREDIT" && (
+                  <div className="mt-2">
+                    <CustomerSelector value={selectedCustomer} onChange={setSelectedCustomer} />
+                    {creditRequiresCustomer && (
+                      <p className="mt-1 text-xs text-red-500">
+                        Selecciona un cliente registrado para fiar esta venta.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -368,7 +421,7 @@ export function POS({ taxes, autoTax }: { taxes: TaxConfig[]; autoTax: boolean }
           {/* Botón confirmar */}
           <button
             onClick={confirmSale}
-            disabled={cart.length === 0 || isPending}
+            disabled={cart.length === 0 || creditRequiresCustomer || isPending}
             className={`w-full rounded-2xl px-6 py-4 text-lg font-bold text-white shadow-lg transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
               !isOnline
                 ? "bg-amber-500 hover:bg-amber-400"

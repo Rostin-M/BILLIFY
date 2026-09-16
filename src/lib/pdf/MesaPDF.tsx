@@ -79,7 +79,7 @@ type Props = {
   mesa: MesaForPdf;
 };
 
-export function MesaPDF({ business, mesa }: Props) {
+export function MesaPDF({ business, mesa }: Readonly<Props>) {
   const grandTotal = mesa.guests.reduce((sum, g) => sum + g.orders.reduce((s, o) => s + o.total, 0), 0);
 
   return (

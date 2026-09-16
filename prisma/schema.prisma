@@ -112,6 +112,7 @@ model User {
   sales                   Sale[]
   cashRegisters           CashRegister[]
   cashMovements           CashMovement[]
+  customerPayments        CustomerPayment[]
   tableSessions           TableSession[]
   tableOrders             TableOrder[]
   emailVerificationCodes  EmailVerificationCode[]
@@ -137,6 +138,7 @@ model Business {
   inventoryMovements InventoryMovement[]
   sales              Sale[]
   customers          Customer[]
+  customerPayments   CustomerPayment[]
   cashRegisters      CashRegister[]
   cashMovements      CashMovement[]
   tableSessions      TableSession[]
@@ -158,6 +160,7 @@ model Product {
   category   String?   @map("category")
   lotNumber  String?   @map("lot_number")
   expiresAt  DateTime? @map("expires_at")
+  barcode    String?   @map("barcode")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
@@ -167,6 +170,7 @@ model Product {
   tableOrderItems    TableOrderItem[]
 
   @@index([businessId])
+  @@index([businessId, barcode])
   @@map("products")
 }
 
@@ -263,6 +267,7 @@ model Customer {
   id         String    @id @default(cuid())
   businessId String    @map("business_id")
   name       String
+  alias      String?
   document   String?
   email      String?
   phone      String?
@@ -270,12 +275,31 @@ model Customer {
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  business    Business     @relation(fields: [businessId], references: [id])
+  business    Business          @relation(fields: [businessId], references: [id])
   sales       Sale[]
   tableGuests TableGuest[]
+  payments    CustomerPayment[]
 
   @@index([businessId])
   @@map("customers")
+}
+
+model CustomerPayment {
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
+  customerId String   @map("customer_id")
+  userId     String   @map("user_id")
+  amount     Float
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([customerId])
+  @@map("customer_payments")
 }
 
 model Sale {

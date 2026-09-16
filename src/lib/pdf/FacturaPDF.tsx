@@ -97,7 +97,7 @@ export type SaleForPdf = {
   note: string | null;
 };
 
-export function FacturaPDF({ business, sale }: { business: BusinessInfoForPdf; sale: SaleForPdf }) {
+export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfoForPdf; sale: SaleForPdf }>) {
   return (
     <Document>
       <Page size="A4" style={s.page}>

@@ -35,6 +35,24 @@ function computeTrend(current: number, prev: number): number | null {
   return Math.round(((current - prev) / prev) * 100);
 }
 
+function pickBalanceValue(current: number | null, lastClosing: number | null): string {
+  if (current !== null) return formatCOP(current);
+  if (lastClosing !== null) return formatCOP(lastClosing);
+  return "—";
+}
+
+function inventorySubLabel(outOfStock: number, lowStock: number): string {
+  if (outOfStock > 0) return `${outOfStock} sin stock`;
+  if (lowStock > 0) return `${lowStock} bajo stock`;
+  return "Sin alertas";
+}
+
+function inventoryColor(outOfStock: number, lowStock: number): KpiColor {
+  if (outOfStock > 0) return "red";
+  if (lowStock > 0) return "amber";
+  return "slate";
+}
+
 export function DashboardClient() {
   const [period, setPeriod] = useState<Period>("today");
   const [chartAnimated, setChartAnimated] = useState(false);
@@ -52,12 +70,15 @@ export function DashboardClient() {
 
   const maxDayTotal = data ? Math.max(...data.sales.byDay.map((d) => d.total), 1) : 1;
   const showBarChart = (data?.sales.byDay.length ?? 0) > 1;
+  const needsBarScroll = (data?.sales.byDay.length ?? 0) > 12;
 
-  const dateRangeLabel = data
-    ? period === "today"
-      ? formatShortDate(data.period.from)
-      : `${formatShortDate(data.period.from)} – ${formatShortDate(data.period.to)}`
-    : null;
+  let dateRangeLabel: string | null = null;
+  if (data) {
+    dateRangeLabel =
+      period === "today"
+        ? formatShortDate(data.period.from)
+        : `${formatShortDate(data.period.from)} – ${formatShortDate(data.period.to)}`;
+  }
 
   const salesCountTrend = data ? computeTrend(data.sales.count, data.comparison.sales.count) : null;
   const salesTotalTrend = data ? computeTrend(data.sales.total, data.comparison.sales.total) : null;
@@ -128,13 +149,7 @@ export function DashboardClient() {
             />
             <KpiCard
               label="Balance"
-              value={
-                data.cashRegister.currentBalance !== null
-                  ? formatCOP(data.cashRegister.currentBalance)
-                  : data.cashRegister.lastClosingBalance !== null
-                  ? formatCOP(data.cashRegister.lastClosingBalance)
-                  : "—"
-              }
+              value={pickBalanceValue(data.cashRegister.currentBalance, data.cashRegister.lastClosingBalance)}
               sub={data.cashRegister.isOpen ? "Saldo actual en caja" : "Último cierre"}
               color={
                 data.cashRegister.currentBalance !== null && data.cashRegister.currentBalance > 0
@@ -157,14 +172,8 @@ export function DashboardClient() {
             <KpiCard
               label="Inventario"
               value={String(data.inventory.totalActive)}
-              sub={
-                data.inventory.outOfStock > 0
-                  ? `${data.inventory.outOfStock} sin stock`
-                  : data.inventory.lowStock > 0
-                  ? `${data.inventory.lowStock} bajo stock`
-                  : "Sin alertas"
-              }
-              color={data.inventory.outOfStock > 0 ? "red" : data.inventory.lowStock > 0 ? "amber" : "slate"}
+              sub={inventorySubLabel(data.inventory.outOfStock, data.inventory.lowStock)}
+              color={inventoryColor(data.inventory.outOfStock, data.inventory.lowStock)}
               tooltip="Productos activos en catálogo. Se muestra alerta cuando alguno tiene stock bajo (≤5) o agotado."
             />
           </div>
@@ -253,44 +262,58 @@ export function DashboardClient() {
                     <div className="h-px w-full border-t border-slate-200 dark:border-white/10" />
                   </div>
 
-                  <div className="flex items-end gap-1" style={{ height: 130 }}>
-                    {data.sales.byDay.map((day, index) => {
-                      const heightPct = maxDayTotal > 0 ? (day.total / maxDayTotal) * 100 : 0;
-                      const hasData = day.total > 0;
-                      const isLatest = index === data.sales.byDay.length - 1;
-                      return (
-                        <div key={day.date} className="group relative flex flex-1 flex-col items-center gap-1">
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full z-10 mb-2 hidden min-w-max rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800">
-                            <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(day.total)}</p>
-                            <p className="text-slate-400">{day.count} venta{day.count !== 1 ? "s" : ""}</p>
+                  {/* En periodos largos (mes) las barras necesitan ancho mínimo — se
+                      vuelven scrolleables en horizontal en vez de aplastarse ilegibles. */}
+                  <div className={needsBarScroll ? "overflow-x-auto pb-1" : undefined}>
+                    <div
+                      className="flex h-[130px] items-end gap-1"
+                      style={needsBarScroll ? { minWidth: `${data.sales.byDay.length * 22}px` } : undefined}
+                    >
+                      {data.sales.byDay.map((day, index) => {
+                        const heightPct = maxDayTotal > 0 ? (day.total / maxDayTotal) * 100 : 0;
+                        const hasData = day.total > 0;
+                        const isLatest = index === data.sales.byDay.length - 1;
+                        let barColorClass: string;
+                        if (!hasData) {
+                          barColorClass = "bg-slate-100 dark:bg-white/5";
+                        } else if (isLatest) {
+                          barColorClass = "bg-violet-600 dark:bg-violet-500";
+                        } else {
+                          barColorClass = "bg-violet-400 dark:bg-violet-600";
+                        }
+                        return (
+                          <div
+                            key={day.date}
+                            className={`group relative flex flex-col items-center gap-1 ${
+                              needsBarScroll ? "w-[22px] shrink-0" : "flex-1"
+                            }`}
+                          >
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full z-10 mb-2 hidden min-w-max rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800">
+                              <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(day.total)}</p>
+                              <p className="text-slate-400">{day.count} venta{day.count !== 1 ? "s" : ""}</p>
+                            </div>
+                            {/* Barra */}
+                            <div className="flex w-full flex-1 items-end">
+                              <div
+                                className={`w-full rounded-t-md ${barColorClass}`}
+                                style={{
+                                  height: chartAnimated
+                                    ? `${Math.max(heightPct, hasData ? 3 : 2)}%`
+                                    : "0%",
+                                  transition: "height 0.55s cubic-bezier(0.4, 0, 0.2, 1)",
+                                  transitionDelay: `${index * 35}ms`,
+                                }}
+                              />
+                            </div>
+                            {/* Etiqueta */}
+                            <span className="truncate text-[9px] text-slate-400 dark:text-slate-500">
+                              {formatBarLabel(day.date)}
+                            </span>
                           </div>
-                          {/* Barra */}
-                          <div className="flex w-full flex-1 items-end">
-                            <div
-                              className={`w-full rounded-t-md ${
-                                hasData
-                                  ? isLatest
-                                    ? "bg-violet-600 dark:bg-violet-500"
-                                    : "bg-violet-400 dark:bg-violet-600"
-                                  : "bg-slate-100 dark:bg-white/5"
-                              }`}
-                              style={{
-                                height: chartAnimated
-                                  ? `${Math.max(heightPct, hasData ? 3 : 2)}%`
-                                  : "0%",
-                                transition: "height 0.55s cubic-bezier(0.4, 0, 0.2, 1)",
-                                transitionDelay: `${index * 35}ms`,
-                              }}
-                            />
-                          </div>
-                          {/* Etiqueta */}
-                          <span className="truncate text-[9px] text-slate-400 dark:text-slate-500">
-                            {formatBarLabel(day.date)}
-                          </span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -414,20 +437,26 @@ export function DashboardClient() {
 
 type KpiColor = "violet" | "emerald" | "slate" | "red" | "amber";
 
-function TrendPill({ value }: { value: number }) {
+function TrendPill({ value }: Readonly<{ value: number }>) {
   const isPositive = value > 0;
   const isNeutral = value === 0;
+  let arrow: string;
+  let colorClass: string;
+  if (isNeutral) {
+    arrow = "=";
+    colorClass = "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400";
+  } else if (isPositive) {
+    arrow = "↑";
+    colorClass = "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400";
+  } else {
+    arrow = "↓";
+    colorClass = "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400";
+  }
   return (
     <span
-      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-        isNeutral
-          ? "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400"
-          : isPositive
-          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-          : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
-      }`}
+      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${colorClass}`}
     >
-      {isPositive ? "↑" : isNeutral ? "=" : "↓"} {Math.abs(value)}%
+      {arrow} {Math.abs(value)}%
     </span>
   );
 }
@@ -439,14 +468,14 @@ function KpiCard({
   trend,
   color,
   tooltip,
-}: {
+}: Readonly<{
   label: string;
   value: string;
   sub?: string;
   trend?: number | null;
   color: KpiColor;
   tooltip?: string;
-}) {
+}>) {
   const colorMap: Record<KpiColor, string> = {
     violet: "text-violet-600 dark:text-violet-400",
     emerald: "text-emerald-600 dark:text-emerald-400",

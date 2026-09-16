@@ -2,9 +2,11 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import type { BusinessInfoForPdf, SaleForPdf, TaxLine } from "~/lib/pdf/FacturaPDF";
 import { CustomerSelector } from "./CustomerSelector";
+import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 
 const FacturaPdfActions = dynamic(
   () => import("~/lib/pdf/FacturaPdfActions").then((m) => m.FacturaPdfActions),
@@ -29,6 +31,7 @@ type Product = {
   stock: number;
   trackStock: boolean;
   category: string | null;
+  barcode: string | null;
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -61,7 +64,7 @@ type Props = {
   userName: string | null;
 };
 
-export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) {
+export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonly<Props>) {
   const activeTaxes = autoTax ? taxes.filter((t) => t.enabled && t.rate > 0) : [];
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
@@ -70,6 +73,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
   const [note, setNote] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [completedSale, setCompletedSale] = useState<{ saleId: string; invoiceNumber: string; total: number; customerEmail?: string | null; saleForPdf: SaleForPdf } | null>(null);
 
   useEffect(() => {
@@ -190,6 +194,17 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
     });
   }
 
+  function handleBarcodeDetected(code: string) {
+    setShowScanner(false);
+    const product = products.find((p: Product) => p.barcode === code);
+    if (!product) {
+      toast.error(`Ningún producto tiene el código ${code}.`);
+      return;
+    }
+    addToCart(product);
+    toast.success(`${product.name} agregado a la factura.`);
+  }
+
   function updateQty(productId: string, delta: number) {
     setCart((prev) =>
       prev
@@ -214,10 +229,10 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
   const taxAmount = activeTaxes.reduce((sum, t) => sum + subtotal * (t.rate / 100), 0);
   const total = subtotal + taxAmount;
 
-  const creditRequiresNote = paymentMethod === "CREDIT" && !note.trim();
+  const creditRequiresCustomer = paymentMethod === "CREDIT" && !selectedCustomer?.id;
 
   function confirmSale() {
-    if (cart.length === 0 || creditRequiresNote) return;
+    if (cart.length === 0 || creditRequiresCustomer) return;
     createSale.mutate({
       items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
       saleType: "INVOICED",
@@ -276,13 +291,26 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
       <div className="flex h-full flex-col gap-4 lg:flex-row">
         {/* Catálogo */}
         <div className="flex flex-col gap-3 lg:w-3/5">
-          <input
-            type="search"
-            placeholder="Buscar producto..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
-          />
+          <div className="flex gap-2">
+            <input
+              type="search"
+              placeholder="Buscar producto..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
+            />
+            <button
+              type="button"
+              onClick={() => setShowScanner(true)}
+              className="shrink-0 rounded-xl border border-violet-300 bg-white px-4 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
+            >
+              📷
+            </button>
+          </div>
+
+          {showScanner && (
+            <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
+          )}
 
           {isLoading ? (
             <p className="text-center text-slate-400 dark:text-slate-500">Cargando productos...</p>
@@ -364,10 +392,10 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
                         {formatCOP(item.price)} × {item.quantity}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
                         onClick={() => updateQty(item.productId, -1)}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-200 text-slate-700 transition hover:bg-slate-300 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
                       >
                         −
                       </button>
@@ -376,13 +404,13 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
                       </span>
                       <button
                         onClick={() => updateQty(item.productId, 1)}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-200 text-slate-700 transition hover:bg-slate-300 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
                       >
                         +
                       </button>
                       <button
                         onClick={() => removeFromCart(item.productId)}
-                        className="ml-1 flex h-7 w-7 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                        className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
                       >
                         ×
                       </button>
@@ -395,9 +423,19 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
             {/* Cliente */}
             <div className="mt-4">
               <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                Cliente <span className="text-slate-400">(opcional)</span>
+                Cliente{" "}
+                {paymentMethod === "CREDIT" ? (
+                  <span className="text-red-500">*</span>
+                ) : (
+                  <span className="text-slate-400">(opcional)</span>
+                )}
               </p>
               <CustomerSelector value={selectedCustomer} onChange={setSelectedCustomer} />
+              {creditRequiresCustomer && (
+                <p className="mt-1 text-xs text-red-500">
+                  Selecciona un cliente registrado para fiar esta venta. No se puede usar &quot;Consumidor Final&quot; ni &quot;Solo documento&quot;.
+                </p>
+              )}
             </div>
 
             {/* Método de pago */}
@@ -428,14 +466,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
             {cart.length > 0 && (
               <div className="mt-3">
                 <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {paymentMethod === "CREDIT" ? (
-                    <span>
-                      Nota del crédito{" "}
-                      <span className="text-red-500">*</span>
-                    </span>
-                  ) : (
-                    "Nota (opcional)"
-                  )}
+                  {paymentMethod === "CREDIT" ? "Nota del crédito (opcional)" : "Nota (opcional)"}
                 </label>
                 <textarea
                   value={note}
@@ -443,20 +474,11 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
                   rows={2}
                   placeholder={
                     paymentMethod === "CREDIT"
-                      ? "Ej: Juan Pérez — paga el viernes"
+                      ? "Ej: paga el viernes"
                       : "Referencia de pago, observación..."
                   }
-                  className={`w-full resize-none rounded-lg border px-3 py-2 text-sm outline-none transition focus:ring-2 dark:bg-white/5 dark:text-white ${
-                    creditRequiresNote
-                      ? "border-red-300 focus:border-red-400 focus:ring-red-100 dark:border-red-500/50 dark:focus:ring-red-900/30"
-                      : "border-slate-200 focus:border-violet-400 focus:ring-violet-100 dark:border-white/10 dark:focus:border-violet-500 dark:focus:ring-violet-900/30"
-                  }`}
+                  className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900/30"
                 />
-                {creditRequiresNote && (
-                  <p className="mt-1 text-xs text-red-500">
-                    Requerido para ventas a crédito.
-                  </p>
-                )}
               </div>
             )}
 
@@ -495,7 +517,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Props) 
           {/* Botón confirmar */}
           <button
             onClick={confirmSale}
-            disabled={cart.length === 0 || creditRequiresNote || createSale.isPending}
+            disabled={cart.length === 0 || creditRequiresCustomer || createSale.isPending}
             className="w-full rounded-2xl bg-violet-600 px-6 py-4 text-lg font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {createSale.isPending

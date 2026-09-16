@@ -5,7 +5,7 @@ import { AppHeader } from "~/app/_components/AppHeader";
 import { NavShell } from "~/app/_components/NavShell";
 import { BottomNav } from "~/app/_components/BottomNav";
 
-export default async function AppLayout({ children }: { children: ReactNode }) {
+export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
   const session = await auth();
   const role = session?.user?.role;
 

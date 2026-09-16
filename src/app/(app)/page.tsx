@@ -128,6 +128,43 @@ const OWNER_ITEMS: NavItem[] = [
   },
 ];
 
+function NavSection({
+  title,
+  items,
+  gridClass,
+  iconSize = 20,
+}: {
+  title: string;
+  items: NavItem[];
+  gridClass: string;
+  iconSize?: number;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+        {title}
+      </p>
+      <div className={`grid gap-3 ${gridClass}`}>
+        {items.map(({ href, label, description, icon: Icon, color }) => (
+          <Link
+            key={href}
+            href={href}
+            className={`flex items-start gap-3 rounded-xl border p-4 transition ${COLOR_MAP[color]}`}
+          >
+            <Icon size={iconSize} className={`mt-0.5 shrink-0 ${ICON_COLOR_MAP[color]}`} />
+            <div>
+              <p className="font-semibold text-slate-800 dark:text-white">{label}</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                {description}
+              </p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default async function Home() {
   const session = await auth();
 
@@ -159,79 +196,20 @@ export default async function Home() {
             </div>
 
             {/* Operaciones comunes */}
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Operaciones
-              </p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {COMMON_ITEMS.map(({ href, label, description, icon: Icon, color }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className={`flex items-start gap-3 rounded-xl border p-4 transition ${COLOR_MAP[color]}`}
-                  >
-                    <Icon size={22} className={`mt-0.5 shrink-0 ${ICON_COLOR_MAP[color]}`} />
-                    <div>
-                      <p className="font-semibold text-slate-800 dark:text-white">{label}</p>
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        {description}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
+            <NavSection title="Operaciones" items={COMMON_ITEMS} gridClass="grid-cols-1 sm:grid-cols-3" iconSize={22} />
 
             {/* Gestión — solo CASHIER */}
             {session.user.role === "CASHIER" && (
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Gestión
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {CASHIER_ITEMS.map(({ href, label, description, icon: Icon, color }) => (
-                    <Link
-                      key={href}
-                      href={href}
-                      className={`flex items-start gap-3 rounded-xl border p-4 transition ${COLOR_MAP[color]}`}
-                    >
-                      <Icon size={20} className={`mt-0.5 shrink-0 ${ICON_COLOR_MAP[color]}`} />
-                      <div>
-                        <p className="font-semibold text-slate-800 dark:text-white">{label}</p>
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {description}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              <NavSection title="Gestión" items={CASHIER_ITEMS} gridClass="grid-cols-1 sm:grid-cols-2" />
             )}
 
             {/* Administración — solo OWNER */}
             {session.user.role === "OWNER" && (
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Administración
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {OWNER_ITEMS.map(({ href, label, description, icon: Icon, color }) => (
-                    <Link
-                      key={href}
-                      href={href}
-                      className={`flex items-start gap-3 rounded-xl border p-4 transition ${COLOR_MAP[color]}`}
-                    >
-                      <Icon size={20} className={`mt-0.5 shrink-0 ${ICON_COLOR_MAP[color]}`} />
-                      <div>
-                        <p className="font-semibold text-slate-800 dark:text-white">{label}</p>
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {description}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              <NavSection
+                title="Administración"
+                items={OWNER_ITEMS}
+                gridClass="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+              />
             )}
           </>
         ) : (

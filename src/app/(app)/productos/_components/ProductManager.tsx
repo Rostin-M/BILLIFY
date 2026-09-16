@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { api } from "~/trpc/react";
 import { parseZodError } from "~/lib/parseZodError";
+import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 
 type ProductForm = {
   name: string;
@@ -17,6 +18,7 @@ type ProductForm = {
   category: string;
   lotNumber: string;
   expiresAt: string;
+  barcode: string;
 };
 
 type AdjustForm = { quantity: string; note: string };
@@ -32,6 +34,7 @@ const emptyForm: ProductForm = {
   category: "",
   lotNumber: "",
   expiresAt: "",
+  barcode: "",
 };
 
 const emptyAdjust: AdjustForm = { quantity: "", note: "" };
@@ -112,14 +115,15 @@ function todayISOString(): string {
 function parseForm(form: ProductForm) {
   return {
     name: form.name,
-    price: parseFloat(form.price),
-    cost: form.cost ? parseFloat(form.cost) : undefined,
+    price: Number.parseFloat(form.price),
+    cost: form.cost ? Number.parseFloat(form.cost) : undefined,
     unit: form.unit,
-    taxRate: form.taxRate !== "" ? parseFloat(form.taxRate) : undefined,
-    stock: parseInt(form.stock, 10) || 0,
+    taxRate: form.taxRate !== "" ? Number.parseFloat(form.taxRate) : undefined,
+    stock: Number.parseInt(form.stock, 10) || 0,
     trackStock: form.trackStock,
     category: form.category.trim() || undefined,
     lotNumber: form.lotNumber.trim() || undefined,
+    barcode: form.barcode.trim() || undefined,
     expiresAt: form.expiresAt ? new Date(form.expiresAt) : undefined,
   };
 }
@@ -137,35 +141,35 @@ const INPUT =
 const INPUT_ERROR =
   "w-full rounded-lg border border-red-400 bg-white px-3 py-2 text-sm outline-none ring-red-400 transition focus:ring-2 dark:border-red-500/60 dark:bg-slate-900";
 
-function FieldError({ msg }: { msg?: string }) {
+function FieldError({ msg }: Readonly<{ msg?: string }>) {
   if (!msg) return null;
   return <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{msg}</p>;
 }
 
 function PriceCalculator({
   onApply,
-}: {
+}: Readonly<{
   onApply: (price: number, cost: number, taxRate: number) => void;
-}) {
+}>) {
   const [cost, setCost] = useState("");
   const [iva, setIva] = useState("19");
   const [margin, setMargin] = useState("20");
   const [calculated, setCalculated] = useState<number | null>(null);
 
   function calculate() {
-    const costNum = parseFloat(cost);
-    const ivaNum = parseFloat(iva);
-    const marginNum = parseFloat(margin);
-    if (isNaN(costNum) || costNum <= 0) return;
+    const costNum = Number.parseFloat(cost);
+    const ivaNum = Number.parseFloat(iva);
+    const marginNum = Number.parseFloat(margin);
+    if (Number.isNaN(costNum) || costNum <= 0) return;
     const withIva = costNum * (1 + ivaNum / 100);
     const withMargin = withIva * (1 + marginNum / 100);
     setCalculated(Math.ceil(withMargin));
   }
 
   function apply() {
-    const costNum = parseFloat(cost);
-    const ivaNum = parseFloat(iva);
-    if (isNaN(costNum) || calculated === null) return;
+    const costNum = Number.parseFloat(cost);
+    const ivaNum = Number.parseFloat(iva);
+    if (Number.isNaN(costNum) || calculated === null) return;
     onApply(calculated, costNum, ivaNum);
     setCost("");
     setCalculated(null);
@@ -246,17 +250,20 @@ function ProductFormFields({
   onChange,
   onCheckChange,
   onSelectChange,
+  onBarcodeScanned,
   fieldErrors,
   onApplyCalculator,
-}: {
+}: Readonly<{
   form: ProductForm;
   onChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) => void;
   onCheckChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) => void;
   onSelectChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLSelectElement>) => void;
+  onBarcodeScanned: (code: string) => void;
   fieldErrors: Record<string, string>;
   onApplyCalculator: (price: number, cost: number, taxRate: number) => void;
-}) {
+}>) {
   const [showCalc, setShowCalc] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   return (
     <div className="space-y-3">
@@ -425,13 +432,46 @@ function ProductFormFields({
           <FieldError msg={fieldErrors.expiresAt} />
         </label>
       </div>
+
+      {/* Código de barras */}
+      <label className="block space-y-1 text-sm">
+        <span className="text-slate-700 dark:text-slate-300">
+          Código de barras <span className="text-slate-400">(opc.)</span>
+        </span>
+        <div className="flex gap-2">
+          <input
+            value={form.barcode}
+            onChange={onChange("barcode")}
+            className={fieldErrors.barcode ? INPUT_ERROR : INPUT}
+            placeholder="Ej: 7702001234567"
+          />
+          <button
+            type="button"
+            onClick={() => setShowScanner(true)}
+            className="shrink-0 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-transparent dark:text-violet-300 dark:hover:bg-violet-900/20"
+          >
+            📷 Escanear
+          </button>
+        </div>
+        <FieldError msg={fieldErrors.barcode} />
+      </label>
+
+      {showScanner && (
+        <BarcodeScanner
+          onDetected={(code) => {
+            setShowScanner(false);
+            onBarcodeScanned(code);
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   );
 }
 
 type RowMode = "view" | "edit" | "price" | "adjust" | "history";
 
-export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) {
+export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CASHIER" }>) {
   const utils = api.useUtils();
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<ProductForm>(emptyForm);
@@ -589,6 +629,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
       category: string | null;
       lotNumber: string | null;
       expiresAt: Date | null;
+      barcode: string | null;
     },
   ) => {
     if (activeRow?.id === id && activeRow.mode === mode) {
@@ -608,6 +649,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
         category: product.category ?? "",
         lotNumber: product.lotNumber ?? "",
         expiresAt: toDateInput(product.expiresAt),
+        barcode: product.barcode ?? "",
       });
     }
     if (mode === "price" && product) {
@@ -625,7 +667,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
   const handleCreate = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     const parsed = parseForm(createForm);
-    if (isNaN(parsed.price)) return;
+    if (Number.isNaN(parsed.price)) return;
     createProduct.mutate(parsed);
   };
 
@@ -633,23 +675,23 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
     e.preventDefault();
     if (!activeRow) return;
     const parsed = parseForm(editForm);
-    if (isNaN(parsed.price)) return;
+    if (Number.isNaN(parsed.price)) return;
     updateProduct.mutate({ id: activeRow.id, ...parsed });
   };
 
   const handleUpdatePrice = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!activeRow) return;
-    const price = parseFloat(priceForm);
-    if (isNaN(price) || price <= 0) return;
+    const price = Number.parseFloat(priceForm);
+    if (Number.isNaN(price) || price <= 0) return;
     updatePrice.mutate({ productId: activeRow.id, price });
   };
 
   const handleAdjust = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!activeRow) return;
-    const qty = parseInt(adjustForm.quantity, 10);
-    if (isNaN(qty) || qty === 0) return;
+    const qty = Number.parseInt(adjustForm.quantity, 10);
+    if (Number.isNaN(qty) || qty === 0) return;
     adjustStock.mutate({
       productId: activeRow.id,
       quantity: qty,
@@ -694,6 +736,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
               onChange={makeChangeHandler(setCreateForm)}
               onCheckChange={makeCheckHandler(setCreateForm)}
               onSelectChange={makeSelectHandler(setCreateForm)}
+              onBarcodeScanned={(code) => setCreateForm((p) => ({ ...p, barcode: code }))}
               fieldErrors={createErrors.fieldErrors}
               onApplyCalculator={(price, cost, taxRate) =>
                 setCreateForm((p) => ({
@@ -777,7 +820,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                         )}
                       </div>
                     </div>
-                    <div className="col-span-4 pt-0.5 sm:col-span-2 sm:text-right">
+                    <div className="col-span-7 pt-0.5 sm:col-span-2 sm:text-right">
                       <p className="text-sm tabular-nums">{formatCOP(product.price)}</p>
                       {/* Costo: solo visible para OWNER */}
                       {userRole === "OWNER" && product.cost != null && (
@@ -786,18 +829,18 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                         </p>
                       )}
                     </div>
-                    <p className="col-span-2 pt-0.5 text-sm tabular-nums sm:col-span-1 sm:text-right">
+                    <p className="col-span-5 pt-0.5 text-sm tabular-nums sm:col-span-1 sm:text-right">
                       {product.trackStock ? product.stock : "∞"}
                     </p>
 
                     {/* Botones de acción — condicionados por rol */}
-                    <div className="col-span-6 flex flex-wrap justify-end gap-1 pt-0.5 sm:col-span-5">
+                    <div className="col-span-12 flex flex-wrap gap-1.5 pt-1 sm:col-span-5 sm:justify-end sm:pt-0.5">
                       {/* OWNER: edición completa */}
                       {userRole === "OWNER" && (
                         <button
                           type="button"
                           onClick={() => openRow(product.id, "edit", product)}
-                          className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                             activeRow?.id === product.id && activeRow.mode === "edit"
                               ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300"
                               : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
@@ -812,7 +855,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                         <button
                           type="button"
                           onClick={() => openRow(product.id, "price", product)}
-                          className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                             activeRow?.id === product.id && activeRow.mode === "price"
                               ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300"
                               : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
@@ -827,7 +870,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                         <button
                           type="button"
                           onClick={() => openRow(product.id, "adjust")}
-                          className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                             activeRow?.id === product.id && activeRow.mode === "adjust"
                               ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
                               : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
@@ -841,7 +884,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                       <button
                         type="button"
                         onClick={() => openRow(product.id, "history")}
-                        className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                           activeRow?.id === product.id && activeRow.mode === "history"
                             ? "border-slate-400 bg-slate-100 text-slate-700 dark:border-white/30 dark:bg-white/15 dark:text-slate-200"
                             : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
@@ -861,7 +904,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                             })
                           }
                           disabled={setActive.isPending}
-                          className={`rounded-lg px-2 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                             product.isActive
                               ? "bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
                               : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
@@ -882,6 +925,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                           onChange={makeChangeHandler(setEditForm)}
                           onCheckChange={makeCheckHandler(setEditForm)}
                           onSelectChange={makeSelectHandler(setEditForm)}
+                          onBarcodeScanned={(code) => setEditForm((p) => ({ ...p, barcode: code }))}
                           fieldErrors={updateErrors.fieldErrors}
                           onApplyCalculator={(price, cost, taxRate) =>
                             setEditForm((p) => ({
@@ -897,18 +941,18 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                             {updateErrors.formError}
                           </p>
                         )}
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row">
                           <button
                             type="submit"
                             disabled={updateProduct.isPending}
-                            className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
+                            className="min-h-11 rounded-lg bg-violet-600 px-3 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
                           >
                             {updateProduct.isPending ? "Guardando..." : "Guardar"}
                           </button>
                           <button
                             type="button"
                             onClick={closeRow}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+                            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
                           >
                             Cancelar
                           </button>
@@ -923,8 +967,8 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                       <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
                         El cambio quedará registrado con tu nombre y la hora exacta.
                       </p>
-                      <form onSubmit={handleUpdatePrice} className="flex flex-wrap items-end gap-3">
-                        <label className="min-w-40 flex-1 space-y-1 text-sm">
+                      <form onSubmit={handleUpdatePrice} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                        <label className="flex-1 space-y-1 text-sm sm:min-w-40">
                           <span className="text-slate-700 dark:text-slate-300">
                             Nuevo precio (COP)
                           </span>
@@ -939,18 +983,18 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                             placeholder={String(product.price)}
                           />
                         </label>
-                        <div className="flex items-end gap-2">
+                        <div className="flex gap-2">
                           <button
                             type="submit"
                             disabled={updatePrice.isPending}
-                            className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
+                            className="min-h-11 flex-1 rounded-lg bg-violet-600 px-3 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-60 sm:flex-none"
                           >
                             {updatePrice.isPending ? "Guardando..." : "Guardar precio"}
                           </button>
                           <button
                             type="button"
                             onClick={closeRow}
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+                            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
                           >
                             Cancelar
                           </button>
@@ -971,8 +1015,8 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                         Usa número positivo para agregar stock, negativo para reducirlo.
                         Este movimiento queda registrado con tu nombre en el historial.
                       </p>
-                      <form onSubmit={handleAdjust} className="flex flex-wrap gap-3">
-                        <label className="min-w-32 flex-1 space-y-1 text-sm">
+                      <form onSubmit={handleAdjust} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                        <label className="flex-1 space-y-1 text-sm sm:min-w-32">
                           <span className="text-slate-700 dark:text-slate-300">
                             Cantidad (+/-)
                           </span>
@@ -987,7 +1031,7 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                             placeholder="Ej: 10 o -3"
                           />
                         </label>
-                        <label className="min-w-48 flex-[2] space-y-1 text-sm">
+                        <label className="space-y-1 text-sm sm:min-w-48 sm:flex-[2]">
                           <span className="text-slate-700 dark:text-slate-300">
                             Motivo <span className="text-slate-400">(opc.)</span>
                           </span>
@@ -1000,18 +1044,18 @@ export function ProductManager({ userRole }: { userRole: "OWNER" | "CASHIER" }) 
                             placeholder="Ej: Recepción de pedido"
                           />
                         </label>
-                        <div className="flex items-end gap-2">
+                        <div className="flex gap-2 sm:items-end">
                           <button
                             type="submit"
                             disabled={adjustStock.isPending}
-                            className="rounded-lg bg-amber-500 px-3 py-2 text-xs font-medium text-white transition hover:bg-amber-400 disabled:opacity-60"
+                            className="min-h-11 flex-1 rounded-lg bg-amber-500 px-3 text-sm font-medium text-white transition hover:bg-amber-400 disabled:opacity-60 sm:flex-none"
                           >
                             {adjustStock.isPending ? "Ajustando..." : "Aplicar ajuste"}
                           </button>
                           <button
                             type="button"
                             onClick={closeRow}
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+                            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
                           >
                             Cancelar
                           </button>

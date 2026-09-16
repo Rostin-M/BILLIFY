@@ -11,7 +11,7 @@ const CashHistoryPdfButton = dynamic(
 
 type Props = { business: { name: string; document: string; logoUrl?: string | null } };
 
-export function CashHistory({ business }: Props) {
+export function CashHistory({ business }: Readonly<Props>) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const { data: history = [], isPending } = api.cashRegister.listHistory.useQuery();
 
@@ -47,13 +47,15 @@ export function CashHistory({ business }: Props) {
         )}
       </div>
 
-      {isPending ? (
+      {isPending && (
         <p className="px-5 pb-5 text-sm text-slate-400 dark:text-slate-500">Cargando historial...</p>
-      ) : history.length === 0 ? (
+      )}
+      {!isPending && history.length === 0 && (
         <p className="px-5 pb-5 text-sm text-slate-400 dark:text-slate-500">
           Aún no hay cierres registrados.
         </p>
-      ) : (
+      )}
+      {!isPending && history.length > 0 && (
         <ul className="divide-y divide-slate-100 dark:divide-white/5">
           {history.map((entry) => {
             const net = (entry.closingBalance ?? 0) - entry.openingBalance;

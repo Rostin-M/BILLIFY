@@ -18,7 +18,7 @@ type Props = {
   business: BusinessInfoForPdf;
 };
 
-export function VentasClient({ taxes, autoTax, isOwner, userName, business }: Props) {
+export function VentasClient({ taxes, autoTax, isOwner, userName, business }: Readonly<Props>) {
   const [tab, setTab] = useState<Tab>("quick");
 
   const tabs: { id: Tab; label: string }[] = [

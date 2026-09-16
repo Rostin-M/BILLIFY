@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
-import { HydrateClient } from "~/trpc/server";
-import { api } from "~/trpc/server";
+import { api, HydrateClient } from "~/trpc/server";
 import { MesasClient } from "./_components/MesasClient";
 import { PageLayout } from "~/app/_components/PageLayout";
 

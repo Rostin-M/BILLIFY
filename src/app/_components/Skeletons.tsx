@@ -24,7 +24,7 @@ export function SkeletonCashCard() {
   );
 }
 
-export function SkeletonListRows({ count = 3 }: { count?: number }) {
+export function SkeletonListRows({ count = 3 }: Readonly<{ count?: number }>) {
   return (
     <div className="animate-pulse divide-y divide-slate-100 dark:divide-white/5">
       {Array.from({ length: count }).map((_, i) => (

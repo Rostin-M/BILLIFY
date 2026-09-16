@@ -26,7 +26,7 @@ const fmtTime = (d: Date | string) => new Date(d).toLocaleTimeString("es-CO", { 
 
 type Props = { session: Session; business: { name: string; document: string; logoUrl?: string | null } };
 
-export function TableCard({ session, business }: Props) {
+export function TableCard({ session, business }: Readonly<Props>) {
   const [addingGuest, setAddingGuest] = useState(false);
   const [addingOrderFor, setAddingOrderFor] = useState<{ id: string; name: string } | null>(null);
   const [checkingOut, setCheckingOut] = useState(false);

@@ -28,6 +28,18 @@ const STATUS_LABEL: Record<StockStatus, string> = {
   agotado: "Sin stock",
 };
 
+const SUMMARY_CARD_STYLE: Record<StockStatus, string> = {
+  disponible: "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10",
+  bajo: "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10",
+  agotado: "border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10",
+};
+
+const SUMMARY_COUNT_STYLE: Record<StockStatus, string> = {
+  disponible: "text-emerald-700 dark:text-emerald-300",
+  bajo: "text-amber-700 dark:text-amber-300",
+  agotado: "text-red-700 dark:text-red-300",
+};
+
 function formatCOP(value: number): string {
   return value.toLocaleString("es-CO", {
     style: "currency",
@@ -107,113 +119,137 @@ export function InventarioView() {
 
       {/* Resumen de estado */}
       {!isPending && products && products.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {(["disponible", "bajo", "agotado"] as StockStatus[]).map((status) => (
-            <button
+            <div
               key={status}
-              onClick={() =>
-                setCategoryFilter((prev) => {
-                  // no filtra por status en esta versión — solo es informativo
-                  return prev;
-                })
-              }
-              className={`rounded-xl border p-3 text-left ${
-                status === "disponible"
-                  ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
-                  : status === "bajo"
-                    ? "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10"
-                    : "border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10"
-              }`}
+              className={`rounded-xl border p-2.5 sm:p-3 ${SUMMARY_CARD_STYLE[status]}`}
             >
               <p
-                className={`text-2xl font-bold tabular-nums ${
-                  status === "disponible"
-                    ? "text-emerald-700 dark:text-emerald-300"
-                    : status === "bajo"
-                      ? "text-amber-700 dark:text-amber-300"
-                      : "text-red-700 dark:text-red-300"
-                }`}
+                className={`text-xl font-bold tabular-nums sm:text-2xl ${SUMMARY_COUNT_STYLE[status]}`}
               >
                 {counts[status]}
               </p>
-              <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+              <p className="mt-0.5 truncate text-xs text-slate-600 dark:text-slate-400">
                 {STATUS_LABEL[status]}
               </p>
-            </button>
+            </div>
           ))}
         </div>
       )}
 
       {/* Tabla de productos */}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-        {isPending ? (
+        {isPending && (
           <p className="p-5 text-sm text-slate-500 dark:text-slate-400">
             Cargando inventario...
           </p>
-        ) : filtered.length === 0 ? (
+        )}
+        {!isPending && filtered.length === 0 && (
           <p className="p-5 text-sm text-slate-500 dark:text-slate-400">
             {query || categoryFilter
               ? "No hay productos que coincidan con la búsqueda."
               : "No hay productos activos registrados."}
           </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-white/5">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Producto
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Precio
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Stock
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Estado
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                {filtered.map((product) => {
-                  const status = getStockStatus(product.stock, product.trackStock);
-                  return (
-                    <tr key={product.id}>
-                      <td className="px-4 py-3">
-                        <p className="font-medium">{product.name}</p>
-                        <div className="mt-0.5 flex flex-wrap gap-1">
-                          {product.category && (
-                            <span className="inline-block rounded-full bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
-                              {product.category}
-                            </span>
-                          )}
-                          {!product.trackStock && (
-                            <span className="inline-block rounded-full bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">
-                              Sin control
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatCOP(product.price)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-medium">
-                        {product.trackStock ? product.stock : "∞"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
+        )}
+        {!isPending && filtered.length > 0 && (
+          <>
+            {/* Tarjetas apiladas en móvil */}
+            <ul className="divide-y divide-slate-100 dark:divide-white/5 md:hidden">
+              {filtered.map((product) => {
+                const status = getStockStatus(product.stock, product.trackStock);
+                return (
+                  <li key={product.id} className="flex items-center gap-3 p-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{product.name}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {product.category && (
+                          <span className="inline-block rounded-full bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                            {product.category}
+                          </span>
+                        )}
+                        {!product.trackStock && (
+                          <span className="inline-block rounded-full bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">
+                            Sin control
+                          </span>
+                        )}
                         <span
                           className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}
                         >
                           {product.trackStock ? STATUS_LABEL[status] : "Disponible"}
                         </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="tabular-nums font-medium">{formatCOP(product.price)}</p>
+                      <p className="mt-0.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                        Stock: {product.trackStock ? product.stock : "∞"}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Tabla en tablet/escritorio */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-white/5">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Producto
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Precio
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Stock
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Estado
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                  {filtered.map((product) => {
+                    const status = getStockStatus(product.stock, product.trackStock);
+                    return (
+                      <tr key={product.id}>
+                        <td className="max-w-0 px-4 py-3">
+                          <p className="truncate font-medium">{product.name}</p>
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {product.category && (
+                              <span className="inline-block rounded-full bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                                {product.category}
+                              </span>
+                            )}
+                            {!product.trackStock && (
+                              <span className="inline-block rounded-full bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">
+                                Sin control
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {formatCOP(product.price)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums font-medium">
+                          {product.trackStock ? product.stock : "∞"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}
+                          >
+                            {product.trackStock ? STATUS_LABEL[status] : "Disponible"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 

@@ -6,6 +6,7 @@ export type PendingSale = {
   localId: string;
   items: { productId: string; quantity: number }[];
   paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER";
+  customerId?: string;
   note?: string;
   createdAt: string;
 };

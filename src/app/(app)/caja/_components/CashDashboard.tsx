@@ -50,7 +50,12 @@ const PAYMENT_LABELS: Record<string, string> = {
   TRANSFER: "Transferencia",
 };
 
-export function CashDashboard({ register, canClose, business }: Props) {
+const TYPE_ACTIVE_CLASSES: Record<"INCOME" | "EXPENSE", string> = {
+  INCOME: "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-300",
+  EXPENSE: "border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-900/20 dark:text-red-300",
+};
+
+export function CashDashboard({ register, canClose, business }: Readonly<Props>) {
   const [form, setForm] = useState({ type: "INCOME" as "INCOME" | "EXPENSE", amount: "", description: "" });
   const [isClosing, setIsClosing] = useState(false);
   const [closingNote, setClosingNote] = useState("");
@@ -75,8 +80,8 @@ export function CashDashboard({ register, canClose, business }: Props) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const amount = parseFloat(form.amount);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = Number.parseFloat(form.amount);
+    if (Number.isNaN(amount) || amount <= 0) return;
     addMovement.mutate({ type: form.type, amount, description: form.description });
   }
 
@@ -99,16 +104,16 @@ export function CashDashboard({ register, canClose, business }: Props) {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       {/* Header estado */}
-      <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/30 dark:bg-emerald-900/10">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/30 dark:bg-emerald-900/10">
         <span className="text-2xl">🟢</span>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <p className="font-semibold text-emerald-800 dark:text-emerald-300">Caja abierta</p>
           <p className="text-sm text-emerald-600 dark:text-emerald-400">
             Desde {openedTime}
             {register.user?.name ? ` · ${register.user.name}` : ""}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
           {showPdf ? (
             <CajaPdfActions
               business={business}
@@ -280,9 +285,7 @@ export function CashDashboard({ register, canClose, business }: Props) {
                 onClick={() => setForm((prev) => ({ ...prev, type: t }))}
                 className={`rounded-xl border py-2.5 text-sm font-semibold transition ${
                   form.type === t
-                    ? t === "INCOME"
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-300"
-                      : "border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-900/20 dark:text-red-300"
+                    ? TYPE_ACTIVE_CLASSES[t]
                     : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-white/10 dark:bg-transparent dark:text-slate-400"
                 }`}
               >
@@ -320,7 +323,7 @@ export function CashDashboard({ register, canClose, business }: Props) {
             />
           </label>
 
-          {form.type === "EXPENSE" && parseFloat(form.amount) > register.currentBalance && (
+          {form.type === "EXPENSE" && Number.parseFloat(form.amount) > register.currentBalance && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-900/10 dark:text-amber-300">
               Saldo insuficiente. Registra primero una entrada con el dinero que vas a usar.
             </p>

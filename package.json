@@ -32,6 +32,8 @@
     "@trpc/client": "^11.0.0",
     "@trpc/react-query": "^11.0.0",
     "@trpc/server": "^11.0.0",
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "bcryptjs": "^3.0.3",
     "lucide-react": "^1.17.0",
     "next": "^15.2.3",

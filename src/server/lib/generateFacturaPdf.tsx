@@ -1,4 +1,4 @@
-import { renderToBuffer, Document } from "@react-pdf/renderer";
+import { renderToBuffer, type Document } from "@react-pdf/renderer";
 import React from "react";
 
 import { FacturaPDF, type BusinessInfoForPdf, type SaleForPdf } from "~/lib/pdf/FacturaPDF";
