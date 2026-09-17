@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { BarcodeScanner } from "./BarcodeScanner";
 
@@ -56,7 +57,13 @@ export function ContinuousScanPanel({ onScan, onClose }: Readonly<Props>) {
                   : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
               }`}
             >
-              <span className="shrink-0">{entry.ok ? "✓" : "⚠"}</span>
+              <span className="shrink-0">
+                {entry.ok ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+              </span>
               <span className="truncate">
                 {entry.ok ? entry.name : `Código ${entry.code} no encontrado`}
               </span>

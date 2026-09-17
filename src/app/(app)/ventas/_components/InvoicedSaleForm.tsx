@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { Camera, CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
@@ -8,7 +9,7 @@ import type { BusinessInfoForPdf, SaleForPdf } from "~/lib/pdf/FacturaPDF";
 import { CustomerSelector } from "./CustomerSelector";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
-import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
+import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
 const FacturaPdfActions = dynamic(
   () => import("~/lib/pdf/FacturaPdfActions").then((m) => m.FacturaPdfActions),
@@ -139,6 +140,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
             quantity: i.quantity,
             price: i.price,
             subtotal: i.price * i.quantity,
+            taxLines: autoTax ? computeItemTaxBreakdown(i, taxes).taxLines : null,
           })),
           subtotal: saleSubtotal,
           taxAmount: saleTaxAmount,
@@ -253,7 +255,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
             <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-              <span className="text-2xl">✓</span>
+              <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h2 className="mt-3 text-lg font-bold text-slate-800 dark:text-white">
               Factura emitida
@@ -281,9 +283,9 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
 
             <button
               onClick={() => setCompletedSale(null)}
-              className="mt-4 w-full rounded-xl border border-slate-200 py-2 text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
+              className="mt-4 w-full rounded-xl border border-slate-200 py-2 text-center text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
             >
-              No, cerrar
+              Cerrar
             </button>
           </div>
         </div>
@@ -305,7 +307,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
               onClick={() => setShowScanner(true)}
               className="shrink-0 rounded-xl border border-violet-300 bg-white px-4 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
             >
-              📷
+              <Camera className="h-5 w-5" />
             </button>
           </div>
 
@@ -368,7 +370,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
               onClick={() => setContinuousScan(true)}
               className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-sm font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
             >
-              📷 Activar escaneo continuo
+              <Camera className="h-4 w-4" /> Activar escaneo continuo
             </button>
           )}
 

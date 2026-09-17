@@ -1,5 +1,7 @@
 "use client";
 
+import { Clock, Loader2, WifiOff } from "lucide-react";
+
 import type { SyncError } from "~/hooks/useOfflineQueue";
 
 type Props = {
@@ -18,7 +20,7 @@ export function OfflineBanner({ isOnline, pendingCount, isSyncing, syncErrors, o
       {/* Sin conexión */}
       {!isOnline && (
         <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-900/20">
-          <span className="text-lg">📶</span>
+          <WifiOff className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
               Sin conexión a internet
@@ -33,7 +35,11 @@ export function OfflineBanner({ isOnline, pendingCount, isSyncing, syncErrors, o
       {/* Ventas pendientes */}
       {pendingCount > 0 && (
         <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-500/30 dark:bg-blue-900/20">
-          <span className="text-lg">{isSyncing ? "⏳" : "🕐"}</span>
+          {isSyncing ? (
+            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+          ) : (
+            <Clock className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+          )}
           <div className="flex-1">
             <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
               {isSyncing

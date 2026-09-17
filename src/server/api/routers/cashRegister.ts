@@ -1,8 +1,66 @@
 import { TRPCError } from "@trpc/server";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
+import { assertCashRegisterNotStale } from "~/server/lib/cashRegisterGuard";
 
+/**
+ * Ventas anuladas, ventas a crédito y abonos registrados dentro de la jornada
+ * de una caja — para el reporte de cierre y la vista en curso, así el dueño
+ * tiene control de quién hizo qué durante el día, no solo los totales.
+ */
+async function getRegisterActivity(db: Prisma.TransactionClient, businessId: string, from: Date, to: Date) {
+  const [voidedSalesRaw, creditSales, payments] = await Promise.all([
+    db.sale.findMany({
+      where: { businessId, status: "VOIDED", voidedAt: { gte: from, lte: to } },
+      select: {
+        id: true, invoiceNumber: true, total: true, voidReason: true, voidedAt: true,
+        user: { select: { name: true } },
+      },
+      orderBy: { voidedAt: "asc" },
+    }),
+    db.sale.findMany({
+      where: { businessId, paymentMethod: "CREDIT", status: "COMPLETED", createdAt: { gte: from, lte: to } },
+      select: {
+        id: true, invoiceNumber: true, total: true, createdAt: true,
+        customer: { select: { name: true } },
+        user: { select: { name: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.customerPayment.findMany({
+      where: { businessId, createdAt: { gte: from, lte: to } },
+      select: {
+        id: true, amount: true, createdAt: true,
+        customer: { select: { name: true } },
+        user: { select: { name: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  const voidedIds = voidedSalesRaw.map((s) => s.id);
+  const voidAuditLogs = voidedIds.length
+    ? await db.auditLog.findMany({
+        where: { businessId, action: "VOID_SALE", entityId: { in: voidedIds } },
+        select: { entityId: true, user: { select: { name: true } } },
+      })
+    : [];
+  const voidedByMap = new Map(voidAuditLogs.map((a) => [a.entityId, a.user?.name ?? null]));
+
+  const voidedSales = voidedSalesRaw.map((s) => ({
+    id: s.id,
+    invoiceNumber: s.invoiceNumber,
+    total: s.total,
+    voidReason: s.voidReason,
+    voidedAt: s.voidedAt!,
+    createdByName: s.user?.name ?? null,
+    voidedByName: voidedByMap.get(s.id) ?? null,
+  }));
+
+  return { voidedSales, creditSales, payments };
+}
 
 export const cashRegisterRouter = createTRPCRouter({
   // Caja activa del negocio con saldo calculado en tiempo real
@@ -206,6 +264,8 @@ export const cashRegisterRouter = createTRPCRouter({
           throw new TRPCError({ code: "FORBIDDEN", message: "No tienes permisos para registrar movimientos en caja." });
         }
       }
+
+      await assertCashRegisterNotStale(ctx.db, businessId, userId);
 
       const registerSelect = {
         id: true,
@@ -475,7 +535,7 @@ export const cashRegisterRouter = createTRPCRouter({
       }
 
       const periodEnd = register.closedAt ?? new Date();
-      const [cashSalesAgg, nonCashGroups] = await Promise.all([
+      const [cashSalesAgg, nonCashGroups, activity] = await Promise.all([
         ctx.db.sale.aggregate({
           where: { businessId, paymentMethod: "CASH", status: "COMPLETED", createdAt: { gte: register.openedAt, lte: periodEnd } },
           _sum: { total: true },
@@ -487,6 +547,7 @@ export const cashRegisterRouter = createTRPCRouter({
           _sum: { total: true },
           _count: { _all: true },
         }),
+        getRegisterActivity(ctx.db, businessId, register.openedAt, periodEnd),
       ]);
 
       const cashSalesTotal = cashSalesAgg._sum.total ?? 0;
@@ -513,6 +574,7 @@ export const cashRegisterRouter = createTRPCRouter({
         manualIncome,
         manualExpense,
         totalBalance,
+        ...activity,
       };
     }),
 

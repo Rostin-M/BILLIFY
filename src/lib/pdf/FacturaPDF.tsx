@@ -42,7 +42,9 @@ const s = StyleSheet.create({
   colUnit: { width: "10%", textAlign: "center" },
   colName: { flex: 1 },
   colPrice: { width: "18%", textAlign: "right" },
+  colTax: { width: "14%", textAlign: "right" },
   colSub: { width: "18%", textAlign: "right" },
+  itemTaxLabel: { fontSize: 7, color: "#94a3b8", marginTop: 1 },
 
   // Totals
   totalsArea: { marginTop: 14, alignItems: "flex-end" },
@@ -69,6 +71,7 @@ const formatCOP = (v: number) =>
 
 const formatDateTime = (d: Date | string) =>
   new Date(d).toLocaleString("es-CO", {
+    timeZone: "America/Bogota",
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
@@ -79,6 +82,7 @@ export type BusinessInfoForPdf = {
   address: string | null;
   phone: string | null;
   email: string | null;
+  invoiceTaxDetail?: "SUMMARY" | "PER_ITEM";
   logoUrl?: string | null;
 };
 
@@ -89,7 +93,14 @@ export type SaleForPdf = {
   createdAt: Date | string;
   customer: { name: string; document?: string | null } | null;
   user: { name: string | null } | null;
-  items: { name: string; unit: string; quantity: number; price: number; subtotal: number }[];
+  items: {
+    name: string;
+    unit: string;
+    quantity: number;
+    price: number;
+    subtotal: number;
+    taxLines?: TaxLine[] | null;
+  }[];
   subtotal: number;
   taxAmount: number;
   taxLines: TaxLine[] | null;
@@ -147,22 +158,43 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
         </View>
 
         {/* Tabla de ítems */}
-        <View style={s.tableHeader}>
-          <Text style={[s.colQty, s.thText]}>Cant.</Text>
-          <Text style={[s.colUnit, s.thText]}>Und.</Text>
-          <Text style={[s.colName, s.thText]}>Producto</Text>
-          <Text style={[s.colPrice, s.thText]}>Precio unit.</Text>
-          <Text style={[s.colSub, s.thText]}>Subtotal</Text>
-        </View>
-        {sale.items.map((item, i) => (
-          <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
-            <Text style={[s.colQty, s.tdText]}>{item.quantity}</Text>
-            <Text style={[s.colUnit, s.tdText]}>{item.unit}</Text>
-            <Text style={[s.colName, s.tdText]}>{item.name}</Text>
-            <Text style={[s.colPrice, s.tdText]}>{formatCOP(item.price)}</Text>
-            <Text style={[s.colSub, s.tdText]}>{formatCOP(item.subtotal)}</Text>
-          </View>
-        ))}
+        {(() => {
+          const perItemTax = business.invoiceTaxDetail === "PER_ITEM";
+          return (
+            <>
+              <View style={s.tableHeader}>
+                <Text style={[s.colQty, s.thText]}>Cant.</Text>
+                <Text style={[s.colUnit, s.thText]}>Und.</Text>
+                <Text style={[s.colName, s.thText]}>Producto</Text>
+                <Text style={[s.colPrice, s.thText]}>Precio unit.</Text>
+                {perItemTax ? <Text style={[s.colTax, s.thText]}>Impuesto</Text> : null}
+                <Text style={[s.colSub, s.thText]}>Subtotal</Text>
+              </View>
+              {sale.items.map((item, i) => {
+                const itemTaxLines = perItemTax ? (item.taxLines ?? []) : [];
+                const itemTaxAmount = itemTaxLines.reduce((sum, t) => sum + t.amount, 0);
+                const taxLabel = itemTaxLines.map((t) => `${t.name} ${t.rate}%`).join(", ");
+                return (
+                  <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
+                    <Text style={[s.colQty, s.tdText]}>{item.quantity}</Text>
+                    <Text style={[s.colUnit, s.tdText]}>{item.unit}</Text>
+                    <View style={s.colName}>
+                      <Text style={s.tdText}>{item.name}</Text>
+                      {taxLabel ? <Text style={s.itemTaxLabel}>{taxLabel}</Text> : null}
+                    </View>
+                    <Text style={[s.colPrice, s.tdText]}>{formatCOP(item.price)}</Text>
+                    {perItemTax ? (
+                      <Text style={[s.colTax, s.tdText]}>
+                        {itemTaxAmount > 0 ? formatCOP(itemTaxAmount) : "-"}
+                      </Text>
+                    ) : null}
+                    <Text style={[s.colSub, s.tdText]}>{formatCOP(item.subtotal)}</Text>
+                  </View>
+                );
+              })}
+            </>
+          );
+        })()}
 
         {/* Totales */}
         <View style={s.totalsArea}>

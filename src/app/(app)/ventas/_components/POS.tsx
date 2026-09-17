@@ -1,5 +1,6 @@
 "use client";
 
+import { Camera } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useOfflineQueue } from "~/hooks/useOfflineQueue";
 import { api } from "~/trpc/react";
@@ -234,7 +235,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
               onClick={() => setShowScanner(true)}
               className="shrink-0 rounded-xl border border-violet-300 bg-white px-4 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
             >
-              📷
+              <Camera className="h-5 w-5" />
             </button>
           </div>
 
@@ -297,7 +298,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
               onClick={() => setContinuousScan(true)}
               className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-sm font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
             >
-              📷 Activar escaneo continuo
+              <Camera className="h-4 w-4" /> Activar escaneo continuo
             </button>
           )}
 

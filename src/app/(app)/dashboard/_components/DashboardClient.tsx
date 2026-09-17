@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ShoppingCart, Wallet, Package } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { ArrowRight, Minus, ShoppingCart, TrendingDown, TrendingUp, Wallet, Package } from "lucide-react";
 import { api } from "~/trpc/react";
 import { SkeletonKpiCard } from "~/app/_components/Skeletons";
 
@@ -29,6 +29,27 @@ const formatShortDate = (d: Date | string) =>
 
 const formatBarLabel = (dateStr: string) =>
   new Date(dateStr + "T00:00:00").toLocaleDateString("es-CO", { weekday: "short", day: "numeric" });
+
+type ChartBucket = { key: string; label: string; total: number; count: number };
+
+/**
+ * El período "mes" trae un total por día (~30 entradas) — mostrarlas todas
+ * como barras se desborda o queda ilegible incluso con scroll. Se agrupan de
+ * a 7 días (Semana 1, 2, 3…) para que el gráfico quede compacto y legible.
+ */
+function buildWeeklyBuckets(byDay: { date: string; total: number; count: number }[]): ChartBucket[] {
+  const buckets: ChartBucket[] = [];
+  for (let i = 0; i < byDay.length; i += 7) {
+    const chunk = byDay.slice(i, i + 7);
+    buckets.push({
+      key: `week-${buckets.length + 1}`,
+      label: `Semana ${buckets.length + 1}`,
+      total: chunk.reduce((s, d) => s + d.total, 0),
+      count: chunk.reduce((s, d) => s + d.count, 0),
+    });
+  }
+  return buckets;
+}
 
 function computeTrend(current: number, prev: number): number | null {
   if (prev === 0) return null;
@@ -68,9 +89,13 @@ export function DashboardClient() {
     return () => clearTimeout(t);
   }, [data]);
 
-  const maxDayTotal = data ? Math.max(...data.sales.byDay.map((d) => d.total), 1) : 1;
-  const showBarChart = (data?.sales.byDay.length ?? 0) > 1;
-  const needsBarScroll = (data?.sales.byDay.length ?? 0) > 12;
+  const chartData: ChartBucket[] = data
+    ? period === "month"
+      ? buildWeeklyBuckets(data.sales.byDay)
+      : data.sales.byDay.map((d) => ({ key: d.date, label: formatBarLabel(d.date), total: d.total, count: d.count }))
+    : [];
+  const maxDayTotal = Math.max(...chartData.map((d) => d.total), 1);
+  const showBarChart = chartData.length > 1;
 
   let dateRangeLabel: string | null = null;
   if (data) {
@@ -239,7 +264,9 @@ export function DashboardClient() {
           {showBarChart && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-semibold text-slate-700 dark:text-slate-200">Ventas por día</h2>
+                <h2 className="font-semibold text-slate-700 dark:text-slate-200">
+                  {period === "month" ? "Ventas por semana" : "Ventas por día"}
+                </h2>
                 <span className="text-xs text-slate-400 dark:text-slate-500">
                   Total: {formatCOP(data.sales.total)}
                 </span>
@@ -254,7 +281,7 @@ export function DashboardClient() {
                 </div>
 
                 {/* Barras */}
-                <div className="relative flex-1">
+                <div className="relative min-w-0 flex-1">
                   {/* Líneas de referencia */}
                   <div className="pointer-events-none absolute inset-0 flex flex-col justify-between pb-5">
                     <div className="h-px w-full border-t border-dashed border-slate-100 dark:border-white/5" />
@@ -262,17 +289,11 @@ export function DashboardClient() {
                     <div className="h-px w-full border-t border-slate-200 dark:border-white/10" />
                   </div>
 
-                  {/* En periodos largos (mes) las barras necesitan ancho mínimo — se
-                      vuelven scrolleables en horizontal en vez de aplastarse ilegibles. */}
-                  <div className={needsBarScroll ? "overflow-x-auto pb-1" : undefined}>
-                    <div
-                      className="flex h-[130px] items-end gap-1"
-                      style={needsBarScroll ? { minWidth: `${data.sales.byDay.length * 22}px` } : undefined}
-                    >
-                      {data.sales.byDay.map((day, index) => {
-                        const heightPct = maxDayTotal > 0 ? (day.total / maxDayTotal) * 100 : 0;
-                        const hasData = day.total > 0;
-                        const isLatest = index === data.sales.byDay.length - 1;
+                  <div className="flex h-[130px] items-end gap-1">
+                    {chartData.map((bucket, index) => {
+                        const heightPct = maxDayTotal > 0 ? (bucket.total / maxDayTotal) * 100 : 0;
+                        const hasData = bucket.total > 0;
+                        const isLatest = index === chartData.length - 1;
                         let barColorClass: string;
                         if (!hasData) {
                           barColorClass = "bg-slate-100 dark:bg-white/5";
@@ -282,16 +303,11 @@ export function DashboardClient() {
                           barColorClass = "bg-violet-400 dark:bg-violet-600";
                         }
                         return (
-                          <div
-                            key={day.date}
-                            className={`group relative flex flex-col items-center gap-1 ${
-                              needsBarScroll ? "w-[22px] shrink-0" : "flex-1"
-                            }`}
-                          >
+                          <div key={bucket.key} className="group relative flex flex-1 flex-col items-center gap-1">
                             {/* Tooltip */}
-                            <div className="absolute bottom-full z-10 mb-2 hidden min-w-max rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800">
-                              <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(day.total)}</p>
-                              <p className="text-slate-400">{day.count} venta{day.count !== 1 ? "s" : ""}</p>
+                            <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden min-w-max -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800">
+                              <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(bucket.total)}</p>
+                              <p className="text-slate-400">{bucket.count} venta{bucket.count !== 1 ? "s" : ""}</p>
                             </div>
                             {/* Barra */}
                             <div className="flex w-full flex-1 items-end">
@@ -308,12 +324,11 @@ export function DashboardClient() {
                             </div>
                             {/* Etiqueta */}
                             <span className="truncate text-[9px] text-slate-400 dark:text-slate-500">
-                              {formatBarLabel(day.date)}
+                              {bucket.label}
                             </span>
                           </div>
                         );
                       })}
-                    </div>
                   </div>
                 </div>
               </div>
@@ -400,9 +415,9 @@ export function DashboardClient() {
                 </p>
                 <Link
                   href="/inventario"
-                  className="text-xs font-medium text-amber-700 underline underline-offset-2 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
+                  className="inline-flex items-center gap-0.5 text-xs font-medium text-amber-700 underline underline-offset-2 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
                 >
-                  Ver inventario →
+                  Ver inventario <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
               {data.inventory.outOfStock > 0 && (
@@ -440,23 +455,23 @@ type KpiColor = "violet" | "emerald" | "slate" | "red" | "amber";
 function TrendPill({ value }: Readonly<{ value: number }>) {
   const isPositive = value > 0;
   const isNeutral = value === 0;
-  let arrow: string;
+  let icon: ReactNode;
   let colorClass: string;
   if (isNeutral) {
-    arrow = "=";
+    icon = <Minus className="h-3 w-3" />;
     colorClass = "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400";
   } else if (isPositive) {
-    arrow = "↑";
+    icon = <TrendingUp className="h-3 w-3" />;
     colorClass = "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400";
   } else {
-    arrow = "↓";
+    icon = <TrendingDown className="h-3 w-3" />;
     colorClass = "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400";
   }
   return (
     <span
-      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${colorClass}`}
+      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${colorClass}`}
     >
-      {arrow} {Math.abs(value)}%
+      {icon} {Math.abs(value)}%
     </span>
   );
 }
@@ -491,7 +506,7 @@ function KpiCard({
       {trend != null && <TrendPill value={trend} />}
       {sub && <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">{sub}</p>}
       {tooltip && (
-        <div className="pointer-events-none absolute bottom-full left-0 z-10 mb-2 hidden w-56 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-56 max-w-[80vw] -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
           {tooltip}
         </div>
       )}

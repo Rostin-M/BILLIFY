@@ -170,7 +170,10 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                           createdAt: sale.createdAt,
                           customer: sale.customer ?? null,
                           user: sale.user ?? null,
-                          items: sale.items,
+                          items: sale.items.map((item) => ({
+                            ...item,
+                            taxLines: (item.taxLines as TaxLine[] | null) ?? null,
+                          })),
                           subtotal: sale.subtotal,
                           taxAmount: sale.taxAmount,
                           taxLines: (sale.taxLines as TaxLine[] | null) ?? null,

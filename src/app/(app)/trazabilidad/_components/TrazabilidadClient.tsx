@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import { api } from "~/trpc/react";
 
@@ -241,8 +242,12 @@ export function TrazabilidadClient() {
                           {log.user?.name ? ` · ${log.user.name}` : ""}
                         </p>
                       </div>
-                      <span className="mt-1 shrink-0 text-xs text-slate-300 dark:text-slate-600">
-                        {isExpanded ? "▲" : "▼"}
+                      <span className="mt-1 shrink-0 text-slate-300 dark:text-slate-600">
+                        {isExpanded ? (
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )}
                       </span>
                     </button>
                     {isExpanded && (

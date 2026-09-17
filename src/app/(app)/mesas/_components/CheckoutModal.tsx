@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useState } from "react";
 import { api } from "~/trpc/react";
 import { useSession } from "next-auth/react";
@@ -169,7 +170,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
             aria-label="Cerrar"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
           >
-            ✕
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -195,7 +196,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                 return (
                   <div
                     key={guest.id}
-                    className={`flex items-center gap-3 rounded-xl border p-3 transition ${isSelectedForGroup ? "border-violet-400 bg-violet-50 dark:border-violet-500/50 dark:bg-violet-900/20" : "border-slate-200 bg-white dark:border-white/10 dark:bg-white/5"}`}
+                    className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border p-3 transition ${isSelectedForGroup ? "border-violet-400 bg-violet-50 dark:border-violet-500/50 dark:bg-violet-900/20" : "border-slate-200 bg-white dark:border-white/10 dark:bg-white/5"}`}
                   >
                     <input
                       type="checkbox"
@@ -209,7 +210,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                       className="min-w-0 flex-1 text-left"
                       onClick={() => toggleGroupSelect(guest.id)}
                     >
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                      <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                         {guest.name}
                         {guest.description && <span className="ml-1 text-xs font-normal text-slate-400">· {guest.description}</span>}
                       </p>
@@ -226,7 +227,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                       <select
                         value={grp.paymentMethod}
                         onChange={(e) => setMethod(grp.id, e.target.value as PaymentMethod)}
-                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                        className="ml-7 w-full shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white sm:ml-0 sm:w-auto"
                       >
                         {(Object.keys(PAYMENT_LABELS) as PaymentMethod[]).map((m) => (
                           <option key={m} value={m}>{PAYMENT_LABELS[m]}</option>

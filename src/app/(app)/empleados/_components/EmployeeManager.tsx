@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, useState } from "react";
 import { toast } from "sonner";
-import { UserCog } from "lucide-react";
+import { Check, UserCog } from "lucide-react";
 
 import { api } from "~/trpc/react";
 import { EmptyState } from "~/app/_components/EmptyState";
@@ -174,13 +174,19 @@ export function EmployeeManager() {
                     }
                     disabled={setCashManagement.isPending}
                     title={emp.canManageCash ? "Puede gestionar caja — clic para revocar" : "Sin acceso a caja — clic para permitir"}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       emp.canManageCash
                         ? "bg-violet-100 text-violet-700 hover:bg-slate-100 hover:text-slate-600 dark:bg-violet-500/20 dark:text-violet-300 dark:hover:bg-white/10 dark:hover:text-slate-300"
                         : "bg-slate-100 text-slate-500 hover:bg-violet-100 hover:text-violet-700 dark:bg-white/10 dark:text-slate-400 dark:hover:bg-violet-500/20 dark:hover:text-violet-300"
                     }`}
                   >
-                    {emp.canManageCash ? "Caja ✓" : "Sin caja"}
+                    {emp.canManageCash ? (
+                      <>
+                        <Check className="h-3 w-3" /> Caja
+                      </>
+                    ) : (
+                      "Sin caja"
+                    )}
                   </button>
                   <button
                     onClick={() =>

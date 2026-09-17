@@ -1,5 +1,6 @@
 "use client";
 
+import { Armchair } from "lucide-react";
 import { useState } from "react";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { TableCard } from "./TableCard";
@@ -95,7 +96,7 @@ export function MesasClient({ business }: Readonly<Props>) {
 
       {sessions.length === 0 && !showCreate && (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center dark:border-white/10 dark:bg-white/5">
-          <p className="text-4xl mb-3">🪑</p>
+          <Armchair className="mx-auto mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
           <p className="text-slate-500 dark:text-slate-400">Abre una mesa para empezar a registrar pedidos en sitio.</p>
         </div>
       )}

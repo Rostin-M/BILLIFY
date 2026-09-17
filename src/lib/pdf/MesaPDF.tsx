@@ -42,10 +42,13 @@ const fmt = (v: number) =>
   v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
 const fmtDate = (d: Date | string) =>
-  new Date(d).toLocaleDateString("es-CO", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  new Date(d).toLocaleDateString("es-CO", {
+    timeZone: "America/Bogota",
+    weekday: "long", day: "2-digit", month: "long", year: "numeric",
+  });
 
 const fmtTime = (d: Date | string) =>
-  new Date(d).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  new Date(d).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
 
 export type TaxLineForPdf = { name: string; rate: number; amount: number };
 

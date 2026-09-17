@@ -3,10 +3,11 @@ import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { adjustStock } from "~/server/lib/inventory";
+import { assertCashRegisterNotStale } from "~/server/lib/cashRegisterGuard";
 import { bogotaStartOfDay, getPeriodRangeBogota } from "~/server/lib/bogotaTime";
 import { sendInvoiceEmail } from "~/server/lib/email";
 import { generateFacturaPdfBuffer } from "~/server/lib/generateFacturaPdf";
-import { computeSaleTotals, type TaxConfig, type TaxLine } from "~/lib/pricing";
+import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig, type TaxLine } from "~/lib/pricing";
 import { resolveInvoiceContact } from "~/lib/invoiceContact";
 
 const PAYMENT_METHODS = ["CASH", "CARD", "CREDIT", "TRANSFER"] as const;
@@ -34,6 +35,8 @@ export const saleRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
 
+      await assertCashRegisterNotStale(ctx.db, businessId, userId);
+
       if (input.paymentMethod === "CREDIT" && !input.customerId) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -60,14 +63,29 @@ export const saleRouter = createTRPCRouter({
       }
 
       const productMap = new Map(products.map((p) => [p.id, p]));
+      const taxConfigs = (business?.taxes as TaxConfig[]) ?? [];
+      const autoTax = business?.autoTax ?? false;
 
       const itemsToCreate = input.items.map((item) => {
         const product = productMap.get(item.productId)!;
         const itemSubtotal = product.price * item.quantity;
-        return { productId: item.productId, name: product.name, unit: product.unit, price: product.price, quantity: item.quantity, subtotal: itemSubtotal };
+        const itemTaxLines = autoTax
+          ? computeItemTaxBreakdown(
+              { price: product.price, quantity: item.quantity, taxSlots: product.taxSlots },
+              taxConfigs,
+            ).taxLines
+          : [];
+        return {
+          productId: item.productId,
+          name: product.name,
+          unit: product.unit,
+          price: product.price,
+          quantity: item.quantity,
+          subtotal: itemSubtotal,
+          taxLines: itemTaxLines.length > 0 ? itemTaxLines : undefined,
+        };
       });
 
-      const taxConfigs = (business?.taxes as TaxConfig[]) ?? [];
       const { subtotal, taxAmount, taxLines, total } = computeSaleTotals(
         input.items.map((item) => ({
           price: productMap.get(item.productId)!.price,
@@ -75,7 +93,7 @@ export const saleRouter = createTRPCRouter({
           taxSlots: productMap.get(item.productId)!.taxSlots,
         })),
         taxConfigs,
-        business?.autoTax ?? false,
+        autoTax,
       );
 
       const sale = await ctx.db.$transaction(async (tx) => {
@@ -143,7 +161,7 @@ export const saleRouter = createTRPCRouter({
           note: true, voidedAt: true, voidReason: true,
           user: { select: { name: true } },
           customer: { select: { name: true } },
-          items: { select: { name: true, unit: true, quantity: true, price: true, subtotal: true } },
+          items: { select: { name: true, unit: true, quantity: true, price: true, subtotal: true, taxLines: true } },
         },
         orderBy: { createdAt: "desc" },
       });
@@ -227,7 +245,7 @@ export const saleRouter = createTRPCRouter({
             status: true,
             customer: { select: { name: true, document: true } },
             user: { select: { name: true } },
-            items: { select: { name: true, unit: true, quantity: true, price: true, subtotal: true } },
+            items: { select: { name: true, unit: true, quantity: true, price: true, subtotal: true, taxLines: true } },
           },
         }),
         ctx.db.business.findUnique({
@@ -240,6 +258,7 @@ export const saleRouter = createTRPCRouter({
             email: true,
             invoicePhoneSource: true,
             invoiceEmailSource: true,
+            invoiceTaxDetail: true,
             logoUrl: true,
           },
         }),
@@ -266,6 +285,7 @@ export const saleRouter = createTRPCRouter({
           address: business.address,
           phone: resolveInvoiceContact(business.invoicePhoneSource, owner?.phone ?? null, business.phone),
           email: resolveInvoiceContact(business.invoiceEmailSource, owner?.email ?? null, business.email),
+          invoiceTaxDetail: business.invoiceTaxDetail,
           logoUrl: business.logoUrl,
         },
         {
@@ -273,7 +293,10 @@ export const saleRouter = createTRPCRouter({
           createdAt: sale.createdAt,
           customer: sale.customer ?? null,
           user: sale.user,
-          items: sale.items,
+          items: sale.items.map((item) => ({
+            ...item,
+            taxLines: item.taxLines as TaxLine[] | null,
+          })),
           subtotal: sale.subtotal,
           taxAmount: sale.taxAmount,
           taxLines: sale.taxLines as TaxLine[] | null,

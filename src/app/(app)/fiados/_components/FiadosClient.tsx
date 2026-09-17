@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { HandCoins } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import { EmptyState } from "~/app/_components/EmptyState";
 
@@ -9,9 +10,40 @@ const formatCOP = (v: number) =>
   v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
 const formatDay = (d: Date) =>
-  new Date(d).toLocaleDateString("es-CO", { weekday: "long", day: "2-digit", month: "long" });
+  new Date(d).toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: "long", day: "2-digit", month: "long" });
 
-function DebtorDetail({ customerId }: Readonly<{ customerId: string }>) {
+const bogotaDayKey = (d: Date) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+
+type CreditSale = {
+  id: string;
+  createdAt: Date;
+  items: { name: string; quantity: number; subtotal: number }[];
+};
+type Payment = {
+  id: string;
+  amount: number;
+  createdAt: Date;
+  user: { name: string | null } | null;
+};
+type DayGroup = { key: string; date: Date; credits: CreditSale[]; payments: Payment[] };
+
+function groupByDay(creditSales: CreditSale[], payments: Payment[]): DayGroup[] {
+  const groups = new Map<string, DayGroup>();
+  function group(date: Date) {
+    const key = bogotaDayKey(date);
+    let g = groups.get(key);
+    if (!g) {
+      g = { key, date, credits: [], payments: [] };
+      groups.set(key, g);
+    }
+    return g;
+  }
+  for (const sale of creditSales) group(sale.createdAt).credits.push(sale);
+  for (const payment of payments) group(payment.createdAt).payments.push(payment);
+  return Array.from(groups.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
+}
+
+function DebtorDetail({ customerId, debtTotal }: Readonly<{ customerId: string; debtTotal: number }>) {
   const { data, isPending } = api.customer.history.useQuery({ customerId });
 
   if (isPending) {
@@ -19,43 +51,66 @@ function DebtorDetail({ customerId }: Readonly<{ customerId: string }>) {
   }
 
   const creditSales = (data?.sales ?? []).filter((s) => s.paymentMethod === "CREDIT");
-  if (creditSales.length === 0) {
+  const payments = data?.payments ?? [];
+
+  if (creditSales.length === 0 && payments.length === 0) {
     return <p className="px-1 py-2 text-xs text-slate-400 dark:text-slate-500">Sin fiados registrados.</p>;
   }
 
-  const byDay = new Map<string, typeof creditSales>();
-  for (const sale of creditSales) {
-    const key = formatDay(sale.createdAt);
-    byDay.set(key, [...(byDay.get(key) ?? []), sale]);
-  }
+  const days = groupByDay(creditSales, payments);
 
   return (
     <div className="space-y-3 px-1 py-2">
-      {Array.from(byDay.entries()).map(([day, sales]) => {
-        const dayTotal = sales.reduce((sum, s) => sum + s.total, 0);
+      <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+        Debe en total: {formatCOP(Math.max(debtTotal, 0))}
+      </p>
+      {days.map((day) => {
+        const dayOwed = day.credits.reduce(
+          (sum, s) => sum + s.items.reduce((isum, i) => isum + i.subtotal, 0),
+          0,
+        );
         return (
-          <div key={day}>
+          <div key={day.key}>
             <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
-              <span className="capitalize">{day}</span>
-              <span>{formatCOP(dayTotal)}</span>
+              <span className="capitalize">{formatDay(day.date)}</span>
+              {dayOwed > 0 && <span>{formatCOP(dayOwed)}</span>}
             </div>
-            <ul className="space-y-1">
-              {sales.flatMap((s) =>
-                s.items.map((item, i) => (
+            {day.credits.length > 0 && (
+              <ul className="space-y-1">
+                {day.credits.flatMap((s) =>
+                  s.items.map((item, i) => (
+                    <li
+                      key={`${s.id}-${i}`}
+                      className="flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs dark:bg-white/5"
+                    >
+                      <span className="text-slate-600 dark:text-slate-300">
+                        {item.quantity} × {item.name}
+                      </span>
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        {formatCOP(item.subtotal)}
+                      </span>
+                    </li>
+                  )),
+                )}
+              </ul>
+            )}
+            {day.payments.length > 0 && (
+              <ul className="mt-1 space-y-1">
+                {day.payments.map((p) => (
                   <li
-                    key={`${s.id}-${i}`}
-                    className="flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs dark:bg-white/5"
+                    key={p.id}
+                    className="flex items-center justify-between rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs dark:bg-emerald-900/10"
                   >
-                    <span className="text-slate-600 dark:text-slate-300">
-                      {item.quantity} × {item.name}
+                    <span className="text-emerald-700 dark:text-emerald-300">
+                      Abonó{p.user?.name ? ` · ${p.user.name}` : ""}
                     </span>
-                    <span className="font-medium text-slate-700 dark:text-slate-200">
-                      {formatCOP(item.subtotal)}
+                    <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                      − {formatCOP(p.amount)}
                     </span>
                   </li>
-                )),
-              )}
-            </ul>
+                ))}
+              </ul>
+            )}
           </div>
         );
       })}
@@ -64,8 +119,25 @@ function DebtorDetail({ customerId }: Readonly<{ customerId: string }>) {
 }
 
 export function FiadosClient() {
+  const utils = api.useUtils();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+
   const { data: debtors = [], isPending } = api.customer.listDebtors.useQuery();
+
+  const addPayment = api.customer.addPayment.useMutation({
+    onSuccess: async (data) => {
+      toast.success(data.message);
+      setPayingId(null);
+      setPaymentAmount("");
+      await Promise.all([
+        utils.customer.listDebtors.invalidate(),
+        expandedId ? utils.customer.history.invalidate({ customerId: expandedId }) : Promise.resolve(),
+      ]);
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const totalDebt = debtors.reduce((sum, d) => sum + d.debt, 0);
 
@@ -102,7 +174,12 @@ export function FiadosClient() {
           <li key={c.id} className="p-3">
             <button
               type="button"
-              onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+              onClick={() => {
+                const next = expandedId === c.id ? null : c.id;
+                setExpandedId(next);
+                setPayingId(null);
+                setPaymentAmount("");
+              }}
               className="flex w-full items-center justify-between gap-3 text-left"
             >
               <div className="min-w-0">
@@ -118,7 +195,68 @@ export function FiadosClient() {
                 {formatCOP(c.debt)}
               </span>
             </button>
-            {expandedId === c.id && <DebtorDetail customerId={c.id} />}
+
+            {expandedId === c.id && (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayingId(payingId === c.id ? null : c.id);
+                      setPaymentAmount("");
+                    }}
+                    className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                      payingId === c.id
+                        ? "border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-300"
+                        : "border-slate-200 text-slate-500 hover:border-amber-200 hover:text-amber-600 dark:border-white/10 dark:text-slate-400"
+                    }`}
+                  >
+                    Abonar
+                  </button>
+
+                  {payingId === c.id && (
+                    <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-900/10">
+                      <p className="mb-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                        Deuda actual: {formatCOP(c.debt)}
+                      </p>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={paymentAmount}
+                        onChange={(e) => setPaymentAmount(e.target.value)}
+                        placeholder="Monto a abonar"
+                        className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                      />
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                        <button
+                          onClick={() => addPayment.mutate({ customerId: c.id, amount: Number(paymentAmount) })}
+                          disabled={!paymentAmount || Number(paymentAmount) <= 0 || addPayment.isPending}
+                          className="min-h-11 flex-1 rounded-lg bg-amber-600 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
+                        >
+                          {addPayment.isPending ? "Guardando..." : "Abonar"}
+                        </button>
+                        <button
+                          onClick={() => addPayment.mutate({ customerId: c.id, amount: c.debt })}
+                          disabled={addPayment.isPending}
+                          className="min-h-11 flex-1 rounded-lg bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                        >
+                          Pagar deuda completa
+                        </button>
+                        <button
+                          onClick={() => setPayingId(null)}
+                          className="min-h-11 rounded-lg border border-amber-200 px-3 text-sm text-amber-700 hover:bg-amber-100 dark:border-amber-500/30 dark:text-amber-300"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <DebtorDetail customerId={c.id} debtTotal={c.debt} />
+              </div>
+            )}
           </li>
         ))}
       </ul>

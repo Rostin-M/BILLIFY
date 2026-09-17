@@ -1,5 +1,6 @@
 "use client";
 
+import { Camera } from "lucide-react";
 import { type ChangeEvent, useState } from "react";
 import { toast } from "sonner";
 
@@ -473,9 +474,9 @@ function ProductFormFields({
           <button
             type="button"
             onClick={() => setShowScanner(true)}
-            className="shrink-0 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-transparent dark:text-violet-300 dark:hover:bg-violet-900/20"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-transparent dark:text-violet-300 dark:hover:bg-violet-900/20"
           >
-            📷 Escanear
+            <Camera className="h-3.5 w-3.5" /> Escanear
           </button>
         </div>
         <FieldError msg={fieldErrors.barcode} />
@@ -857,17 +858,17 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                         <span className="text-xs text-slate-400 dark:text-slate-500">
                           {product.unit}
                         </span>
-                        {product.lotNumber && (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Lote: {product.lotNumber}
-                          </span>
-                        )}
-                        {product.expiresAt && (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Vence: {formatDate(product.expiresAt)}
-                          </span>
-                        )}
                       </div>
+                      {(product.lotNumber != null || product.expiresAt != null) && (
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          {[
+                            product.lotNumber ? `Lote: ${product.lotNumber}` : null,
+                            product.expiresAt ? `Vence: ${formatDate(product.expiresAt)}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      )}
                     </div>
                     <div className="col-span-7 pt-0.5 sm:col-span-2 sm:text-right">
                       <p className="text-sm tabular-nums">{formatCOP(product.price)}</p>

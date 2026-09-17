@@ -1,6 +1,7 @@
 "use client";
 
 import { usePDF } from "@react-pdf/renderer";
+import { Download, Mail, X } from "lucide-react";
 import { useState } from "react";
 
 import { api } from "~/trpc/react";
@@ -58,9 +59,9 @@ export function FacturaPdfActions({ saleId, business, sale, fileName, onClose, l
       <div className="inline-flex items-center gap-1 flex-wrap">
         <button
           onClick={handleDownload}
-          className="rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
+          className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
         >
-          ↓ PDF
+          <Download className="h-3.5 w-3.5" /> PDF
         </button>
         <button
           onClick={handlePrint}
@@ -71,16 +72,16 @@ export function FacturaPdfActions({ saleId, business, sale, fileName, onClose, l
         {sale.invoiceNumber && (
           <button
             onClick={() => setShowEmailForm((v) => !v)}
-            className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
+            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
           >
-            ✉ Correo
+            <Mail className="h-3.5 w-3.5" /> Correo
           </button>
         )}
         <button
           onClick={onClose}
-          className="rounded-lg px-1.5 py-1 text-xs text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+          className="rounded-lg p-1 text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
         >
-          ✕
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
 

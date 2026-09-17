@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 
 import { Logo } from "~/app/_components/Logo";
@@ -31,7 +32,7 @@ export default function RecuperarContrasenaPage() {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-4">
         <div className="space-y-3 text-center">
-          <div className="text-4xl text-emerald-400">✓</div>
+          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
           <p className="text-lg font-semibold text-emerald-400">
             Contraseña actualizada correctamente
           </p>

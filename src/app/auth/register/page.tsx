@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ChangeEvent, useState } from "react";
 
@@ -77,7 +78,7 @@ export default function RegisterPage() {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 text-slate-900 dark:bg-slate-950 dark:text-white">
         <div className="space-y-3 text-center">
-          <div className="text-4xl">✓</div>
+          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
           <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
             ¡Cuenta verificada con éxito!
           </p>

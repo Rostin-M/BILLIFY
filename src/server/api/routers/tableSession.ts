@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter } from "~/server/api/trpc";
 import { adjustStock } from "~/server/lib/inventory";
+import { assertCashRegisterNotStale } from "~/server/lib/cashRegisterGuard";
 import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
 const PAYMENT_METHODS = ["CASH", "CARD", "CREDIT", "TRANSFER"] as const;
@@ -275,6 +276,8 @@ export const tableSessionRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
+
+      await assertCashRegisterNotStale(ctx.db, businessId, userId);
 
       const session = await ctx.db.tableSession.findFirst({
         where: { id: input.sessionId, businessId, status: "OPEN" },

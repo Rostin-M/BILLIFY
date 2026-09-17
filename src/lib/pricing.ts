@@ -62,3 +62,38 @@ export function computeSaleTotals(
 
   return { subtotal: Math.round(subtotal), taxAmount, taxLines, total };
 }
+
+export type ItemTaxBreakdown = { subtotal: number; taxLines: TaxLine[]; taxAmount: number };
+
+/**
+ * Desglose de impuestos de UNA línea (no de la venta completa) — usado para
+ * mostrar, por producto, qué impuestos se le cobraron. Se extraen "hacia
+ * atrás" desde el precio final igual que en computeSaleTotals, pero sin
+ * mezclar el redondeo con el de otras líneas.
+ */
+export function computeItemTaxBreakdown(item: PricedItem, taxes: TaxConfig[]): ItemTaxBreakdown {
+  const itemTotal = item.price * item.quantity;
+  const applicable = (item.taxSlots ?? [])
+    .map((slot) => taxes[slot])
+    .filter((t): t is TaxConfig => !!t && t.enabled && t.rate > 0);
+
+  const totalRate = applicable.reduce((sum, t) => sum + t.rate, 0);
+  if (totalRate === 0) {
+    return { subtotal: itemTotal, taxLines: [], taxAmount: 0 };
+  }
+
+  const itemSubtotal = itemTotal / (1 + totalRate / 100);
+  const itemTaxAmount = itemTotal - itemSubtotal;
+
+  const taxLines: TaxLine[] = applicable.map((tax) => ({
+    name: tax.name,
+    rate: tax.rate,
+    amount: Math.round(itemTaxAmount * (tax.rate / totalRate)),
+  }));
+
+  return {
+    subtotal: Math.round(itemSubtotal),
+    taxLines,
+    taxAmount: taxLines.reduce((sum, t) => sum + t.amount, 0),
+  };
+}

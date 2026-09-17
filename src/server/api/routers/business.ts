@@ -10,6 +10,7 @@ const taxItemSchema = z.object({
 });
 
 const contactSourceSchema = z.enum(["NONE", "OWNER", "BUSINESS"]);
+const taxDetailSchema = z.enum(["SUMMARY", "PER_ITEM"]);
 
 const updateSettingsSchema = z
   .object({
@@ -20,6 +21,7 @@ const updateSettingsSchema = z
     ownerPhone: z.string().trim().optional(),
     invoicePhoneSource: contactSourceSchema.default("NONE"),
     invoiceEmailSource: contactSourceSchema.default("NONE"),
+    invoiceTaxDetail: taxDetailSchema.default("SUMMARY"),
     taxes: z.array(taxItemSchema).max(3, "Máximo 3 impuestos").default([]),
     autoTax: z.boolean().default(false),
     maxCashRegisters: z.number().int().min(1).max(10).default(1),
@@ -55,6 +57,7 @@ export const businessRouter = createTRPCRouter({
           email: true,
           invoicePhoneSource: true,
           invoiceEmailSource: true,
+          invoiceTaxDetail: true,
           taxes: true,
           autoTax: true,
           plan: true,
@@ -98,6 +101,7 @@ export const businessRouter = createTRPCRouter({
             email: input.email ?? null,
             invoicePhoneSource: input.invoicePhoneSource,
             invoiceEmailSource: input.invoiceEmailSource,
+            invoiceTaxDetail: input.invoiceTaxDetail,
             taxes: input.taxes,
             autoTax: input.autoTax,
             maxCashRegisters: input.maxCashRegisters,

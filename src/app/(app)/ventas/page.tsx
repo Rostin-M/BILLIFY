@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { auth } from "~/server/auth";
@@ -25,6 +26,7 @@ export default async function VentasPage() {
         email: true,
         invoicePhoneSource: true,
         invoiceEmailSource: true,
+        invoiceTaxDetail: true,
         taxes: true,
         autoTax: true,
         logoUrl: true,
@@ -50,7 +52,7 @@ export default async function VentasPage() {
 
           {!activeRegister ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-10 text-center dark:border-amber-500/30 dark:bg-amber-900/10">
-              <p className="text-5xl">🔒</p>
+              <Lock className="mx-auto h-12 w-12 text-amber-500" />
               <p className="mt-4 text-xl font-bold text-amber-800 dark:text-amber-300">
                 Caja cerrada
               </p>
@@ -84,6 +86,7 @@ export default async function VentasPage() {
                   owner?.email ?? null,
                   business?.email ?? null,
                 ),
+                invoiceTaxDetail: business?.invoiceTaxDetail ?? "SUMMARY",
                 logoUrl: business?.logoUrl ?? null,
               }}
             />

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { pdf } from "@react-pdf/renderer";
+import { X } from "lucide-react";
 import { MesaPDF } from "./MesaPDF";
 import type { MesaForPdf } from "./MesaPDF";
 
@@ -56,7 +57,7 @@ export function MesaPdfActions({ business, mesa, fileName, onClose }: Readonly<P
           onClick={onClose}
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
         >
-          ✕
+          <X className="h-4 w-4" />
         </button>
       )}
     </div>

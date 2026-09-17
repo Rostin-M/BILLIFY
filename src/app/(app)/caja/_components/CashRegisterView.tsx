@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { api } from "~/trpc/react";
 import { CashOpenForm } from "./CashOpenForm";
 import { CashDashboard } from "./CashDashboard";
@@ -16,9 +17,11 @@ function OtherRegisters({ excludeRegisterId }: Readonly<{ excludeRegisterId?: st
     refetchIntervalInBackground: false,
   });
   const utils = api.useUtils();
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const closeRegister = api.cashRegister.close.useMutation({
     onSuccess: async () => {
+      setConfirmingId(null);
       await utils.cashRegister.listActive.invalidate();
       await utils.cashRegister.getActive.invalidate();
     },
@@ -38,35 +41,64 @@ function OtherRegisters({ excludeRegisterId }: Readonly<{ excludeRegisterId?: st
             hour: "2-digit",
             minute: "2-digit",
           });
+          const balance = r.movementsBalance;
+          const isConfirming = confirmingId === r.id;
           return (
-            <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-4">
-              <div>
-                <p className="font-medium text-slate-700 dark:text-slate-200">
-                  {r.user?.name ?? "Sin nombre"}
-                </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  Abierta {openedTime} · Fondo inicial {formatCOP(r.openingBalance)}
-                </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  Balance movimientos: {formatCOP(r.movementsBalance)}
-                  {r.manualIncome > 0 && ` · +${formatCOP(r.manualIncome)} entradas`}
-                  {r.manualExpense > 0 && ` · −${formatCOP(r.manualExpense)} salidas`}
-                </p>
+            <li key={r.id} className="flex flex-col gap-3 px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-700 dark:text-slate-200">
+                    {r.user?.name ?? "Sin nombre"}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    Abierta {openedTime} · Fondo inicial {formatCOP(r.openingBalance)}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    Balance movimientos: {formatCOP(balance)}
+                    {r.manualIncome > 0 && ` · +${formatCOP(r.manualIncome)} entradas`}
+                    {r.manualExpense > 0 && ` · −${formatCOP(r.manualExpense)} salidas`}
+                  </p>
+                </div>
+                {!isConfirming && (
+                  <button
+                    onClick={() => setConfirmingId(r.id)}
+                    className="shrink-0 rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-500/30 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-900/20"
+                  >
+                    Cerrar caja
+                  </button>
+                )}
               </div>
-              <button
-                onClick={() => closeRegister.mutate({ registerId: r.id })}
-                disabled={closeRegister.isPending}
-                className="shrink-0 rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-500/30 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-900/20"
-              >
-                Cerrar
-              </button>
+
+              {isConfirming && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm dark:border-red-500/30 dark:bg-red-900/10">
+                  <p className="mb-2 font-medium text-red-700 dark:text-red-300">
+                    ¿Cerrar la caja de {r.user?.name ?? "este empleado"}? Se calcula un saldo final de{" "}
+                    {formatCOP(balance)} y ya no podrá seguir registrando ventas en ella.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => closeRegister.mutate({ registerId: r.id })}
+                      disabled={closeRegister.isPending}
+                      className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {closeRegister.isPending ? "Cerrando..." : "Sí, cerrar caja"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingId(null)}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-white dark:border-white/10"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  {closeRegister.error && (
+                    <p className="mt-2 text-xs text-red-600">{closeRegister.error.message}</p>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}
       </ul>
-      {closeRegister.error && (
-        <p className="px-5 pb-3 text-xs text-red-500">{closeRegister.error.message}</p>
-      )}
     </div>
   );
 }

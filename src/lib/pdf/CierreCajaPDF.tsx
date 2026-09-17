@@ -48,10 +48,13 @@ const formatCOP = (v: number) =>
   v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
 const formatDate = (d: Date | string) =>
-  new Date(d).toLocaleDateString("es-CO", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  new Date(d).toLocaleDateString("es-CO", {
+    timeZone: "America/Bogota",
+    weekday: "long", day: "2-digit", month: "long", year: "numeric",
+  });
 
 const formatTime = (d: Date | string) =>
-  new Date(d).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  new Date(d).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
 
 const MOV_LABELS: Record<string, string> = {
   OPENING: "Apertura",
@@ -84,6 +87,30 @@ export type RegisterForPdf = {
     amount: number;
     description: string;
     createdAt: Date | string;
+    user: { name: string | null } | null;
+  }[];
+  voidedSales?: {
+    id: string;
+    invoiceNumber: string | null;
+    total: number;
+    voidReason: string | null;
+    voidedAt: Date | string;
+    createdByName: string | null;
+    voidedByName: string | null;
+  }[];
+  creditSales?: {
+    id: string;
+    invoiceNumber: string | null;
+    total: number;
+    createdAt: Date | string;
+    customer: { name: string } | null;
+    user: { name: string | null } | null;
+  }[];
+  payments?: {
+    id: string;
+    amount: number;
+    createdAt: Date | string;
+    customer: { name: string } | null;
     user: { name: string | null } | null;
   }[];
 };
@@ -197,6 +224,78 @@ export function CierreCajaPDF({
                   {m.type === "EXPENSE" ? "−" : "+"}
                   {formatCOP(m.amount)}
                 </Text>
+              </View>
+            ))}
+          </>
+        ) : null}
+
+        {/* Ventas anuladas */}
+        {(register.voidedSales?.length ?? 0) > 0 ? (
+          <>
+            <View style={[s.divider, { marginTop: 20 }]} />
+            <Text style={s.sectionTitle}>Ventas anuladas</Text>
+            <View style={s.movHeader}>
+              <Text style={[s.movTime, s.movThText]}>Hora</Text>
+              <Text style={[s.movDesc, s.movThText]}>Detalle</Text>
+              <Text style={[s.movAmount, s.movThText]}>Monto</Text>
+            </View>
+            {register.voidedSales!.map((v) => (
+              <View key={v.id} style={s.movRow}>
+                <Text style={s.movTime}>{formatTime(v.voidedAt)}</Text>
+                <Text style={s.movDesc}>
+                  {v.invoiceNumber ?? "Venta rápida"}
+                  {v.createdByName ? ` · Vendió: ${v.createdByName}` : ""}
+                  {v.voidedByName ? ` · Anuló: ${v.voidedByName}` : ""}
+                  {v.voidReason ? ` · Motivo: ${v.voidReason}` : ""}
+                </Text>
+                <Text style={[s.movAmount, { color: "#dc2626" }]}>−{formatCOP(v.total)}</Text>
+              </View>
+            ))}
+          </>
+        ) : null}
+
+        {/* Ventas a crédito (fiado) */}
+        {(register.creditSales?.length ?? 0) > 0 ? (
+          <>
+            <View style={[s.divider, { marginTop: 20 }]} />
+            <Text style={s.sectionTitle}>Ventas a crédito (fiado)</Text>
+            <View style={s.movHeader}>
+              <Text style={[s.movTime, s.movThText]}>Hora</Text>
+              <Text style={[s.movDesc, s.movThText]}>Detalle</Text>
+              <Text style={[s.movAmount, s.movThText]}>Monto</Text>
+            </View>
+            {register.creditSales!.map((c) => (
+              <View key={c.id} style={s.movRow}>
+                <Text style={s.movTime}>{formatTime(c.createdAt)}</Text>
+                <Text style={s.movDesc}>
+                  {c.invoiceNumber ?? "Venta rápida"}
+                  {c.customer?.name ? ` · Cliente: ${c.customer.name}` : ""}
+                  {c.user?.name ? ` · Vendió: ${c.user.name}` : ""}
+                </Text>
+                <Text style={s.movAmount}>{formatCOP(c.total)}</Text>
+              </View>
+            ))}
+          </>
+        ) : null}
+
+        {/* Abonos a deudas */}
+        {(register.payments?.length ?? 0) > 0 ? (
+          <>
+            <View style={[s.divider, { marginTop: 20 }]} />
+            <Text style={s.sectionTitle}>Abonos a deudas</Text>
+            <View style={s.movHeader}>
+              <Text style={[s.movTime, s.movThText]}>Hora</Text>
+              <Text style={[s.movDesc, s.movThText]}>Detalle</Text>
+              <Text style={[s.movAmount, s.movThText]}>Monto</Text>
+            </View>
+            {register.payments!.map((p) => (
+              <View key={p.id} style={s.movRow}>
+                <Text style={s.movTime}>{formatTime(p.createdAt)}</Text>
+                <Text style={s.movDesc}>
+                  {p.customer?.name ? `Cliente: ${p.customer.name}` : "Cliente"}
+                  {p.user?.name ? ` · Registró: ${p.user.name}` : ""}
+                </Text>
+                <Text style={[s.movAmount, { color: "#059669" }]}>+{formatCOP(p.amount)}</Text>
               </View>
             ))}
           </>

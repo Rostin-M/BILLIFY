@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useState } from "react";
 import { api } from "~/trpc/react";
 
@@ -60,7 +61,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
             aria-label="Cerrar"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
           >
-            ✕
+            <X className="h-5 w-5" />
           </button>
         </div>
 

@@ -8,6 +8,7 @@ import { api } from "~/trpc/react";
 type TaxFormItem = { name: string; rate: string; enabled: boolean };
 
 type ContactSource = "NONE" | "OWNER" | "BUSINESS";
+type TaxDetail = "SUMMARY" | "PER_ITEM";
 
 type SettingsForm = {
   name: string;
@@ -17,6 +18,7 @@ type SettingsForm = {
   ownerPhone: string;
   invoicePhoneSource: ContactSource;
   invoiceEmailSource: ContactSource;
+  invoiceTaxDetail: TaxDetail;
   taxes: [TaxFormItem, TaxFormItem, TaxFormItem];
   autoTax: boolean;
   maxCashRegisters: string;
@@ -34,6 +36,7 @@ type BusinessData = {
   email: string | null;
   invoicePhoneSource: ContactSource;
   invoiceEmailSource: ContactSource;
+  invoiceTaxDetail: TaxDetail;
   ownerPhone: string | null;
   ownerEmail: string | null;
   taxes: unknown;
@@ -212,6 +215,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
     ownerPhone: initial.ownerPhone ?? "",
     invoicePhoneSource: initial.invoicePhoneSource,
     invoiceEmailSource: initial.invoiceEmailSource,
+    invoiceTaxDetail: initial.invoiceTaxDetail,
     taxes: parseTaxes(initial.taxes),
     autoTax: initial.autoTax,
     maxCashRegisters: String(initial.maxCashRegisters),
@@ -271,6 +275,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
       ownerPhone: form.ownerPhone || undefined,
       invoicePhoneSource: form.invoicePhoneSource,
       invoiceEmailSource: form.invoiceEmailSource,
+      invoiceTaxDetail: form.invoiceTaxDetail,
       taxes,
       autoTax: form.autoTax,
       maxCashRegisters: maxReg,
@@ -526,6 +531,48 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
               <p className="text-xs text-slate-400 dark:text-slate-500">
                 Activa cada impuesto por separado. Los desactivados no se incluirán en el cálculo.
               </p>
+
+              <div className="border-t border-slate-100 pt-3 dark:border-white/10">
+                <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                  ¿Cómo mostrar los impuestos en la factura?
+                </p>
+                <div className="space-y-2">
+                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+                    <input
+                      type="radio"
+                      name="invoiceTaxDetail"
+                      checked={form.invoiceTaxDetail === "SUMMARY"}
+                      onChange={() => setForm((prev) => ({ ...prev, invoiceTaxDetail: "SUMMARY" }))}
+                      className="mt-0.5 h-4 w-4 accent-violet-600"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Solo el total al final (actual)
+                      </span>
+                      <span className="block text-xs text-slate-400 dark:text-slate-500">
+                        La factura muestra subtotal, impuestos y total agrupados al final, sin desglosar por producto.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+                    <input
+                      type="radio"
+                      name="invoiceTaxDetail"
+                      checked={form.invoiceTaxDetail === "PER_ITEM"}
+                      onChange={() => setForm((prev) => ({ ...prev, invoiceTaxDetail: "PER_ITEM" }))}
+                      className="mt-0.5 h-4 w-4 accent-violet-600"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Desglosado por producto
+                      </span>
+                      <span className="block text-xs text-slate-400 dark:text-slate-500">
+                        Cada producto muestra qué impuesto se le cobra (o ninguno) y su valor, además del resumen final.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
           )}
         </section>

@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, CircleDot } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 
-const CajaPdfActions = dynamic(
-  () => import("~/lib/pdf/CajaPdfActions").then((m) => m.CajaPdfActions),
+const CashHistoryPdfButton = dynamic(
+  () => import("~/lib/pdf/CashHistoryPdfButton").then((m) => m.CashHistoryPdfButton),
   { ssr: false, loading: () => <span className="text-xs text-slate-400">Generando…</span> },
 );
 
@@ -59,7 +60,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
   const [form, setForm] = useState({ type: "INCOME" as "INCOME" | "EXPENSE", amount: "", description: "" });
   const [isClosing, setIsClosing] = useState(false);
   const [closingNote, setClosingNote] = useState("");
-  const [showPdf, setShowPdf] = useState(false);
 
   const utils = api.useUtils();
 
@@ -96,6 +96,9 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
     minute: "2-digit",
   });
 
+  const bogotaDateKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+  const isStale = bogotaDateKey(new Date(register.openedAt)) !== bogotaDateKey(new Date());
+
   // Mostrar movimientos + ventas en efectivo juntos ordenados por hora
   // Los movimientos de caja están en register.movements
   // Las ventas en efectivo se reflejan solo en el saldo agregado (cashSalesTotal)
@@ -103,9 +106,24 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
+      {/* Aviso: caja abierta desde un día anterior */}
+      {isStale && (
+        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 dark:border-red-500/30 dark:bg-red-900/10">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+          <div>
+            <p className="font-semibold text-red-800 dark:text-red-300">
+              Esta caja sigue abierta desde un día anterior
+            </p>
+            <p className="text-sm text-red-600 dark:text-red-400">
+              Ciérrala y cuenta el efectivo antes de seguir registrando ventas o movimientos de hoy.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header estado */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/30 dark:bg-emerald-900/10">
-        <span className="text-2xl">🟢</span>
+        <CircleDot className="h-6 w-6 shrink-0 text-emerald-500" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-emerald-800 dark:text-emerald-300">Caja abierta</p>
           <p className="text-sm text-emerald-600 dark:text-emerald-400">
@@ -114,35 +132,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           </p>
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
-          {showPdf ? (
-            <CajaPdfActions
-              business={business}
-              register={{
-                openingBalance: register.openingBalance,
-                closingBalance: null,
-                closingNote: null,
-                openedAt: register.openedAt,
-                closedAt: null,
-                cashSalesTotal: register.cashSalesTotal,
-                cashSalesCount: register.cashSalesCount,
-                nonCashSales: register.nonCashSales,
-                manualIncome: register.manualIncome,
-                manualExpense: register.manualExpense,
-                totalBalance: register.currentBalance,
-                user: register.user,
-                movements: register.movements,
-              }}
-              fileName={`reporte-caja-${new Date(register.openedAt).toISOString().split("T")[0]}.pdf`}
-              onClose={() => setShowPdf(false)}
-            />
-          ) : (
-            <button
-              onClick={() => setShowPdf(true)}
-              className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:bg-transparent dark:text-slate-400 dark:hover:bg-white/5"
-            >
-              Reporte PDF
-            </button>
-          )}
+          <CashHistoryPdfButton registerId={register.id} business={business} openedAt={register.openedAt} />
           {canClose && !isClosing && (
             <button
               onClick={() => setIsClosing(true)}
@@ -283,13 +273,18 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
                 key={t}
                 type="button"
                 onClick={() => setForm((prev) => ({ ...prev, type: t }))}
-                className={`rounded-xl border py-2.5 text-sm font-semibold transition ${
+                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold transition ${
                   form.type === t
                     ? TYPE_ACTIVE_CLASSES[t]
                     : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-white/10 dark:bg-transparent dark:text-slate-400"
                 }`}
               >
-                {t === "INCOME" ? "↑ Entrada" : "↓ Salida"}
+                {t === "INCOME" ? (
+                  <ArrowUpCircle className="h-4 w-4" />
+                ) : (
+                  <ArrowDownCircle className="h-4 w-4" />
+                )}
+                {t === "INCOME" ? "Entrada" : "Salida"}
               </button>
             ))}
           </div>

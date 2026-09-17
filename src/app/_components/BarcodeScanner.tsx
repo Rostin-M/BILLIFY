@@ -54,6 +54,13 @@ declare global {
 // a propósito).
 const CONTINUOUS_SAME_CODE_COOLDOWN_MS = 1200;
 
+// Un solo frame puede decodificar mal (desenfoque, reflejo, ángulo) y algunos
+// formatos (CODE_39, ITF, Codabar) no tienen dígito de verificación, así que
+// una lectura errónea puede "parecer" válida. Exigir el mismo valor en 2
+// lecturas seguidas antes de aceptarlo filtra casi todos esos falsos positivos
+// a costa de un par de frames extra (imperceptible, corre a ~30-60 fps).
+const REQUIRED_CONSECUTIVE_READS = 2;
+
 type Props = {
   onDetected: (code: string) => void;
   onClose: () => void;
@@ -85,6 +92,8 @@ export function BarcodeScanner({
     let rafId: number | undefined;
     let lastCode: string | undefined;
     let lastAcceptedAt = 0;
+    let pendingCode: string | undefined;
+    let pendingCount = 0;
 
     function stopStream() {
       stream?.getTracks().forEach((track) => track.stop());
@@ -119,6 +128,22 @@ export function BarcodeScanner({
       onDetected(code);
     }
 
+    // Solo llega a `finish` cuando el mismo valor se lee en lecturas
+    // consecutivas — ver comentario de REQUIRED_CONSECUTIVE_READS.
+    function confirmAndFinish(code: string) {
+      if (code === pendingCode) {
+        pendingCount += 1;
+      } else {
+        pendingCode = code;
+        pendingCount = 1;
+      }
+      if (pendingCount >= REQUIRED_CONSECUTIVE_READS) {
+        pendingCode = undefined;
+        pendingCount = 0;
+        finish(code);
+      }
+    }
+
     function runNativeDetector(detector: NativeBarcodeDetector) {
       const video = videoRef.current;
       if (!video) return;
@@ -129,15 +154,12 @@ export function BarcodeScanner({
           try {
             const results = await detector.detect(video);
             const value = results[0]?.rawValue;
-            if (value) {
-              finish(value);
-              return;
-            }
+            if (value) confirmAndFinish(value);
           } catch {
             // Transient per-frame detection failure — keep polling.
           }
         }
-        rafId = requestAnimationFrame(() => void tick());
+        if (!cancelled) rafId = requestAnimationFrame(() => void tick());
       }
 
       rafId = requestAnimationFrame(() => void tick());
@@ -151,7 +173,7 @@ export function BarcodeScanner({
         .decodeFromStream(s, videoRef.current ?? undefined, (result, err) => {
           if (cancelled) return;
           if (result) {
-            finish(result.getText());
+            confirmAndFinish(result.getText());
             return;
           }
           // NotFoundException/ChecksumException/FormatException fire on every frame

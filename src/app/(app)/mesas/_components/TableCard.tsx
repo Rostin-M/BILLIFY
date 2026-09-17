@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
@@ -190,13 +191,16 @@ export function TableCard({ session, business }: Readonly<Props>) {
                       <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{fmt(gTotal)}</span>
                       {guest.orders.length === 0 && (
                         confirmRemoveGuest === guest.id ? (
-                          <span className="flex items-center gap-1">
+                          <span className="flex flex-wrap items-center justify-end gap-1.5">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              ¿Quitar a {guest.name}?
+                            </span>
                             <button
                               onClick={() => { removeGuest.mutate({ guestId: guest.id }); setConfirmRemoveGuest(null); }}
                               disabled={removeGuest.isPending}
                               className="rounded bg-red-500 px-2 py-0.5 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
                             >
-                              Sí
+                              Sí, quitar
                             </button>
                             <button
                               onClick={() => setConfirmRemoveGuest(null)}
@@ -208,10 +212,10 @@ export function TableCard({ session, business }: Readonly<Props>) {
                         ) : (
                           <button
                             onClick={() => setConfirmRemoveGuest(guest.id)}
-                            className="text-xs text-slate-400 hover:text-red-500"
+                            className="text-slate-400 hover:text-red-500"
                             title="Quitar cliente"
                           >
-                            ✕
+                            <X className="h-3.5 w-3.5" />
                           </button>
                         )
                       )}
@@ -234,13 +238,16 @@ export function TableCard({ session, business }: Readonly<Props>) {
                               )}
                             </span>
                             {confirmDeleteOrder === order.id ? (
-                              <span className="flex items-center gap-1">
+                              <span className="flex flex-wrap items-center justify-end gap-1.5">
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  ¿Eliminar esta ronda?
+                                </span>
                                 <button
                                   onClick={() => { removeOrder.mutate({ orderId: order.id }); setConfirmDeleteOrder(null); }}
                                   disabled={removeOrder.isPending}
                                   className="rounded bg-red-500 px-2 py-0.5 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
                                 >
-                                  Sí
+                                  Sí, eliminar
                                 </button>
                                 <button
                                   onClick={() => setConfirmDeleteOrder(null)}
@@ -253,10 +260,10 @@ export function TableCard({ session, business }: Readonly<Props>) {
                               <button
                                 onClick={() => setConfirmDeleteOrder(order.id)}
                                 disabled={removeOrder.isPending}
-                                className="text-xs text-slate-300 hover:text-red-500 transition disabled:opacity-50"
+                                className="text-slate-300 hover:text-red-500 transition disabled:opacity-50"
                                 title="Eliminar ronda"
                               >
-                                ✕
+                                <X className="h-3.5 w-3.5" />
                               </button>
                             )}
                           </div>

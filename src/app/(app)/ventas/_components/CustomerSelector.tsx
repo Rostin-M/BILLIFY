@@ -63,7 +63,7 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
   if (value) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-500/30 dark:bg-violet-900/20">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <span className="text-sm font-medium text-violet-700 dark:text-violet-300">
             {value.name}
           </span>
