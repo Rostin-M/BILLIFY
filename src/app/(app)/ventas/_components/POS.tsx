@@ -5,6 +5,7 @@ import { useOfflineQueue } from "~/hooks/useOfflineQueue";
 import { api } from "~/trpc/react";
 import { OfflineBanner } from "./OfflineBanner";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
+import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
 import { CustomerSelector } from "./CustomerSelector";
 
 type SelectedCustomer = { id?: string; name: string; document?: string; email?: string | null; isGuestWithDoc?: boolean };
@@ -50,6 +51,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [continuousScan, setContinuousScan] = useState(false);
 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(QUICK_CART_KEY, []));
@@ -144,6 +146,13 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
     }
     addToCart(product);
     showMessage("success", `${product.name} agregado al carrito.`);
+  }
+
+  function handleContinuousScan(code: string): ScanResult {
+    const product = products.find((p: Product) => p.barcode === code);
+    if (!product) return { ok: false, code };
+    addToCart(product);
+    return { ok: true, name: product.name };
   }
 
   function updateQty(productId: string, delta: number) {
@@ -282,6 +291,18 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
 
         {/* Panel derecho: carrito */}
         <div className="flex flex-col gap-3 lg:w-2/5">
+          {continuousScan ? (
+            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setContinuousScan(true)}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-sm font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
+            >
+              📷 Activar escaneo continuo
+            </button>
+          )}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Carrito</h2>

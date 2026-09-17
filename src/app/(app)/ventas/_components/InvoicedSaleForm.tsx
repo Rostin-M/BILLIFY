@@ -7,6 +7,7 @@ import { api } from "~/trpc/react";
 import type { BusinessInfoForPdf, SaleForPdf, TaxLine } from "~/lib/pdf/FacturaPDF";
 import { CustomerSelector } from "./CustomerSelector";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
+import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
 
 const FacturaPdfActions = dynamic(
   () => import("~/lib/pdf/FacturaPdfActions").then((m) => m.FacturaPdfActions),
@@ -74,6 +75,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [continuousScan, setContinuousScan] = useState(false);
   const [completedSale, setCompletedSale] = useState<{ saleId: string; invoiceNumber: string; total: number; customerEmail?: string | null; saleForPdf: SaleForPdf } | null>(null);
 
   useEffect(() => {
@@ -203,6 +205,13 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     }
     addToCart(product);
     toast.success(`${product.name} agregado a la factura.`);
+  }
+
+  function handleContinuousScan(code: string): ScanResult {
+    const product = products.find((p: Product) => p.barcode === code);
+    if (!product) return { ok: false, code };
+    addToCart(product);
+    return { ok: true, name: product.name };
   }
 
   function updateQty(productId: string, delta: number) {
@@ -359,6 +368,18 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
 
         {/* Panel de factura */}
         <div className="flex flex-col gap-3 lg:w-2/5">
+          {continuousScan ? (
+            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setContinuousScan(true)}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-sm font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
+            >
+              📷 Activar escaneo continuo
+            </button>
+          )}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
             <div className="mb-3 flex items-center gap-2">
               <span className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">

@@ -47,15 +47,31 @@ declare global {
   }
 }
 
+// Tiempo mínimo antes de aceptar el MISMO código dos veces seguidas en modo
+// continuo — evita que un producto se agregue decenas de veces mientras el
+// código sigue frente a la cámara. Pasado ese tiempo, volver a mostrar el
+// mismo código sí se acepta (permite escanear dos unidades del mismo producto
+// a propósito).
+const CONTINUOUS_SAME_CODE_COOLDOWN_MS = 1200;
+
+type Props = {
+  onDetected: (code: string) => void;
+  onClose: () => void;
+  /** false (por defecto): detecta un código y cierra. true: sigue escaneando. */
+  continuous?: boolean;
+  /** "modal" (por defecto): overlay de pantalla completa. "inline": panel que ocupa el espacio de su contenedor. */
+  variant?: "modal" | "inline";
+};
+
 export function BarcodeScanner({
   onDetected,
   onClose,
-}: {
-  onDetected: (code: string) => void;
-  onClose: () => void;
-}) {
+  continuous = false,
+  variant = "modal",
+}: Readonly<Props>) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [justScanned, setJustScanned] = useState(false);
 
   useEffect(() => {
     // React Strict Mode mounts effects twice in dev (mount → cleanup → mount).
@@ -67,17 +83,39 @@ export function BarcodeScanner({
     let stream: MediaStream | undefined;
     let zxingControls: { stop: () => void } | undefined;
     let rafId: number | undefined;
+    let lastCode: string | undefined;
+    let lastAcceptedAt = 0;
 
     function stopStream() {
       stream?.getTracks().forEach((track) => track.stop());
     }
 
-    function finish(code: string) {
-      if (cancelled) return;
+    function teardown() {
       cancelled = true;
       if (rafId !== undefined) cancelAnimationFrame(rafId);
       zxingControls?.stop();
       stopStream();
+    }
+
+    function finish(code: string) {
+      if (cancelled) return;
+
+      if (!continuous) {
+        teardown();
+        onDetected(code);
+        return;
+      }
+
+      // Modo continuo: ignora el mismo código repetido dentro del cooldown,
+      // pero deja la cámara y el loop de detección corriendo.
+      const now = Date.now();
+      if (code === lastCode && now - lastAcceptedAt < CONTINUOUS_SAME_CODE_COOLDOWN_MS) {
+        return;
+      }
+      lastCode = code;
+      lastAcceptedAt = now;
+      setJustScanned(true);
+      setTimeout(() => setJustScanned(false), 400);
       onDetected(code);
     }
 
@@ -179,25 +217,48 @@ export function BarcodeScanner({
         if (!cancelled) setError("No se pudo acceder a la cámara. Revisa los permisos del navegador.");
       });
 
-    return () => {
-      cancelled = true;
-      if (rafId !== undefined) cancelAnimationFrame(rafId);
-      zxingControls?.stop();
-      stopStream();
-    };
-  }, [onDetected]);
+    return teardown;
+  }, [onDetected, continuous]);
+
+  const videoBox = (
+    <div className="relative w-full max-w-md">
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        className={`w-full rounded-2xl bg-black transition-shadow ${
+          justScanned ? "ring-4 ring-emerald-400" : ""
+        }`}
+      />
+      <div className="pointer-events-none absolute inset-x-10 top-1/2 h-0.5 -translate-y-1/2 bg-red-500/80" />
+    </div>
+  );
+
+  if (variant === "inline") {
+    return (
+      <div className="flex flex-col items-center rounded-2xl border border-violet-200 bg-slate-950 p-3 dark:border-violet-500/30">
+        {videoBox}
+        {error ? (
+          <p className="mt-3 max-w-xs text-center text-sm text-red-400">{error}</p>
+        ) : (
+          <p className="mt-3 text-xs text-white/70">
+            {continuous ? "Escaneo continuo activo — apunta al siguiente código" : "Apunta la cámara al código de barras"}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3 min-h-11 w-full rounded-xl bg-white px-5 text-sm font-semibold text-slate-900 transition hover:bg-slate-200"
+        >
+          {continuous ? "Detener escaneo" : "Cancelar"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-4">
-      <div className="relative w-full max-w-md">
-        <video
-          ref={videoRef}
-          muted
-          playsInline
-          className="w-full rounded-2xl bg-black"
-        />
-        <div className="pointer-events-none absolute inset-x-10 top-1/2 h-0.5 -translate-y-1/2 bg-red-500/80" />
-      </div>
+      {videoBox}
       {error ? (
         <p className="mt-4 max-w-xs text-center text-sm text-red-400">{error}</p>
       ) : (

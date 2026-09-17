@@ -169,8 +169,8 @@ model Product {
   saleItems          SaleItem[]
   tableOrderItems    TableOrderItem[]
 
+  @@unique([businessId, barcode])
   @@index([businessId])
-  @@index([businessId, barcode])
   @@map("products")
 }
 
