@@ -7,13 +7,20 @@ import { api } from "~/trpc/react";
 
 type TaxFormItem = { name: string; rate: string; enabled: boolean };
 
+type ContactSource = "NONE" | "OWNER" | "BUSINESS";
+
 type SettingsForm = {
   name: string;
   address: string;
   phone: string;
+  email: string;
+  ownerPhone: string;
+  invoicePhoneSource: ContactSource;
+  invoiceEmailSource: ContactSource;
   taxes: [TaxFormItem, TaxFormItem, TaxFormItem];
   autoTax: boolean;
   maxCashRegisters: string;
+  categories: string[];
 };
 
 type TaxConfig = { name: string; rate: number; enabled: boolean };
@@ -24,10 +31,16 @@ type BusinessData = {
   document: string;
   address: string | null;
   phone: string | null;
+  email: string | null;
+  invoicePhoneSource: ContactSource;
+  invoiceEmailSource: ContactSource;
+  ownerPhone: string | null;
+  ownerEmail: string | null;
   taxes: unknown;
   autoTax: boolean;
   maxCashRegisters: number;
   logoUrl: string | null;
+  categories: string[];
 };
 
 function LogoSection({ logoUrl, onLogoChange }: Readonly<{ logoUrl: string | null; onLogoChange: () => void }>) {
@@ -159,6 +172,19 @@ function LogoSection({ logoUrl, onLogoChange }: Readonly<{ logoUrl: string | nul
   );
 }
 
+function parseErrorMessage(rawMessage: string): string {
+  try {
+    const parsed = JSON.parse(rawMessage) as Array<{ message?: string }>;
+    if (Array.isArray(parsed)) {
+      const first = parsed.find((e) => e.message)?.message;
+      if (first) return first;
+    }
+  } catch {
+    // mensaje plano
+  }
+  return rawMessage;
+}
+
 const DEFAULT_NAMES = ["IVA", "INC", ""] as const;
 
 function parseTaxes(raw: unknown): [TaxFormItem, TaxFormItem, TaxFormItem] {
@@ -177,13 +203,19 @@ function parseTaxes(raw: unknown): [TaxFormItem, TaxFormItem, TaxFormItem] {
 function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) {
   const utils = api.useUtils();
   const [logoUrl, setLogoUrl] = useState<string | null>(initial.logoUrl);
+  const [categoryDraft, setCategoryDraft] = useState("");
   const [form, setForm] = useState<SettingsForm>({
     name: initial.name,
     address: initial.address ?? "",
     phone: initial.phone ?? "",
+    email: initial.email ?? "",
+    ownerPhone: initial.ownerPhone ?? "",
+    invoicePhoneSource: initial.invoicePhoneSource,
+    invoiceEmailSource: initial.invoiceEmailSource,
     taxes: parseTaxes(initial.taxes),
     autoTax: initial.autoTax,
     maxCashRegisters: String(initial.maxCashRegisters),
+    categories: initial.categories,
   });
   const updateSettings = api.business.updateSettings.useMutation({
     onSuccess: async (data) => {
@@ -193,7 +225,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
   });
 
   const handleField =
-    (field: "name" | "address" | "phone" | "maxCashRegisters") =>
+    (field: "name" | "address" | "phone" | "email" | "ownerPhone" | "maxCashRegisters") =>
     (e: ChangeEvent<HTMLInputElement>) => {
       setForm((prev) => ({ ...prev, [field]: e.target.value }));
     };
@@ -235,11 +267,31 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
       name: form.name,
       address: form.address || undefined,
       phone: form.phone || undefined,
+      email: form.email || undefined,
+      ownerPhone: form.ownerPhone || undefined,
+      invoicePhoneSource: form.invoicePhoneSource,
+      invoiceEmailSource: form.invoiceEmailSource,
       taxes,
       autoTax: form.autoTax,
       maxCashRegisters: maxReg,
+      categories: form.categories,
     });
   };
+
+  function addCategory() {
+    const name = categoryDraft.trim();
+    if (!name) return;
+    setForm((prev) =>
+      prev.categories.some((c) => c.toLowerCase() === name.toLowerCase())
+        ? prev
+        : { ...prev, categories: [...prev.categories, name] },
+    );
+    setCategoryDraft("");
+  }
+
+  function removeCategory(name: string) {
+    setForm((prev) => ({ ...prev, categories: prev.categories.filter((c) => c !== name) }));
+  }
 
   return (
     <div className="space-y-6">
@@ -270,7 +322,9 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                 />
               </label>
               <label className="space-y-1 text-sm">
-                <span className="text-slate-700 dark:text-slate-300">Documento del negocio</span>
+                <span className="text-slate-700 dark:text-slate-300">
+                  NIT / Documento del negocio <span className="text-red-500">*</span>
+                </span>
                 <input
                   disabled
                   value={initial.document}
@@ -303,6 +357,93 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
                   placeholder="300 123 4567"
                 />
+              </label>
+            </div>
+          </div>
+        </section>
+
+        {/* Contacto en facturas */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <h2 className="mb-1 font-semibold">Contacto en facturas</h2>
+          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+            Decide qué teléfono y correo se muestran en las facturas que generas.
+          </p>
+
+          <div className="space-y-5">
+            {/* Teléfono */}
+            <div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="text-slate-700 dark:text-slate-300">
+                    Mi teléfono personal <span className="text-slate-400">(opcional)</span>
+                  </span>
+                  <input
+                    type="tel"
+                    value={form.ownerPhone}
+                    onChange={handleField("ownerPhone")}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+                    placeholder="300 123 4567"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="text-slate-700 dark:text-slate-300">¿Qué teléfono va en la factura?</span>
+                  <select
+                    value={form.invoicePhoneSource}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, invoicePhoneSource: e.target.value as ContactSource }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+                  >
+                    <option value="NONE">No mostrar teléfono</option>
+                    <option value="BUSINESS">Teléfono del negocio</option>
+                    <option value="OWNER">Mi teléfono personal</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 dark:border-white/10" />
+
+            {/* Correo */}
+            <div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="text-slate-700 dark:text-slate-300">
+                    Mi correo (propietario) <span className="text-red-500">*</span>
+                  </span>
+                  <input
+                    disabled
+                    value={initial.ownerEmail ?? ""}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500 dark:border-white/10 dark:bg-slate-800 dark:text-slate-400"
+                    title="Se cambia desde tu cuenta"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="text-slate-700 dark:text-slate-300">
+                    Correo del negocio <span className="text-slate-400">(opcional)</span>
+                  </span>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={handleField("email")}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+                    placeholder="contacto@negocio.com"
+                  />
+                </label>
+              </div>
+              <label className="mt-4 block space-y-1 text-sm">
+                <span className="text-slate-700 dark:text-slate-300">¿Qué correo va en la factura?</span>
+                <select
+                  value={form.invoiceEmailSource}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, invoiceEmailSource: e.target.value as ContactSource }))
+                  }
+                  className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+                >
+                  <option value="NONE">No mostrar correo</option>
+                  <option value="OWNER">Mi correo (propietario)</option>
+                  <option value="BUSINESS">Correo del negocio</option>
+                </select>
               </label>
             </div>
           </div>
@@ -389,6 +530,62 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
           )}
         </section>
 
+        {/* Categorías de productos */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <h2 className="mb-1 font-semibold">Categorías de productos</h2>
+          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+            Aparecerán como sugerencias al crear o editar un producto.
+          </p>
+
+          <div className="flex gap-2">
+            <input
+              value={categoryDraft}
+              onChange={(e) => setCategoryDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCategory();
+                }
+              }}
+              placeholder="Ej: Bebidas frías"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+            />
+            <button
+              type="button"
+              onClick={addCategory}
+              disabled={!categoryDraft.trim()}
+              className="shrink-0 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Agregar
+            </button>
+          </div>
+
+          {form.categories.length === 0 ? (
+            <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+              Aún no has agregado categorías.
+            </p>
+          ) : (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {form.categories.map((c) => (
+                <li
+                  key={c}
+                  className="flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 py-1 pl-3 pr-1.5 text-xs font-medium text-violet-700 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300"
+                >
+                  {c}
+                  <button
+                    type="button"
+                    onClick={() => removeCategory(c)}
+                    aria-label={`Eliminar categoría ${c}`}
+                    className="flex h-4 w-4 items-center justify-center rounded-full text-violet-400 transition hover:bg-violet-200 hover:text-violet-700 dark:text-violet-500 dark:hover:bg-violet-800/40 dark:hover:text-violet-200"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {/* Caja */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
           <h2 className="mb-1 font-semibold">Cajas registradoras</h2>
@@ -411,7 +608,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
 
         {updateSettings.error && (
           <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
-            {updateSettings.error.message}
+            {parseErrorMessage(updateSettings.error.message)}
           </p>
         )}
 

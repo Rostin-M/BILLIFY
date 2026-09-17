@@ -7,6 +7,7 @@ import { OfflineBanner } from "./OfflineBanner";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
 import { CustomerSelector } from "./CustomerSelector";
+import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
 type SelectedCustomer = { id?: string; name: string; document?: string; email?: string | null; isGuestWithDoc?: boolean };
 
@@ -15,6 +16,7 @@ type CartItem = {
   name: string;
   price: number;
   quantity: number;
+  taxSlots: number[];
 };
 
 type Product = {
@@ -25,6 +27,7 @@ type Product = {
   trackStock: boolean;
   category: string | null;
   barcode: string | null;
+  taxSlots: number[];
 };
 
 const QUICK_CART_KEY = "billify_quick_cart";
@@ -39,8 +42,6 @@ function loadLS<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
-
-type TaxConfig = { name: string; rate: number; enabled: boolean };
 
 export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: boolean }>) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -132,7 +133,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
       if (product.trackStock && product.stock === 0) return prev;
       return [
         ...prev,
-        { productId: product.id, name: product.name, price: product.price, quantity: 1 },
+        { productId: product.id, name: product.name, price: product.price, quantity: 1, taxSlots: product.taxSlots },
       ];
     });
   }
@@ -175,10 +176,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
     setCart((prev) => prev.filter((i) => i.productId !== productId));
   }
 
-  const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const activeTaxes = autoTax ? taxes.filter((t) => t.enabled && t.rate > 0) : [];
-  const taxAmount = activeTaxes.reduce((sum, t) => sum + subtotal * (t.rate / 100), 0);
-  const total = subtotal + taxAmount;
+  const { subtotal, taxLines, total } = computeSaleTotals(cart, taxes, autoTax);
 
   const creditRequiresCustomer = paymentMethod === "CREDIT" && !selectedCustomer?.id;
 
@@ -404,16 +402,16 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
             {/* Desglose de totales */}
             {cart.length > 0 && (
               <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
-                {activeTaxes.length > 0 && (
+                {taxLines.length > 0 && (
                   <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
                     <span>Subtotal</span>
                     <span>{formatCOP(subtotal)}</span>
                   </div>
                 )}
-                {activeTaxes.map((t, i) => (
-                  <div key={i} className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+                {taxLines.map((t) => (
+                  <div key={`${t.name}-${t.rate}`} className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
                     <span>{t.name} ({t.rate}%)</span>
-                    <span>{formatCOP(subtotal * (t.rate / 100))}</span>
+                    <span>{formatCOP(t.amount)}</span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between">

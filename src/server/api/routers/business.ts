@@ -9,32 +9,65 @@ const taxItemSchema = z.object({
   enabled: z.boolean(),
 });
 
-const updateSettingsSchema = z.object({
-  name: z.string().trim().min(2, "El nombre del negocio es obligatorio"),
-  address: z.string().trim().optional(),
-  phone: z.string().trim().optional(),
-  taxes: z.array(taxItemSchema).max(3, "Máximo 3 impuestos").default([]),
-  autoTax: z.boolean().default(false),
-  maxCashRegisters: z.number().int().min(1).max(10).default(1),
-});
+const contactSourceSchema = z.enum(["NONE", "OWNER", "BUSINESS"]);
+
+const updateSettingsSchema = z
+  .object({
+    name: z.string().trim().min(2, "El nombre del negocio es obligatorio"),
+    address: z.string().trim().optional(),
+    phone: z.string().trim().optional(),
+    email: z.string().trim().toLowerCase().email("Correo del negocio inválido").optional(),
+    ownerPhone: z.string().trim().optional(),
+    invoicePhoneSource: contactSourceSchema.default("NONE"),
+    invoiceEmailSource: contactSourceSchema.default("NONE"),
+    taxes: z.array(taxItemSchema).max(3, "Máximo 3 impuestos").default([]),
+    autoTax: z.boolean().default(false),
+    maxCashRegisters: z.number().int().min(1).max(10).default(1),
+    categories: z
+      .array(z.string().trim().min(1))
+      .max(40, "Máximo 40 categorías")
+      .default([]),
+  })
+  .refine((data) => data.invoicePhoneSource !== "BUSINESS" || !!data.phone, {
+    message: "Ingresa el teléfono del negocio para poder mostrarlo en la factura.",
+    path: ["phone"],
+  })
+  .refine((data) => data.invoicePhoneSource !== "OWNER" || !!data.ownerPhone, {
+    message: "Ingresa tu teléfono personal para poder mostrarlo en la factura.",
+    path: ["ownerPhone"],
+  })
+  .refine((data) => data.invoiceEmailSource !== "BUSINESS" || !!data.email, {
+    message: "Ingresa el correo del negocio para poder mostrarlo en la factura.",
+    path: ["email"],
+  });
 
 export const businessRouter = createTRPCRouter({
   getSettings: ownerProcedure.query(async ({ ctx }) => {
-    const business = await ctx.db.business.findUnique({
-      where: { id: ctx.session.user.businessId },
-      select: {
-        id: true,
-        name: true,
-        document: true,
-        address: true,
-        phone: true,
-        taxes: true,
-        autoTax: true,
-        plan: true,
-        maxCashRegisters: true,
-        logoUrl: true,
-      },
-    });
+    const [business, owner] = await Promise.all([
+      ctx.db.business.findUnique({
+        where: { id: ctx.session.user.businessId },
+        select: {
+          id: true,
+          name: true,
+          document: true,
+          address: true,
+          phone: true,
+          email: true,
+          invoicePhoneSource: true,
+          invoiceEmailSource: true,
+          taxes: true,
+          autoTax: true,
+          plan: true,
+          maxCashRegisters: true,
+          logoUrl: true,
+          categories: true,
+        },
+      }),
+      ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { phone: true, email: true },
+      }),
+    ]);
 
     if (!business) {
       throw new TRPCError({
@@ -43,7 +76,11 @@ export const businessRouter = createTRPCRouter({
       });
     }
 
-    return business;
+    return {
+      ...business,
+      ownerPhone: owner?.phone ?? null,
+      ownerEmail: owner?.email ?? null,
+    };
   }),
 
   updateSettings: ownerProcedure
@@ -51,18 +88,28 @@ export const businessRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: ownerId } = ctx.session.user;
 
-      const business = await ctx.db.business.update({
-        where: { id: businessId },
-        data: {
-          name: input.name,
-          address: input.address ?? null,
-          phone: input.phone ?? null,
-          taxes: input.taxes,
-          autoTax: input.autoTax,
-          maxCashRegisters: input.maxCashRegisters,
-        },
-        select: { id: true, name: true },
-      });
+      const [business] = await Promise.all([
+        ctx.db.business.update({
+          where: { id: businessId },
+          data: {
+            name: input.name,
+            address: input.address ?? null,
+            phone: input.phone ?? null,
+            email: input.email ?? null,
+            invoicePhoneSource: input.invoicePhoneSource,
+            invoiceEmailSource: input.invoiceEmailSource,
+            taxes: input.taxes,
+            autoTax: input.autoTax,
+            maxCashRegisters: input.maxCashRegisters,
+            categories: input.categories,
+          },
+          select: { id: true, name: true },
+        }),
+        ctx.db.user.update({
+          where: { id: ownerId },
+          data: { phone: input.ownerPhone ?? null },
+        }),
+      ]);
 
       await ctx.db.auditLog.create({
         data: {
@@ -76,6 +123,7 @@ export const businessRouter = createTRPCRouter({
             taxes: input.taxes,
             autoTax: input.autoTax,
             maxCashRegisters: input.maxCashRegisters,
+            categories: input.categories,
           },
         },
       });

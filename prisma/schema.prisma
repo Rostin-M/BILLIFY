@@ -16,6 +16,12 @@ enum UserRole {
   CASHIER
 }
 
+enum InvoiceContactSource {
+  NONE
+  OWNER
+  BUSINESS
+}
+
 enum SaleStatus {
   COMPLETED
   CANCELLED
@@ -97,6 +103,7 @@ model User {
   email         String?   @unique
   passwordHash  String?   @map("password_hash")
   document      String?
+  phone         String?
   role          UserRole  @default(OWNER)
   isActive      Boolean   @default(false) @map("is_active")
   canManageCash Boolean   @default(true) @map("can_manage_cash")
@@ -127,7 +134,11 @@ model Business {
   document         String  @unique
   address          String?
   phone            String?
+  email            String?
+  invoicePhoneSource InvoiceContactSource @default(NONE) @map("invoice_phone_source")
+  invoiceEmailSource InvoiceContactSource @default(NONE) @map("invoice_email_source")
   taxes            Json    @default("[]") @map("taxes")
+  categories       String[] @default([]) @map("categories")
   plan             String  @default("MVP") @map("plan")
   autoTax          Boolean @default(false) @map("auto_tax")
   maxCashRegisters Int     @default(1) @map("max_cash_registers")
@@ -153,7 +164,7 @@ model Product {
   price      Float
   cost       Float?    @map("cost")
   unit       String    @default("und") @map("unit")
-  taxRate    Float?    @map("tax_rate")
+  taxSlots   Int[]     @default([]) @map("tax_slots")
   stock      Int       @default(0)
   trackStock Boolean   @default(true) @map("track_stock")
   isActive   Boolean   @default(true) @map("is_active")

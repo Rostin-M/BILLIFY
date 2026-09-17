@@ -9,6 +9,7 @@ import {
   ClipboardList,
   UserCog,
   Settings,
+  HandCoins,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,6 +49,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "amber", roles: ["OWNER"] },
   { href: "/productos", label: "Catálogo", icon: Tag, color: "slate", roles: "all" },
   { href: "/clientes", label: "Clientes", icon: Users, color: "sky", roles: ["OWNER"] },
+  { href: "/fiados", label: "Fiados", icon: HandCoins, color: "amber", roles: "all" },
   { href: "/trazabilidad", label: "Trazabilidad", icon: ClipboardList, color: "slate", roles: ["OWNER"] },
   { href: "/empleados", label: "Empleados", icon: UserCog, color: "slate", roles: ["OWNER"] },
   { href: "/configuracion", label: "Configuración", icon: Settings, color: "rose", roles: ["OWNER"] },

@@ -78,6 +78,7 @@ export type BusinessInfoForPdf = {
   document: string;
   address: string | null;
   phone: string | null;
+  email: string | null;
   logoUrl?: string | null;
 };
 
@@ -112,6 +113,7 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
               <Text style={s.bizSub}>NIT: {business.document}</Text>
               {business.address ? <Text style={s.bizSub}>{business.address}</Text> : null}
               {business.phone ? <Text style={s.bizSub}>Tel: {business.phone}</Text> : null}
+              {business.email ? <Text style={s.bizSub}>{business.email}</Text> : null}
             </View>
           </View>
           <View style={s.headerRight}>

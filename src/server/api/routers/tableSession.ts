@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter } from "~/server/api/trpc";
 import { adjustStock } from "~/server/lib/inventory";
+import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
 const PAYMENT_METHODS = ["CASH", "CARD", "CREDIT", "TRANSFER"] as const;
 
@@ -184,7 +185,7 @@ export const tableSessionRouter = createTRPCRouter({
       const [products, business] = await Promise.all([
         ctx.db.product.findMany({
           where: { id: { in: input.items.map((i) => i.productId) }, businessId, isActive: true },
-          select: { id: true, name: true, unit: true, price: true, stock: true, trackStock: true },
+          select: { id: true, name: true, unit: true, price: true, stock: true, trackStock: true, taxSlots: true },
         }),
         ctx.db.business.findUnique({ where: { id: businessId }, select: { taxes: true, autoTax: true } }),
       ]);
@@ -194,25 +195,21 @@ export const tableSessionRouter = createTRPCRouter({
       }
 
       const productMap = new Map(products.map((p) => [p.id, p]));
-      let subtotal = 0;
       const itemsToCreate = input.items.map((item) => {
         const p = productMap.get(item.productId)!;
         const s = p.price * item.quantity;
-        subtotal += s;
         return { productId: item.productId, name: p.name, unit: p.unit, price: p.price, quantity: item.quantity, subtotal: s };
       });
 
-      type TaxLine = { name: string; rate: number; amount: number };
-      const taxConfigs = (business?.taxes as Array<{ name: string; rate: number; enabled: boolean }>) ?? [];
-      const activeTaxes = (business?.autoTax ?? false) ? taxConfigs.filter((t) => t.enabled && t.rate > 0) : [];
-      let taxAmount = 0;
-      const taxLines: TaxLine[] = [];
-      for (const tax of activeTaxes) {
-        const amt = subtotal * (tax.rate / 100);
-        taxAmount += amt;
-        taxLines.push({ name: tax.name, rate: tax.rate, amount: amt });
-      }
-      const total = subtotal + taxAmount;
+      const taxConfigs = (business?.taxes as TaxConfig[]) ?? [];
+      const { subtotal, taxAmount, taxLines, total } = computeSaleTotals(
+        input.items.map((item) => {
+          const p = productMap.get(item.productId)!;
+          return { price: p.price, quantity: item.quantity, taxSlots: p.taxSlots };
+        }),
+        taxConfigs,
+        business?.autoTax ?? false,
+      );
 
       const order = await ctx.db.$transaction(async (tx) => {
         for (const item of input.items) {
@@ -312,6 +309,27 @@ export const tableSessionRouter = createTRPCRouter({
       }
 
       const guestMap = new Map(session.guests.map((g) => [g.id, g]));
+
+      // Las ventas a crédito deben quedar asociadas a un único cliente registrado,
+      // igual que en sale.create — de lo contrario la deuda no queda rastreable.
+      for (const group of input.groups) {
+        if (group.paymentMethod !== "CREDIT") continue;
+        const customerIds = new Set(
+          group.guestIds.map((id) => guestMap.get(id)!.customerId).filter((id): id is string => !!id),
+        );
+        if (customerIds.size === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Las ventas a crédito requieren un cliente registrado. Identifica al cliente en la mesa antes de cobrar a crédito.",
+          });
+        }
+        if (customerIds.size > 1 || customerIds.size !== group.guestIds.length) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Todos los clientes del grupo a crédito deben ser el mismo cliente registrado.",
+          });
+        }
+      }
 
       const result = await ctx.db.$transaction(async (tx) => {
         const sales: { id: string; invoiceNumber: string | null; total: number }[] = [];

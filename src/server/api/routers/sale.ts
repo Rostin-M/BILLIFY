@@ -6,6 +6,8 @@ import { adjustStock } from "~/server/lib/inventory";
 import { bogotaStartOfDay, getPeriodRangeBogota } from "~/server/lib/bogotaTime";
 import { sendInvoiceEmail } from "~/server/lib/email";
 import { generateFacturaPdfBuffer } from "~/server/lib/generateFacturaPdf";
+import { computeSaleTotals, type TaxConfig, type TaxLine } from "~/lib/pricing";
+import { resolveInvoiceContact } from "~/lib/invoiceContact";
 
 const PAYMENT_METHODS = ["CASH", "CARD", "CREDIT", "TRANSFER"] as const;
 
@@ -17,8 +19,6 @@ const saleItemInput = z.object({
 function generateInvoiceNumber(year: number, sequence: number): string {
   return `F-${year}-${String(sequence).padStart(5, "0")}`;
 }
-
-type TaxLine = { name: string; rate: number; amount: number };
 
 export const saleRouter = createTRPCRouter({
   create: businessProcedure
@@ -44,7 +44,7 @@ export const saleRouter = createTRPCRouter({
       const [products, business] = await Promise.all([
         ctx.db.product.findMany({
           where: { id: { in: input.items.map((i) => i.productId) }, businessId, isActive: true },
-          select: { id: true, name: true, unit: true, price: true, stock: true, trackStock: true },
+          select: { id: true, name: true, unit: true, price: true, stock: true, trackStock: true, taxSlots: true },
         }),
         ctx.db.business.findUnique({
           where: { id: businessId },
@@ -61,26 +61,22 @@ export const saleRouter = createTRPCRouter({
 
       const productMap = new Map(products.map((p) => [p.id, p]));
 
-      let subtotal = 0;
       const itemsToCreate = input.items.map((item) => {
         const product = productMap.get(item.productId)!;
         const itemSubtotal = product.price * item.quantity;
-        subtotal += itemSubtotal;
         return { productId: item.productId, name: product.name, unit: product.unit, price: product.price, quantity: item.quantity, subtotal: itemSubtotal };
       });
 
-      const taxConfigs = (business?.taxes as Array<{ name: string; rate: number; enabled: boolean }>) ?? [];
-      const autoTax = business?.autoTax ?? false;
-      const activeTaxes = autoTax ? taxConfigs.filter((t) => t.enabled && t.rate > 0) : [];
-
-      let taxAmount = 0;
-      const taxLines: TaxLine[] = [];
-      for (const tax of activeTaxes) {
-        const lineAmt = subtotal * (tax.rate / 100);
-        taxAmount += lineAmt;
-        taxLines.push({ name: tax.name, rate: tax.rate, amount: lineAmt });
-      }
-      const total = subtotal + taxAmount;
+      const taxConfigs = (business?.taxes as TaxConfig[]) ?? [];
+      const { subtotal, taxAmount, taxLines, total } = computeSaleTotals(
+        input.items.map((item) => ({
+          price: productMap.get(item.productId)!.price,
+          quantity: item.quantity,
+          taxSlots: productMap.get(item.productId)!.taxSlots,
+        })),
+        taxConfigs,
+        business?.autoTax ?? false,
+      );
 
       const sale = await ctx.db.$transaction(async (tx) => {
         let invoiceNumber: string | null = null;
@@ -215,7 +211,7 @@ export const saleRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { businessId } = ctx.session.user;
 
-      const [sale, business] = await Promise.all([
+      const [sale, business, owner] = await Promise.all([
         ctx.db.sale.findFirst({
           where: { id: input.saleId, businessId },
           select: {
@@ -236,7 +232,20 @@ export const saleRouter = createTRPCRouter({
         }),
         ctx.db.business.findUnique({
           where: { id: businessId },
-          select: { name: true, document: true, address: true, phone: true, logoUrl: true },
+          select: {
+            name: true,
+            document: true,
+            address: true,
+            phone: true,
+            email: true,
+            invoicePhoneSource: true,
+            invoiceEmailSource: true,
+            logoUrl: true,
+          },
+        }),
+        ctx.db.user.findFirst({
+          where: { businessId, role: "OWNER" },
+          select: { phone: true, email: true },
         }),
       ]);
 
@@ -251,7 +260,14 @@ export const saleRouter = createTRPCRouter({
       }
 
       const pdfBuffer = await generateFacturaPdfBuffer(
-        { name: business.name, document: business.document, address: business.address, phone: business.phone, logoUrl: business.logoUrl },
+        {
+          name: business.name,
+          document: business.document,
+          address: business.address,
+          phone: resolveInvoiceContact(business.invoicePhoneSource, owner?.phone ?? null, business.phone),
+          email: resolveInvoiceContact(business.invoiceEmailSource, owner?.email ?? null, business.email),
+          logoUrl: business.logoUrl,
+        },
         {
           invoiceNumber: sale.invoiceNumber,
           createdAt: sale.createdAt,

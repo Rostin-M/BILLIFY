@@ -12,7 +12,7 @@ type ProductForm = {
   price: string;
   cost: string;
   unit: string;
-  taxRate: string;
+  taxSlots: number[];
   stock: string;
   trackStock: boolean;
   category: string;
@@ -28,7 +28,7 @@ const emptyForm: ProductForm = {
   price: "",
   cost: "",
   unit: "und",
-  taxRate: "",
+  taxSlots: [],
   stock: "0",
   trackStock: true,
   category: "",
@@ -38,22 +38,6 @@ const emptyForm: ProductForm = {
 };
 
 const emptyAdjust: AdjustForm = { quantity: "", note: "" };
-
-const PRESET_CATEGORIES = [
-  "Bebidas calientes",
-  "Bebidas frías",
-  "Licores",
-  "Cervezas",
-  "Gaseosas y jugos",
-  "Granos y abarrotes",
-  "Snacks",
-  "Comidas rápidas",
-  "Postres",
-  "Lácteos",
-  "Frutas y verduras",
-  "Cigarrillos",
-  "Aseo y hogar",
-];
 
 const UNITS = [
   { value: "und", label: "Unidad (und)" },
@@ -69,20 +53,7 @@ const UNITS = [
   { value: "porcion", label: "Porción" },
 ];
 
-const TAX_RATES = [
-  { value: "", label: "Usar config. negocio" },
-  { value: "0", label: "0% (Exento)" },
-  { value: "5", label: "5%" },
-  { value: "19", label: "19% (IVA estándar)" },
-  { value: "30", label: "30%" },
-];
-
-const IVA_OPTIONS = [
-  { value: "0", label: "0%" },
-  { value: "5", label: "5%" },
-  { value: "19", label: "19%" },
-  { value: "30", label: "30%" },
-];
+type BusinessTax = { name: string; rate: number; enabled: boolean };
 
 function formatCOP(value: number): string {
   return value.toLocaleString("es-CO", {
@@ -118,7 +89,7 @@ function parseForm(form: ProductForm) {
     price: Number.parseFloat(form.price),
     cost: form.cost ? Number.parseFloat(form.cost) : undefined,
     unit: form.unit,
-    taxRate: form.taxRate !== "" ? Number.parseFloat(form.taxRate) : undefined,
+    taxSlots: form.taxSlots,
     stock: Number.parseInt(form.stock, 10) || 0,
     trackStock: form.trackStock,
     category: form.category.trim() || undefined,
@@ -146,33 +117,45 @@ function FieldError({ msg }: Readonly<{ msg?: string }>) {
   return <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{msg}</p>;
 }
 
+type EnabledTax = { slot: number; name: string; rate: number };
+
 function PriceCalculator({
+  businessTaxes,
   onApply,
 }: Readonly<{
-  onApply: (price: number, cost: number, taxRate: number) => void;
+  businessTaxes: EnabledTax[];
+  onApply: (price: number, cost: number, taxSlots: number[]) => void;
 }>) {
   const [cost, setCost] = useState("");
-  const [iva, setIva] = useState("19");
   const [margin, setMargin] = useState("20");
-  const [calculated, setCalculated] = useState<number | null>(null);
+  const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
+  const [result, setResult] = useState<{ base: number; taxAmount: number; total: number } | null>(null);
+
+  function toggleSlot(slot: number) {
+    setSelectedSlots((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
+    setResult(null);
+  }
 
   function calculate() {
     const costNum = Number.parseFloat(cost);
-    const ivaNum = Number.parseFloat(iva);
     const marginNum = Number.parseFloat(margin);
     if (Number.isNaN(costNum) || costNum <= 0) return;
-    const withIva = costNum * (1 + ivaNum / 100);
-    const withMargin = withIva * (1 + marginNum / 100);
-    setCalculated(Math.ceil(withMargin));
+    const base = costNum * (1 + (Number.isNaN(marginNum) ? 0 : marginNum) / 100);
+    const totalRate = businessTaxes
+      .filter((t) => selectedSlots.includes(t.slot))
+      .reduce((sum, t) => sum + t.rate, 0);
+    const taxAmount = base * (totalRate / 100);
+    // Aproxima por encima a la centena más cercana
+    const total = Math.ceil((base + taxAmount) / 100) * 100;
+    setResult({ base, taxAmount, total });
   }
 
   function apply() {
     const costNum = Number.parseFloat(cost);
-    const ivaNum = Number.parseFloat(iva);
-    if (Number.isNaN(costNum) || calculated === null) return;
-    onApply(calculated, costNum, ivaNum);
+    if (Number.isNaN(costNum) || result === null) return;
+    onApply(result.total, costNum, selectedSlots);
     setCost("");
-    setCalculated(null);
+    setResult(null);
   }
 
   return (
@@ -180,7 +163,7 @@ function PriceCalculator({
       <p className="mb-2 text-xs font-semibold text-violet-700 dark:text-violet-300">
         Calculadora de precio
       </p>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1 text-xs">
           <span className="text-slate-600 dark:text-slate-400">Costo (COP)</span>
           <input
@@ -188,36 +171,51 @@ function PriceCalculator({
             min="0"
             step="100"
             value={cost}
-            onChange={(e) => { setCost(e.target.value); setCalculated(null); }}
+            onChange={(e) => { setCost(e.target.value); setResult(null); }}
             placeholder="2000"
             className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-violet-400 dark:border-white/15 dark:bg-slate-900"
           />
         </label>
         <label className="space-y-1 text-xs">
-          <span className="text-slate-600 dark:text-slate-400">IVA (%)</span>
-          <select
-            value={iva}
-            onChange={(e) => { setIva(e.target.value); setCalculated(null); }}
-            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-violet-400 dark:border-white/15 dark:bg-slate-900"
-          >
-            {IVA_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1 text-xs">
-          <span className="text-slate-600 dark:text-slate-400">Margen (%)</span>
+          <span className="text-slate-600 dark:text-slate-400">Margen de ganancia (%)</span>
           <input
             type="number"
             min="0"
             step="1"
             value={margin}
-            onChange={(e) => { setMargin(e.target.value); setCalculated(null); }}
+            onChange={(e) => { setMargin(e.target.value); setResult(null); }}
             placeholder="20"
             className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-violet-400 dark:border-white/15 dark:bg-slate-900"
           />
         </label>
       </div>
+
+      <div className="mt-2 space-y-1 text-xs">
+        <span className="text-slate-600 dark:text-slate-400">Impuestos que aplican a este producto</span>
+        {businessTaxes.length === 0 ? (
+          <p className="text-slate-400 dark:text-slate-500">
+            Tu negocio no tiene impuestos configurados en Ajustes.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {businessTaxes.map((t) => (
+              <button
+                type="button"
+                key={t.slot}
+                onClick={() => toggleSlot(t.slot)}
+                className={`rounded-full border px-2.5 py-1 font-medium transition ${
+                  selectedSlots.includes(t.slot)
+                    ? "border-violet-400 bg-violet-600 text-white"
+                    : "border-violet-200 bg-white text-violet-700 hover:bg-violet-100 dark:border-violet-500/30 dark:bg-transparent dark:text-violet-300"
+                }`}
+              >
+                {t.name} {t.rate}%
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"
@@ -226,21 +224,25 @@ function PriceCalculator({
         >
           Calcular
         </button>
-        {calculated !== null && (
-          <>
-            <span className="text-sm font-bold text-violet-700 dark:text-violet-300">
-              → {formatCOP(calculated)}
-            </span>
-            <button
-              type="button"
-              onClick={apply}
-              className="ml-auto rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-violet-500"
-            >
-              Aplicar al precio
-            </button>
-          </>
+        {result !== null && (
+          <button
+            type="button"
+            onClick={apply}
+            className="ml-auto rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-violet-500"
+          >
+            Aplicar al precio
+          </button>
         )}
       </div>
+
+      {result !== null && (
+        <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">
+          Base {formatCOP(result.base)}
+          {result.taxAmount > 0 && <> + impuestos {formatCOP(result.taxAmount)}</>}
+          {" "}→ precio de venta{" "}
+          <span className="font-bold">{formatCOP(result.total)}</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -250,17 +252,23 @@ function ProductFormFields({
   onChange,
   onCheckChange,
   onSelectChange,
+  onToggleTaxSlot,
   onBarcodeScanned,
   fieldErrors,
   onApplyCalculator,
+  categories,
+  businessTaxes,
 }: Readonly<{
   form: ProductForm;
   onChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) => void;
   onCheckChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) => void;
   onSelectChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLSelectElement>) => void;
+  onToggleTaxSlot: (slot: number) => void;
   onBarcodeScanned: (code: string) => void;
   fieldErrors: Record<string, string>;
-  onApplyCalculator: (price: number, cost: number, taxRate: number) => void;
+  onApplyCalculator: (price: number, cost: number, taxSlots: number[]) => void;
+  categories: string[];
+  businessTaxes: EnabledTax[];
 }>) {
   const [showCalc, setShowCalc] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -292,7 +300,7 @@ function ProductFormFields({
             placeholder="Ej: Bebidas calientes"
           />
           <datalist id="category-options">
-            {PRESET_CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <option key={c} value={c} />
             ))}
           </datalist>
@@ -311,8 +319,8 @@ function ProductFormFields({
         </label>
       </div>
 
-      {/* Precio + costo + IVA producto */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Precio + costo */}
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-sm">
           <span className="text-slate-700 dark:text-slate-300">
             Precio de venta (COP) <span className="text-red-500">*</span>
@@ -343,18 +351,35 @@ function ProductFormFields({
             placeholder="1500"
           />
         </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">IVA del producto</span>
-          <select
-            value={form.taxRate}
-            onChange={onSelectChange("taxRate")}
-            className={INPUT}
-          >
-            {TAX_RATES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+      </div>
+
+      {/* Impuestos del producto — solo los que el negocio tiene configurados */}
+      <div className="space-y-1 text-sm">
+        <span className="text-slate-700 dark:text-slate-300">
+          Impuestos aplicables <span className="text-slate-400">(opc.)</span>
+        </span>
+        {businessTaxes.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-400 dark:border-white/15 dark:text-slate-500">
+            Tu negocio no tiene impuestos configurados. Configúralos en Ajustes para poder asignarlos a este producto.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {businessTaxes.map((t) => (
+              <button
+                type="button"
+                key={t.slot}
+                onClick={() => onToggleTaxSlot(t.slot)}
+                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                  form.taxSlots.includes(t.slot)
+                    ? "border-violet-400 bg-violet-600 text-white"
+                    : "border-slate-300 bg-white text-slate-600 hover:border-violet-300 hover:text-violet-700 dark:border-white/15 dark:bg-slate-900 dark:text-slate-300"
+                }`}
+              >
+                {t.name} {t.rate}%
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+        )}
       </div>
 
       {/* Calculadora de precio */}
@@ -364,11 +389,11 @@ function ProductFormFields({
           onClick={() => setShowCalc((v) => !v)}
           className="text-xs text-violet-600 underline underline-offset-2 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-200"
         >
-          {showCalc ? "Ocultar calculadora" : "Calcular precio desde costo + IVA + margen"}
+          {showCalc ? "Ocultar calculadora" : "Calcular precio desde costo + margen + impuestos"}
         </button>
         {showCalc && (
           <div className="mt-2">
-            <PriceCalculator onApply={onApplyCalculator} />
+            <PriceCalculator businessTaxes={businessTaxes} onApply={onApplyCalculator} />
           </div>
         )}
       </div>
@@ -485,6 +510,17 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
     refetchOnWindowFocus: true,
   });
 
+  const { data: settings } = api.business.getSettings.useQuery(undefined, {
+    enabled: userRole === "OWNER",
+    staleTime: 30_000,
+  });
+  const categories = settings?.categories ?? [];
+  const businessTaxes: EnabledTax[] = (
+    (settings?.taxes as BusinessTax[] | undefined) ?? []
+  )
+    .map((t, slot) => ({ slot, name: t.name, rate: t.rate, enabled: t.enabled }))
+    .filter((t) => t.enabled && t.rate > 0);
+
   const activeProduct = products?.find((p) => p.id === activeRow?.id);
 
   const movementsQuery = api.product.listMovements.useQuery(
@@ -519,7 +555,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                 price: newData.price,
                 cost: newData.cost ?? null,
                 unit: newData.unit ?? "und",
-                taxRate: newData.taxRate ?? null,
+                taxSlots: newData.taxSlots ?? [],
                 stock: (newData.trackStock ?? true) ? newData.stock : 0,
                 trackStock: newData.trackStock ?? true,
                 category: newData.category ?? null,
@@ -615,6 +651,16 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       setter((prev) => ({ ...prev, [field]: e.target.value }));
   }
 
+  function makeToggleTaxSlotHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
+    return (slot: number) =>
+      setter((prev) => ({
+        ...prev,
+        taxSlots: prev.taxSlots.includes(slot)
+          ? prev.taxSlots.filter((s) => s !== slot)
+          : [...prev.taxSlots, slot],
+      }));
+  }
+
   const openRow = (
     id: string,
     mode: RowMode,
@@ -623,7 +669,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       price: number;
       cost: number | null;
       unit: string;
-      taxRate: number | null;
+      taxSlots: number[];
       stock: number;
       trackStock: boolean;
       category: string | null;
@@ -643,7 +689,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
         price: String(product.price),
         cost: product.cost != null ? String(product.cost) : "",
         unit: product.unit,
-        taxRate: product.taxRate != null ? String(product.taxRate) : "",
+        taxSlots: product.taxSlots,
         stock: String(product.stock),
         trackStock: product.trackStock,
         category: product.category ?? "",
@@ -736,14 +782,17 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
               onChange={makeChangeHandler(setCreateForm)}
               onCheckChange={makeCheckHandler(setCreateForm)}
               onSelectChange={makeSelectHandler(setCreateForm)}
+              onToggleTaxSlot={makeToggleTaxSlotHandler(setCreateForm)}
               onBarcodeScanned={(code) => setCreateForm((p) => ({ ...p, barcode: code }))}
               fieldErrors={createErrors.fieldErrors}
-              onApplyCalculator={(price, cost, taxRate) =>
+              categories={categories}
+              businessTaxes={businessTaxes}
+              onApplyCalculator={(price, cost, taxSlots) =>
                 setCreateForm((p) => ({
                   ...p,
                   price: String(price),
                   cost: String(cost),
-                  taxRate: String(taxRate),
+                  taxSlots,
                 }))
               }
             />
@@ -925,14 +974,17 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                           onChange={makeChangeHandler(setEditForm)}
                           onCheckChange={makeCheckHandler(setEditForm)}
                           onSelectChange={makeSelectHandler(setEditForm)}
+                          onToggleTaxSlot={makeToggleTaxSlotHandler(setEditForm)}
                           onBarcodeScanned={(code) => setEditForm((p) => ({ ...p, barcode: code }))}
                           fieldErrors={updateErrors.fieldErrors}
-                          onApplyCalculator={(price, cost, taxRate) =>
+                          categories={categories}
+                          businessTaxes={businessTaxes}
+                          onApplyCalculator={(price, cost, taxSlots) =>
                             setEditForm((p) => ({
                               ...p,
                               price: String(price),
                               cost: String(cost),
-                              taxRate: String(taxRate),
+                              taxSlots,
                             }))
                           }
                         />

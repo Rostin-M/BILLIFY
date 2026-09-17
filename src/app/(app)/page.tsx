@@ -10,6 +10,7 @@ import {
   ClipboardList,
   UserCog,
   Settings,
+  HandCoins,
   type LucideIcon,
 } from "lucide-react";
 
@@ -70,6 +71,13 @@ const COMMON_ITEMS: NavItem[] = [
     description: "Ver existencias y estado del stock",
     icon: Package,
     color: "sky",
+  },
+  {
+    href: "/fiados",
+    label: "Fiados",
+    description: "Clientes con deudas pendientes",
+    icon: HandCoins,
+    color: "amber",
   },
 ];
 

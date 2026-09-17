@@ -79,6 +79,42 @@ export const customerRouter = createTRPCRouter({
     }));
   }),
 
+  // Clientes con deuda pendiente — ambos roles, para la vista de Fiados
+  listDebtors: businessProcedure.query(async ({ ctx }) => {
+    const { businessId } = ctx.session.user;
+
+    const [creditTotals, paidTotals] = await Promise.all([
+      ctx.db.sale.groupBy({
+        by: ["customerId"],
+        where: { businessId, paymentMethod: "CREDIT", status: "COMPLETED", customerId: { not: null } },
+        _sum: { total: true },
+      }),
+      ctx.db.customerPayment.groupBy({
+        by: ["customerId"],
+        where: { businessId },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const paidMap = new Map(paidTotals.map((p) => [p.customerId, p._sum.amount ?? 0]));
+    const debtorIds = creditTotals
+      .map((c) => ({ customerId: c.customerId!, debt: (c._sum.total ?? 0) - (paidMap.get(c.customerId!) ?? 0) }))
+      .filter((d) => d.debt > 0.01);
+
+    if (debtorIds.length === 0) return [];
+
+    const customers = await ctx.db.customer.findMany({
+      where: { id: { in: debtorIds.map((d) => d.customerId) } },
+      select: { id: true, name: true, alias: true, phone: true },
+    });
+    const customerMap = new Map(customers.map((c) => [c.id, c]));
+
+    return debtorIds
+      .map((d) => ({ ...customerMap.get(d.customerId)!, debt: d.debt }))
+      .filter((c) => !!c.id)
+      .sort((a, b) => b.debt - a.debt);
+  }),
+
   // Crear cliente — ambos roles (cajero puede crear al vuelo en la venta)
   create: businessProcedure.input(customerSchema).mutation(async ({ ctx, input }) => {
     const { businessId, id: userId } = ctx.session.user;
@@ -210,7 +246,7 @@ export const customerRouter = createTRPCRouter({
             total: true,
             paymentMethod: true,
             createdAt: true,
-            items: { select: { name: true, quantity: true } },
+            items: { select: { name: true, quantity: true, price: true, subtotal: true } },
           },
           orderBy: { createdAt: "desc" },
           take: 20,

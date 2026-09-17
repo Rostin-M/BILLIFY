@@ -221,16 +221,25 @@ export function BarcodeScanner({
   }, [onDetected, continuous]);
 
   const videoBox = (
-    <div className="relative w-full max-w-md">
+    <div
+      className={`relative w-full max-w-md overflow-hidden rounded-2xl bg-black transition-shadow ${
+        justScanned ? "ring-4 ring-emerald-400" : ""
+      }`}
+    >
       <video
         ref={videoRef}
         muted
         playsInline
-        className={`w-full rounded-2xl bg-black transition-shadow ${
-          justScanned ? "ring-4 ring-emerald-400" : ""
-        }`}
+        className="h-56 w-full object-cover sm:h-64"
       />
-      <div className="pointer-events-none absolute inset-x-10 top-1/2 h-0.5 -translate-y-1/2 bg-red-500/80" />
+      {/* Marco de encuadre — delimita solo la zona donde debe quedar el código */}
+      <div className="pointer-events-none absolute inset-x-8 inset-y-6 rounded-xl border-2 border-white/70">
+        <span className="absolute -left-0.5 -top-0.5 h-5 w-5 rounded-tl-lg border-l-2 border-t-2 border-emerald-400" />
+        <span className="absolute -right-0.5 -top-0.5 h-5 w-5 rounded-tr-lg border-r-2 border-t-2 border-emerald-400" />
+        <span className="absolute -bottom-0.5 -left-0.5 h-5 w-5 rounded-bl-lg border-b-2 border-l-2 border-emerald-400" />
+        <span className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-br-lg border-b-2 border-r-2 border-emerald-400" />
+        <div className="absolute inset-x-4 top-1/2 h-0.5 -translate-y-1/2 bg-red-500/80" />
+      </div>
     </div>
   );
 

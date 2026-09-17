@@ -4,10 +4,11 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
-import type { BusinessInfoForPdf, SaleForPdf, TaxLine } from "~/lib/pdf/FacturaPDF";
+import type { BusinessInfoForPdf, SaleForPdf } from "~/lib/pdf/FacturaPDF";
 import { CustomerSelector } from "./CustomerSelector";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
+import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
 const FacturaPdfActions = dynamic(
   () => import("~/lib/pdf/FacturaPdfActions").then((m) => m.FacturaPdfActions),
@@ -22,6 +23,7 @@ type CartItem = {
   price: number;
   quantity: number;
   unit: string;
+  taxSlots: number[];
 };
 
 type Product = {
@@ -33,6 +35,7 @@ type Product = {
   trackStock: boolean;
   category: string | null;
   barcode: string | null;
+  taxSlots: number[];
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -56,8 +59,6 @@ function loadLS<T>(key: string, fallback: T): T {
   }
 }
 
-type TaxConfig = { name: string; rate: number; enabled: boolean };
-
 type Props = {
   taxes: TaxConfig[];
   autoTax: boolean;
@@ -66,7 +67,6 @@ type Props = {
 };
 
 export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonly<Props>) {
-  const activeTaxes = autoTax ? taxes.filter((t) => t.enabled && t.rate > 0) : [];
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "CREDIT" | "TRANSFER">("CASH");
@@ -118,14 +118,8 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
 
       clearCart();
 
-      const saleSubtotal = cartSnapshot.reduce((sum, i) => sum + i.price * i.quantity, 0);
-      const saleTaxLines: TaxLine[] = activeTaxes.map((t) => ({
-        name: t.name,
-        rate: t.rate,
-        amount: saleSubtotal * (t.rate / 100),
-      }));
-      const saleTaxAmount = saleTaxLines.reduce((s, l) => s + l.amount, 0);
-      const saleTotal = saleSubtotal + saleTaxAmount;
+      const { subtotal: saleSubtotal, taxAmount: saleTaxAmount, taxLines: saleTaxLines, total: saleTotal } =
+        computeSaleTotals(cartSnapshot, taxes, autoTax);
 
       setCompletedSale({
         saleId: data.id,
@@ -191,7 +185,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
       if (product.trackStock && product.stock === 0) return prev;
       return [
         ...prev,
-        { productId: product.id, name: product.name, price: product.price, quantity: 1, unit: product.unit },
+        { productId: product.id, name: product.name, price: product.price, quantity: 1, unit: product.unit, taxSlots: product.taxSlots },
       ];
     });
   }
@@ -234,9 +228,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     setCart((prev) => prev.filter((i) => i.productId !== productId));
   }
 
-  const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const taxAmount = activeTaxes.reduce((sum, t) => sum + subtotal * (t.rate / 100), 0);
-  const total = subtotal + taxAmount;
+  const { subtotal, taxLines, total } = computeSaleTotals(cart, taxes, autoTax);
 
   const creditRequiresCustomer = paymentMethod === "CREDIT" && !selectedCustomer?.id;
 
@@ -506,16 +498,16 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
             {/* Desglose fiscal */}
             {cart.length > 0 && (
               <div className="mt-4 space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
-                {activeTaxes.length > 0 && (
+                {taxLines.length > 0 && (
                   <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
                     <span>Subtotal</span>
                     <span>{formatCOP(subtotal)}</span>
                   </div>
                 )}
-                {activeTaxes.map((t, i) => (
-                  <div key={i} className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+                {taxLines.map((t) => (
+                  <div key={`${t.name}-${t.rate}`} className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
                     <span>{t.name} ({t.rate}%)</span>
-                    <span>{formatCOP(subtotal * (t.rate / 100))}</span>
+                    <span>{formatCOP(t.amount)}</span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between border-t border-slate-100 pt-2 dark:border-white/10">

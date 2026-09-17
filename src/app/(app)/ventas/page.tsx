@@ -6,6 +6,7 @@ import { db } from "~/server/db";
 import { api, HydrateClient } from "~/trpc/server";
 import { VentasClient } from "./_components/VentasClient";
 import { PageLayout } from "~/app/_components/PageLayout";
+import { resolveInvoiceContact } from "~/lib/invoiceContact";
 
 export default async function VentasPage() {
   const session = await auth();
@@ -13,10 +14,25 @@ export default async function VentasPage() {
   if (!session?.user) redirect("/auth/login");
   if (!session.user.businessId) redirect("/");
 
-  const [business, activeRegister] = await Promise.all([
+  const [business, owner, activeRegister] = await Promise.all([
     db.business.findUnique({
       where: { id: session.user.businessId },
-      select: { name: true, document: true, address: true, phone: true, taxes: true, autoTax: true, logoUrl: true },
+      select: {
+        name: true,
+        document: true,
+        address: true,
+        phone: true,
+        email: true,
+        invoicePhoneSource: true,
+        invoiceEmailSource: true,
+        taxes: true,
+        autoTax: true,
+        logoUrl: true,
+      },
+    }),
+    db.user.findFirst({
+      where: { businessId: session.user.businessId, role: "OWNER" },
+      select: { phone: true, email: true },
     }),
     db.cashRegister.findFirst({
       where: { businessId: session.user.businessId, status: "OPEN" },
@@ -58,7 +74,16 @@ export default async function VentasPage() {
                 name: business?.name ?? "",
                 document: business?.document ?? "",
                 address: business?.address ?? null,
-                phone: business?.phone ?? null,
+                phone: resolveInvoiceContact(
+                  business?.invoicePhoneSource ?? "NONE",
+                  owner?.phone ?? null,
+                  business?.phone ?? null,
+                ),
+                email: resolveInvoiceContact(
+                  business?.invoiceEmailSource ?? "NONE",
+                  owner?.email ?? null,
+                  business?.email ?? null,
+                ),
                 logoUrl: business?.logoUrl ?? null,
               }}
             />
