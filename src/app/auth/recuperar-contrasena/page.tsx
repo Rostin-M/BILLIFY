@@ -29,7 +29,7 @@ export default function RecuperarContrasenaPage() {
 
   if (step === "done") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-4">
         <div className="space-y-3 text-center">
           <div className="text-4xl text-emerald-400">✓</div>
           <p className="text-lg font-semibold text-emerald-400">

@@ -75,7 +75,7 @@ export default function RegisterPage() {
 
   if (verified) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-900 dark:bg-slate-950 dark:text-white">
+      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 text-slate-900 dark:bg-slate-950 dark:text-white">
         <div className="space-y-3 text-center">
           <div className="text-4xl">✓</div>
           <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
@@ -91,7 +91,7 @@ export default function RegisterPage() {
 
   if (step === "verify") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 text-slate-900 dark:bg-slate-950 dark:text-white">
+      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-12 text-slate-900 dark:bg-slate-950 dark:text-white">
         <div className="absolute right-4 top-4">
           <ThemeToggle />
         </div>
@@ -173,7 +173,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 text-slate-900 dark:bg-slate-950 dark:text-white">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-12 text-slate-900 dark:bg-slate-950 dark:text-white">
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
