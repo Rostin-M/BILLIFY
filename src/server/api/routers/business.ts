@@ -29,6 +29,7 @@ const updateSettingsSchema = z
       .array(z.string().trim().min(1))
       .max(40, "Máximo 40 categorías")
       .default([]),
+    produceModuleEnabled: z.boolean().default(false),
   })
   .refine((data) => data.invoicePhoneSource !== "BUSINESS" || !!data.phone, {
     message: "Ingresa el teléfono del negocio para poder mostrarlo en la factura.",
@@ -64,6 +65,7 @@ export const businessRouter = createTRPCRouter({
           maxCashRegisters: true,
           logoUrl: true,
           categories: true,
+          produceModuleEnabled: true,
         },
       }),
       ctx.db.user.findUnique({
@@ -106,6 +108,7 @@ export const businessRouter = createTRPCRouter({
             autoTax: input.autoTax,
             maxCashRegisters: input.maxCashRegisters,
             categories: input.categories,
+            produceModuleEnabled: input.produceModuleEnabled,
           },
           select: { id: true, name: true },
         }),

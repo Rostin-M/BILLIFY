@@ -50,6 +50,7 @@ export default function RegisterPage() {
   const [code, setCode] = useState("");
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const registerOwner = api.auth.registerOwner.useMutation({
     onSuccess: () => {
@@ -274,6 +275,27 @@ export default function RegisterPage() {
             </label>
           </div>
 
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              required
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded accent-violet-600"
+            />
+            <span className="text-slate-600 dark:text-slate-300">
+              He leído y acepto los{" "}
+              <Link href="/legal/terminos" target="_blank" className="text-violet-600 underline underline-offset-2 dark:text-violet-400">
+                Términos y Condiciones
+              </Link>{" "}
+              y la{" "}
+              <Link href="/legal/privacidad" target="_blank" className="text-violet-600 underline underline-offset-2 dark:text-violet-400">
+                Política de Privacidad
+              </Link>{" "}
+              de BILLIFY.
+            </span>
+          </label>
+
           {registerOwner.error && (
             <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
               {parseErrorMessage(registerOwner.error.message)}
@@ -282,7 +304,7 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            disabled={registerOwner.isPending}
+            disabled={registerOwner.isPending || !acceptedTerms}
             className="w-full rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {registerOwner.isPending ? "Registrando..." : "Registrar negocio"}

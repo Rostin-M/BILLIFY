@@ -128,7 +128,7 @@ export function DashboardClient() {
           ))}
         </div>
         {dateRangeLabel && (
-          <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+          <p className="text-center text-xs text-slate-500 dark:text-slate-500">
             {dateRangeLabel}
           </p>
         )}
@@ -239,7 +239,7 @@ export function DashboardClient() {
                 Resumen de hoy
               </p>
               {data.sales.count === 0 ? (
-                <p className="text-sm text-slate-400 dark:text-slate-500">Sin ventas registradas hoy</p>
+                <p className="text-sm text-slate-500 dark:text-slate-500">Sin ventas registradas hoy</p>
               ) : (
                 <div className="flex items-end gap-6">
                   <div>
@@ -249,7 +249,7 @@ export function DashboardClient() {
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                       {data.sales.count} venta{data.sales.count !== 1 ? "s" : ""}
                       {data.sales.count > 0 && (
-                        <span className="ml-2 text-slate-400 dark:text-slate-500">
+                        <span className="ml-2 text-slate-500 dark:text-slate-500">
                           · Promedio {formatCOP(data.sales.total / data.sales.count)}
                         </span>
                       )}
@@ -267,7 +267,7 @@ export function DashboardClient() {
                 <h2 className="font-semibold text-slate-700 dark:text-slate-200">
                   {period === "month" ? "Ventas por semana" : "Ventas por día"}
                 </h2>
-                <span className="text-xs text-slate-400 dark:text-slate-500">
+                <span className="text-xs text-slate-500 dark:text-slate-500">
                   Total: {formatCOP(data.sales.total)}
                 </span>
               </div>
@@ -275,9 +275,9 @@ export function DashboardClient() {
               <div className="flex gap-2">
                 {/* Eje Y */}
                 <div className="flex w-14 shrink-0 flex-col justify-between pb-5 text-right">
-                  <span className="text-[9px] text-slate-400">{formatCOP(maxDayTotal)}</span>
-                  <span className="text-[9px] text-slate-400">{formatCOP(maxDayTotal / 2)}</span>
-                  <span className="text-[9px] text-slate-400">$0</span>
+                  <span className="text-[9px] text-slate-500">{formatCOP(maxDayTotal)}</span>
+                  <span className="text-[9px] text-slate-500">{formatCOP(maxDayTotal / 2)}</span>
+                  <span className="text-[9px] text-slate-500">$0</span>
                 </div>
 
                 {/* Barras */}
@@ -307,7 +307,7 @@ export function DashboardClient() {
                             {/* Tooltip */}
                             <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden min-w-max -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800">
                               <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(bucket.total)}</p>
-                              <p className="text-slate-400">{bucket.count} venta{bucket.count !== 1 ? "s" : ""}</p>
+                              <p className="text-slate-500">{bucket.count} venta{bucket.count !== 1 ? "s" : ""}</p>
                             </div>
                             {/* Barra */}
                             <div className="flex w-full flex-1 items-end">
@@ -323,7 +323,7 @@ export function DashboardClient() {
                               />
                             </div>
                             {/* Etiqueta */}
-                            <span className="truncate text-[9px] text-slate-400 dark:text-slate-500">
+                            <span className="truncate text-[9px] text-slate-500 dark:text-slate-500">
                               {bucket.label}
                             </span>
                           </div>
@@ -342,7 +342,7 @@ export function DashboardClient() {
                 Por método de pago
               </h2>
               {data.sales.total === 0 ? (
-                <p className="text-sm text-slate-400 dark:text-slate-500">Sin ventas en el período</p>
+                <p className="text-sm text-slate-500 dark:text-slate-500">Sin ventas en el período</p>
               ) : (
                 <div className="space-y-3">
                   {Object.entries(data.sales.byMethod)
@@ -357,7 +357,7 @@ export function DashboardClient() {
                               {METHOD_LABELS[method] ?? method}
                             </span>
                             <span className="font-semibold text-slate-800 dark:text-white">
-                              <span className="mr-1.5 text-xs font-normal text-slate-400">{pct}%</span>
+                              <span className="mr-1.5 text-xs font-normal text-slate-500">{pct}%</span>
                               {formatCOP(total)}
                             </span>
                           </div>
@@ -377,22 +377,22 @@ export function DashboardClient() {
             {/* Top productos */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
               <h2 className="mb-4 font-semibold text-slate-700 dark:text-slate-200">
-                Top 5 productos
+                Top 20 productos más vendidos
               </h2>
               {data.topProducts.length === 0 ? (
-                <p className="text-sm text-slate-400 dark:text-slate-500">Sin ventas en el período</p>
+                <p className="text-sm text-slate-500 dark:text-slate-500">Sin ventas en el período</p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="max-h-96 space-y-2 overflow-y-auto pr-1">
                   {data.topProducts.map((p, i) => (
                     <li key={p.name} className="flex items-center gap-3">
-                      <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-400">
+                      <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-500">
                         {i + 1}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
                           {p.name}
                         </p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                        <p className="text-xs text-slate-500 dark:text-slate-500">
                           {p.quantitySold} unidad{p.quantitySold !== 1 ? "es" : ""}
                         </p>
                       </div>
@@ -504,7 +504,7 @@ function KpiCard({
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
       <p className={`mt-1 truncate text-lg font-bold ${colorMap[color]}`}>{value}</p>
       {trend != null && <TrendPill value={trend} />}
-      {sub && <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">{sub}</p>}
+      {sub && <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-500">{sub}</p>}
       {tooltip && (
         <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-56 max-w-[80vw] -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
           {tooltip}

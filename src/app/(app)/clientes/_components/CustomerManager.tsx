@@ -199,15 +199,15 @@ export function CustomerManager() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className={`break-words text-sm font-medium ${c.isActive ? "text-slate-800 dark:text-slate-100" : "text-slate-400 line-through dark:text-slate-500"}`}>
+                        <p className={`break-words text-sm font-medium ${c.isActive ? "text-slate-800 dark:text-slate-100" : "text-slate-500 line-through dark:text-slate-500"}`}>
                           {c.name}
                         </p>
                         {c.alias && (
-                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                          <span className="text-xs text-slate-500 dark:text-slate-500">
                             &quot;{c.alias}&quot;
                           </span>
                         )}
-                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                        <span className="text-xs text-slate-500 dark:text-slate-500">
                           {c._count.sales} {c._count.sales === 1 ? "venta" : "ventas"}
                         </span>
                         {c.debt > 0.01 && (
@@ -216,7 +216,7 @@ export function CustomerManager() {
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">
                         {[c.document, c.phone, c.email].filter(Boolean).join(" · ") || "Sin datos de contacto"}
                       </p>
                     </div>
@@ -258,10 +258,10 @@ export function CustomerManager() {
                 {historyId === c.id && (
                   <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
                     {historyLoading && (
-                      <p className="text-xs text-slate-400">Cargando historial...</p>
+                      <p className="text-xs text-slate-500">Cargando historial...</p>
                     )}
                     {!historyLoading && (!historyData || historyData.sales.length === 0) && (
-                      <p className="text-xs text-slate-400">Sin ventas registradas.</p>
+                      <p className="text-xs text-slate-500">Sin ventas registradas.</p>
                     )}
                     {!historyLoading && historyData && historyData.sales.length > 0 && (
                       <>
@@ -275,7 +275,7 @@ export function CustomerManager() {
                                 <span className="font-medium text-slate-700 dark:text-slate-200">
                                   {s.invoiceNumber ?? "Venta rápida"}
                                 </span>
-                                <span className="ml-2 text-slate-400 dark:text-slate-500">
+                                <span className="ml-2 text-slate-500 dark:text-slate-500">
                                   {formatDate(s.createdAt)} · {PAYMENT_LABELS[s.paymentMethod] ?? s.paymentMethod}
                                 </span>
                               </div>

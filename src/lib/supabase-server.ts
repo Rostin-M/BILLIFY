@@ -13,3 +13,5 @@ export function createSupabaseServiceClient() {
 }
 
 export const LOGO_BUCKET = "business-logos";
+// Comprobantes de pago (privado — se sirve siempre con URL firmada, nunca pública)
+export const RECEIPTS_BUCKET = "payment-receipts";

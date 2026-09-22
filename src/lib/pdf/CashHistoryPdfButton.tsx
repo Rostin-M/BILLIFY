@@ -20,7 +20,7 @@ export function CashHistoryPdfButton({ registerId, business, openedAt }: Readonl
 
   if (enabled && isPending) {
     return (
-      <span className="text-xs text-slate-400 dark:text-slate-500">Cargando…</span>
+      <span className="text-xs text-slate-500 dark:text-slate-500">Cargando…</span>
     );
   }
 

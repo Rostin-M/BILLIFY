@@ -11,12 +11,12 @@ export function EmptyState({ icon: Icon, title, description, onAction }: Readonl
   return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-        <Icon size={28} className="text-slate-400 dark:text-slate-500" />
+        <Icon size={28} className="text-slate-500 dark:text-slate-500" />
       </div>
       <div>
         <p className="font-medium text-slate-700 dark:text-slate-300">{title}</p>
         {description && (
-          <p className="mt-1 text-sm text-slate-400 dark:text-slate-500">{description}</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-500">{description}</p>
         )}
       </div>
       {onAction && (

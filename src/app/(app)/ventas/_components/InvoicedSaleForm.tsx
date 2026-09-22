@@ -13,7 +13,7 @@ import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig } from "~/li
 
 const FacturaPdfActions = dynamic(
   () => import("~/lib/pdf/FacturaPdfActions").then((m) => m.FacturaPdfActions),
-  { ssr: false, loading: () => <span className="text-xs text-slate-400">Generando PDF…</span> },
+  { ssr: false, loading: () => <span className="text-xs text-slate-500">Generando PDF…</span> },
 );
 
 type SelectedCustomer = { id?: string; name: string; document?: string; email?: string | null; isGuestWithDoc?: boolean };
@@ -316,9 +316,9 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
           )}
 
           {isLoading ? (
-            <p className="text-center text-slate-400 dark:text-slate-500">Cargando productos...</p>
+            <p className="text-center text-slate-500 dark:text-slate-500">Cargando productos...</p>
           ) : filteredProducts.length === 0 ? (
-            <p className="text-center text-slate-400 dark:text-slate-500">Sin resultados</p>
+            <p className="text-center text-slate-500 dark:text-slate-500">Sin resultados</p>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
               {filteredProducts.map((p: Product) => {
@@ -344,7 +344,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
                       {formatCOP(p.price)}
                     </span>
                     <span
-                      className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-400 dark:text-slate-500"}`}
+                      className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-500"}`}
                     >
                       {outOfStock ? "Sin stock" : p.trackStock ? `${p.stock} disp.` : "∞ disp."}
                     </span>
@@ -381,7 +381,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
               </span>
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Detalle</h2>
               {cart.length > 0 && (
-                <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">
+                <span className="ml-auto text-xs text-slate-500 dark:text-slate-500">
                   guardado automáticamente
                 </span>
               )}
@@ -389,7 +389,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
 
             {/* Ítems */}
             {cart.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-400 dark:text-slate-500">
+              <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-500">
                 Toca un producto para agregar a la factura
               </p>
             ) : (
@@ -442,7 +442,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
                 {paymentMethod === "CREDIT" ? (
                   <span className="text-red-500">*</span>
                 ) : (
-                  <span className="text-slate-400">(opcional)</span>
+                  <span className="text-slate-500">(opcional)</span>
                 )}
               </p>
               <CustomerSelector value={selectedCustomer} onChange={setSelectedCustomer} />
@@ -568,7 +568,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
               ) : (
                 <button
                   onClick={() => setShowClearConfirm(true)}
-                  className="text-center text-sm text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                  className="text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
                 >
                   Limpiar factura
                 </button>

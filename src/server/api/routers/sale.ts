@@ -9,12 +9,16 @@ import { sendInvoiceEmail } from "~/server/lib/email";
 import { generateFacturaPdfBuffer } from "~/server/lib/generateFacturaPdf";
 import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig, type TaxLine } from "~/lib/pricing";
 import { resolveInvoiceContact } from "~/lib/invoiceContact";
+import { createSupabaseServiceClient, RECEIPTS_BUCKET } from "~/lib/supabase-server";
+import { resolveSaleItem } from "~/server/lib/resolveSaleItem";
 
 const PAYMENT_METHODS = ["CASH", "CARD", "CREDIT", "TRANSFER"] as const;
 
 const saleItemInput = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().positive("La cantidad debe ser mayor a cero"),
+  weightKg: z.number().positive().optional(),
+  customAmount: z.number().positive().optional(),
 });
 
 function generateInvoiceNumber(year: number, sequence: number): string {
@@ -30,6 +34,7 @@ export const saleRouter = createTRPCRouter({
         paymentMethod: z.enum(PAYMENT_METHODS).default("CASH"),
         customerId: z.string().optional(),
         note: z.string().trim().optional(),
+        receiptPath: z.string().trim().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -47,7 +52,7 @@ export const saleRouter = createTRPCRouter({
       const [products, business] = await Promise.all([
         ctx.db.product.findMany({
           where: { id: { in: input.items.map((i) => i.productId) }, businessId, isActive: true },
-          select: { id: true, name: true, unit: true, price: true, stock: true, trackStock: true, taxSlots: true },
+          select: { id: true, name: true, unit: true, price: true, trackStock: true, taxSlots: true, openPrice: true, soldByWeight: true },
         }),
         ctx.db.business.findUnique({
           where: { id: businessId },
@@ -66,31 +71,31 @@ export const saleRouter = createTRPCRouter({
       const taxConfigs = (business?.taxes as TaxConfig[]) ?? [];
       const autoTax = business?.autoTax ?? false;
 
-      const itemsToCreate = input.items.map((item) => {
-        const product = productMap.get(item.productId)!;
-        const itemSubtotal = product.price * item.quantity;
+      const resolvedItems = input.items.map((item) => resolveSaleItem(productMap.get(item.productId)!, item));
+
+      const itemsToCreate = resolvedItems.map((resolved) => {
         const itemTaxLines = autoTax
           ? computeItemTaxBreakdown(
-              { price: product.price, quantity: item.quantity, taxSlots: product.taxSlots },
+              { price: resolved.price, quantity: resolved.quantity, taxSlots: resolved.taxSlots },
               taxConfigs,
             ).taxLines
           : [];
         return {
-          productId: item.productId,
-          name: product.name,
-          unit: product.unit,
-          price: product.price,
-          quantity: item.quantity,
-          subtotal: itemSubtotal,
+          productId: resolved.productId,
+          name: resolved.name,
+          unit: resolved.unit,
+          price: resolved.price,
+          quantity: resolved.quantity,
+          subtotal: resolved.subtotal,
           taxLines: itemTaxLines.length > 0 ? itemTaxLines : undefined,
         };
       });
 
       const { subtotal, taxAmount, taxLines, total } = computeSaleTotals(
-        input.items.map((item) => ({
-          price: productMap.get(item.productId)!.price,
-          quantity: item.quantity,
-          taxSlots: productMap.get(item.productId)!.taxSlots,
+        resolvedItems.map((resolved) => ({
+          price: resolved.price,
+          quantity: resolved.quantity,
+          taxSlots: resolved.taxSlots,
         })),
         taxConfigs,
         autoTax,
@@ -108,10 +113,9 @@ export const saleRouter = createTRPCRouter({
           invoiceNumber = generateInvoiceNumber(year, count + 1);
         }
 
-        for (const item of input.items) {
-          const product = productMap.get(item.productId);
-          if (product?.trackStock) {
-            await adjustStock({ tx, productId: item.productId, businessId, userId, quantity: -item.quantity, reason: "SALE", note: invoiceNumber ?? undefined });
+        for (const resolved of resolvedItems) {
+          if (resolved.stockDelta > 0) {
+            await adjustStock({ tx, productId: resolved.productId, businessId, userId, quantity: -resolved.stockDelta, reason: "SALE", note: invoiceNumber ?? undefined });
           }
         }
 
@@ -121,7 +125,9 @@ export const saleRouter = createTRPCRouter({
             invoiceNumber, paymentMethod: input.paymentMethod, subtotal, taxAmount,
             taxLines: taxLines.length > 0 ? taxLines : undefined,
             total,
-            note: input.note ?? null, items: { create: itemsToCreate },
+            note: input.note ?? null,
+            receiptPath: input.paymentMethod === "TRANSFER" ? (input.receiptPath ?? null) : null,
+            items: { create: itemsToCreate },
           },
           select: { id: true, total: true, invoiceNumber: true, saleType: true },
         });
@@ -158,13 +164,37 @@ export const saleRouter = createTRPCRouter({
         select: {
           id: true, saleType: true, invoiceNumber: true, status: true, total: true,
           subtotal: true, taxAmount: true, taxLines: true, paymentMethod: true, createdAt: true,
-          note: true, voidedAt: true, voidReason: true,
+          note: true, voidedAt: true, voidReason: true, receiptPath: true,
           user: { select: { name: true } },
           customer: { select: { name: true } },
           items: { select: { name: true, unit: true, quantity: true, price: true, subtotal: true, taxLines: true } },
         },
         orderBy: { createdAt: "desc" },
       });
+    }),
+
+  // Devuelve una URL firmada y temporal del comprobante — el bucket es privado
+  getReceiptUrl: businessProcedure
+    .input(z.object({ saleId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const { businessId } = ctx.session.user;
+      const sale = await ctx.db.sale.findFirst({
+        where: { id: input.saleId, businessId },
+        select: { receiptPath: true },
+      });
+      if (!sale?.receiptPath) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Esta venta no tiene comprobante adjunto." });
+      }
+
+      const supabase = createSupabaseServiceClient();
+      const { data, error } = await supabase.storage
+        .from(RECEIPTS_BUCKET)
+        .createSignedUrl(sale.receiptPath, 300);
+
+      if (error || !data) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo generar el enlace del comprobante." });
+      }
+      return { url: data.signedUrl };
     }),
 
   void: ownerProcedure

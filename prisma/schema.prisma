@@ -148,6 +148,8 @@ model Business {
   plan             String  @default("MVP") @map("plan")
   autoTax          Boolean @default(false) @map("auto_tax")
   maxCashRegisters Int     @default(1) @map("max_cash_registers")
+  // Habilita el modo "se vende por peso" en el formulario de productos (frutas/verduras)
+  produceModuleEnabled Boolean @default(false) @map("produce_module_enabled")
   logoUrl          String? @map("logo_url")
   users              User[]
   auditLogs          AuditLog[]
@@ -178,6 +180,12 @@ model Product {
   lotNumber  String?   @map("lot_number")
   expiresAt  DateTime? @map("expires_at")
   barcode    String?   @map("barcode")
+  brand        String?  @map("brand")
+  presentation String?  @map("presentation")
+  // Monto libre: el precio se define en cada venta (ej. confites sueltos) en vez de usar `price`.
+  openPrice    Boolean  @default(false) @map("open_price")
+  // Se vende por peso: `price` representa el precio por kg; en la venta se pide el peso.
+  soldByWeight Boolean  @default(false) @map("sold_by_weight")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
@@ -335,6 +343,7 @@ model Sale {
   note          String?
   voidedAt      DateTime?     @map("voided_at")
   voidReason    String?       @map("void_reason")
+  receiptPath   String?       @map("receipt_path")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { adjustStock } from "~/server/lib/inventory";
 
-const productSchema = z.object({
+const baseProductSchema = z.object({
   name: z.string().trim().min(2, "El nombre del producto es obligatorio"),
   price: z.number().positive("El precio debe ser mayor a cero"),
   cost: z.number().nonnegative("El costo no puede ser negativo").optional(),
@@ -16,26 +16,47 @@ const productSchema = z.object({
   category: z.string().trim().optional(),
   lotNumber: z.string().trim().optional(),
   barcode: z.string().trim().optional(),
+  brand: z.string().trim().optional(),
+  presentation: z.string().trim().optional(),
+  openPrice: z.boolean().default(false),
+  soldByWeight: z.boolean().default(false),
   expiresAt: z.coerce
     .date()
     .refine((d) => d > new Date(), "La fecha de vencimiento debe ser en el futuro")
     .optional(),
 });
 
-type ProductInput = z.infer<typeof productSchema>;
+function noOpenPriceAndWeight(v: { openPrice: boolean; soldByWeight: boolean }): boolean {
+  return !(v.openPrice && v.soldByWeight);
+}
+const mutualExclusionRefinement: { message: string; path: (string | number)[] } = {
+  message: "Un producto no puede ser 'monto libre' y 'se vende por peso' a la vez.",
+  path: ["openPrice"],
+};
+
+const productSchema = baseProductSchema.refine(noOpenPriceAndWeight, mutualExclusionRefinement);
+
+type ProductInput = z.infer<typeof baseProductSchema>;
 
 function productData(input: ProductInput) {
+  // Los productos de monto libre o por peso no tienen un conteo de unidades físicas
+  // que tenga sentido descontar automáticamente — igual que trackStock: false.
+  const trackStock = input.trackStock && !input.openPrice && !input.soldByWeight;
   return {
     name: input.name,
     price: input.price,
     cost: input.cost ?? null,
     unit: input.unit,
     taxSlots: input.taxSlots,
-    stock: input.trackStock ? input.stock : 0,
-    trackStock: input.trackStock,
+    stock: trackStock ? input.stock : 0,
+    trackStock,
     category: input.category ?? null,
     lotNumber: input.lotNumber ?? null,
     barcode: input.barcode ?? null,
+    brand: input.brand ?? null,
+    presentation: input.presentation ?? null,
+    openPrice: input.openPrice,
+    soldByWeight: input.soldByWeight,
     expiresAt: input.expiresAt ?? null,
   };
 }
@@ -72,24 +93,46 @@ async function assertBarcodeAvailable(
 }
 
 export const productRouter = createTRPCRouter({
-  // Disponible para OWNER y CASHIER — solo productos activos, usado en inventario y venta
+  // Disponible para OWNER y CASHIER — solo productos activos, usado en inventario y venta.
+  // Se ordena por cantidad vendida histórica (más vendidos primero) para que cerveza, café,
+  // fritos, etc. aparezcan de primeros en la grilla de venta/mesas sin depender de categorías fijas.
   search: businessProcedure.query(async ({ ctx }) => {
     const { businessId } = ctx.session.user;
 
-    return ctx.db.product.findMany({
-      where: { businessId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        unit: true,
-        stock: true,
-        trackStock: true,
-        category: true,
-        barcode: true,
-        taxSlots: true,
-      },
-      orderBy: [{ category: "asc" }, { name: "asc" }],
+    const [products, soldByProduct] = await Promise.all([
+      ctx.db.product.findMany({
+        where: { businessId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          unit: true,
+          stock: true,
+          trackStock: true,
+          category: true,
+          barcode: true,
+          taxSlots: true,
+          brand: true,
+          presentation: true,
+          openPrice: true,
+          soldByWeight: true,
+        },
+      }),
+      ctx.db.saleItem.groupBy({
+        by: ["productId"],
+        where: { sale: { businessId, status: "COMPLETED" } },
+        _sum: { quantity: true },
+      }),
+    ]);
+
+    const soldQtyByProductId = new Map(
+      soldByProduct.map((s) => [s.productId, s._sum.quantity ?? 0]),
+    );
+
+    return products.sort((a, b) => {
+      const qtyDiff = (soldQtyByProductId.get(b.id) ?? 0) - (soldQtyByProductId.get(a.id) ?? 0);
+      if (qtyDiff !== 0) return qtyDiff;
+      return a.name.localeCompare(b.name);
     });
   }),
 
@@ -112,6 +155,10 @@ export const productRouter = createTRPCRouter({
         lotNumber: true,
         expiresAt: true,
         barcode: true,
+        brand: true,
+        presentation: true,
+        openPrice: true,
+        soldByWeight: true,
       },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
     });
@@ -147,7 +194,11 @@ export const productRouter = createTRPCRouter({
   }),
 
   update: ownerProcedure
-    .input(productSchema.extend({ id: z.string().min(1) }))
+    .input(
+      baseProductSchema
+        .extend({ id: z.string().min(1) })
+        .refine(noOpenPriceAndWeight, mutualExclusionRefinement),
+    )
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: ownerId } = ctx.session.user;
 

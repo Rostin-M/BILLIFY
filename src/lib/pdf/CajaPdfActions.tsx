@@ -31,7 +31,7 @@ export function CajaPdfActions({ business, register, fileName, onClose }: Readon
   };
 
   if (instance.loading) {
-    return <span className="text-xs text-slate-400 dark:text-slate-500">Generando PDF…</span>;
+    return <span className="text-xs text-slate-500 dark:text-slate-500">Generando PDF…</span>;
   }
 
   if (instance.error) {
@@ -55,7 +55,8 @@ export function CajaPdfActions({ business, register, fileName, onClose }: Readon
       {onClose ? (
         <button
           onClick={onClose}
-          className="rounded-lg p-1 text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+          aria-label="Cerrar"
+          className="rounded-lg p-1 text-slate-500 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
         >
           <X className="h-3.5 w-3.5" />
         </button>

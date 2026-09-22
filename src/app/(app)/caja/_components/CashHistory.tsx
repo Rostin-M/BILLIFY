@@ -6,7 +6,7 @@ import { api } from "~/trpc/react";
 
 const CashHistoryPdfButton = dynamic(
   () => import("~/lib/pdf/CashHistoryPdfButton").then((m) => m.CashHistoryPdfButton),
-  { ssr: false, loading: () => <span className="text-xs text-slate-400">…</span> },
+  { ssr: false, loading: () => <span className="text-xs text-slate-500">…</span> },
 );
 
 type Props = { business: { name: string; document: string; logoUrl?: string | null } };
@@ -41,17 +41,17 @@ export function CashHistory({ business }: Readonly<Props>) {
       <div className="flex items-center justify-between px-5 py-4">
         <h2 className="font-semibold text-slate-700 dark:text-slate-200">Historial de cierres</h2>
         {!isPending && (
-          <span className="text-xs text-slate-400 dark:text-slate-500">
+          <span className="text-xs text-slate-500 dark:text-slate-500">
             {history.length} {history.length === 1 ? "jornada" : "jornadas"}
           </span>
         )}
       </div>
 
       {isPending && (
-        <p className="px-5 pb-5 text-sm text-slate-400 dark:text-slate-500">Cargando historial...</p>
+        <p className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-500">Cargando historial...</p>
       )}
       {!isPending && history.length === 0 && (
-        <p className="px-5 pb-5 text-sm text-slate-400 dark:text-slate-500">
+        <p className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-500">
           Aún no hay cierres registrados.
         </p>
       )}
@@ -71,7 +71,7 @@ export function CashHistory({ business }: Readonly<Props>) {
                     <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                       {formatDate(entry.openedAt)}
                     </p>
-                    <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">
                       {formatTime(entry.openedAt)} → {entry.closedAt ? formatTime(entry.closedAt) : "—"}
                       {" · "}
                       {duration(entry.openedAt, entry.closedAt)}
@@ -99,25 +99,25 @@ export function CashHistory({ business }: Readonly<Props>) {
                     </div>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                       <div>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">Fondo inicial</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500">Fondo inicial</p>
                         <p className="font-semibold text-slate-700 dark:text-slate-200">
                           {formatCOP(entry.openingBalance)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">Saldo al cierre</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500">Saldo al cierre</p>
                         <p className="font-semibold text-slate-700 dark:text-slate-200">
                           {formatCOP(entry.closingBalance ?? 0)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">Movimientos</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500">Movimientos</p>
                         <p className="font-semibold text-slate-700 dark:text-slate-200">
                           {entry._count.movements}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">Diferencia neta</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500">Diferencia neta</p>
                         <p className={`font-bold ${net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                           {net >= 0 ? "+" : ""}{formatCOP(net)}
                         </p>
@@ -125,7 +125,7 @@ export function CashHistory({ business }: Readonly<Props>) {
                     </div>
                     {entry.closingNote && (
                       <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/5">
-                        <p className="text-xs text-slate-400 dark:text-slate-500">Nota de cierre</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500">Nota de cierre</p>
                         <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-200">
                           {entry.closingNote}
                         </p>

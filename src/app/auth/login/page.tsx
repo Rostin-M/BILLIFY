@@ -76,6 +76,19 @@ function LoginForm() {
         <p className="animate-copy-in mt-1 text-xs tracking-[0.05em] text-slate-500">
           © {new Date().getFullYear()} BILLIFY · Todos los derechos reservados
         </p>
+        <p className="animate-copy-in mt-1 text-xs text-slate-500">
+          <Link href="/legal/privacidad" className="underline underline-offset-2 hover:text-slate-300">
+            Privacidad
+          </Link>
+          {" · "}
+          <Link href="/legal/terminos" className="underline underline-offset-2 hover:text-slate-300">
+            Términos
+          </Link>
+          {" · "}
+          <Link href="/legal/cookies" className="underline underline-offset-2 hover:text-slate-300">
+            Cookies
+          </Link>
+        </p>
       </div>
 
       {/* ── Formulario de login ── */}

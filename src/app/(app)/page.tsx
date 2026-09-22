@@ -149,7 +149,7 @@ function NavSection({
 }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-500">
         {title}
       </p>
       <div className={`grid gap-3 ${gridClass}`}>

@@ -23,6 +23,7 @@ type SettingsForm = {
   autoTax: boolean;
   maxCashRegisters: string;
   categories: string[];
+  produceModuleEnabled: boolean;
 };
 
 type TaxConfig = { name: string; rate: number; enabled: boolean };
@@ -44,6 +45,7 @@ type BusinessData = {
   maxCashRegisters: number;
   logoUrl: string | null;
   categories: string[];
+  produceModuleEnabled: boolean;
 };
 
 function LogoSection({ logoUrl, onLogoChange }: Readonly<{ logoUrl: string | null; onLogoChange: () => void }>) {
@@ -162,7 +164,7 @@ function LogoSection({ logoUrl, onLogoChange }: Readonly<{ logoUrl: string | nul
               Eliminar logo
             </button>
           )}
-          <p className="text-xs text-slate-400 dark:text-slate-500">PNG · WebP · SVG</p>
+          <p className="text-xs text-slate-500 dark:text-slate-500">PNG · WebP · SVG</p>
         </div>
       </div>
 
@@ -220,6 +222,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
     autoTax: initial.autoTax,
     maxCashRegisters: String(initial.maxCashRegisters),
     categories: initial.categories,
+    produceModuleEnabled: initial.produceModuleEnabled,
   });
   const updateSettings = api.business.updateSettings.useMutation({
     onSuccess: async (data) => {
@@ -280,6 +283,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
       autoTax: form.autoTax,
       maxCashRegisters: maxReg,
       categories: form.categories,
+      produceModuleEnabled: form.produceModuleEnabled,
     });
   };
 
@@ -342,7 +346,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1 text-sm">
                 <span className="text-slate-700 dark:text-slate-300">
-                  Dirección <span className="text-slate-400">(opcional)</span>
+                  Dirección <span className="text-slate-500">(opcional)</span>
                 </span>
                 <input
                   value={form.address}
@@ -353,7 +357,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
               </label>
               <label className="space-y-1 text-sm">
                 <span className="text-slate-700 dark:text-slate-300">
-                  Teléfono <span className="text-slate-400">(opcional)</span>
+                  Teléfono <span className="text-slate-500">(opcional)</span>
                 </span>
                 <input
                   type="tel"
@@ -380,7 +384,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-1 text-sm">
                   <span className="text-slate-700 dark:text-slate-300">
-                    Mi teléfono personal <span className="text-slate-400">(opcional)</span>
+                    Mi teléfono personal <span className="text-slate-500">(opcional)</span>
                   </span>
                   <input
                     type="tel"
@@ -425,7 +429,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                 </label>
                 <label className="space-y-1 text-sm">
                   <span className="text-slate-700 dark:text-slate-300">
-                    Correo del negocio <span className="text-slate-400">(opcional)</span>
+                    Correo del negocio <span className="text-slate-500">(opcional)</span>
                   </span>
                   <input
                     type="email"
@@ -473,7 +477,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
               <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Calcular impuesto en facturas
               </p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-500">
                 Si está activo se muestra subtotal + impuestos + total. Si no, solo se muestra el total.
               </p>
             </div>
@@ -507,7 +511,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                       onChange={handleTaxText(i, "name")}
                       disabled={!taxItem.enabled}
                       placeholder={`Impuesto ${i + 1}`}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 dark:border-white/15 dark:bg-slate-900 dark:disabled:bg-slate-900/50"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 disabled:bg-slate-50 disabled:text-slate-500 dark:border-white/15 dark:bg-slate-900 dark:disabled:bg-slate-900/50"
                     />
                   </div>
                   <div className="relative">
@@ -520,15 +524,15 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                       onChange={handleTaxText(i, "rate")}
                       disabled={!taxItem.enabled}
                       placeholder="0"
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-7 text-sm outline-none ring-violet-400 transition focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 dark:border-white/15 dark:bg-slate-900 dark:disabled:bg-slate-900/50"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-7 text-sm outline-none ring-violet-400 transition focus:ring-2 disabled:bg-slate-50 disabled:text-slate-500 dark:border-white/15 dark:bg-slate-900 dark:disabled:bg-slate-900/50"
                     />
-                    <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                    <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">
                       %
                     </span>
                   </div>
                 </div>
               ))}
-              <p className="text-xs text-slate-400 dark:text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-500">
                 Activa cada impuesto por separado. Los desactivados no se incluirán en el cálculo.
               </p>
 
@@ -549,7 +553,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                       <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                         Solo el total al final (actual)
                       </span>
-                      <span className="block text-xs text-slate-400 dark:text-slate-500">
+                      <span className="block text-xs text-slate-500 dark:text-slate-500">
                         La factura muestra subtotal, impuestos y total agrupados al final, sin desglosar por producto.
                       </span>
                     </span>
@@ -566,7 +570,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                       <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                         Desglosado por producto
                       </span>
-                      <span className="block text-xs text-slate-400 dark:text-slate-500">
+                      <span className="block text-xs text-slate-500 dark:text-slate-500">
                         Cada producto muestra qué impuesto se le cobra (o ninguno) y su valor, además del resumen final.
                       </span>
                     </span>
@@ -608,7 +612,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
           </div>
 
           {form.categories.length === 0 ? (
-            <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-500">
               Aún no has agregado categorías.
             </p>
           ) : (
@@ -631,6 +635,30 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
               ))}
             </ul>
           )}
+        </section>
+
+        {/* Frutas y verduras (venta por peso) */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <h2 className="mb-1 font-semibold">Frutas y verduras</h2>
+          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+            Actívalo si vendes productos por peso (ej. tomate, papa). Habilita la opción &quot;Se vende por peso&quot; en el formulario de productos.
+          </p>
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+            <input
+              type="checkbox"
+              checked={form.produceModuleEnabled}
+              onChange={(e) => setForm((prev) => ({ ...prev, produceModuleEnabled: e.target.checked }))}
+              className="h-4 w-4 rounded accent-violet-600"
+            />
+            <div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Habilitar venta por peso
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-500">
+                Si no vendes productos por peso, déjalo desactivado para no complicar el formulario de productos.
+              </p>
+            </div>
+          </label>
         </section>
 
         {/* Caja */}

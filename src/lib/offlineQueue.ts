@@ -4,10 +4,11 @@ const DB_VERSION = 1;
 
 export type PendingSale = {
   localId: string;
-  items: { productId: string; quantity: number }[];
+  items: { productId: string; quantity: number; weightKg?: number; customAmount?: number }[];
   paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER";
   customerId?: string;
   note?: string;
+  receiptPath?: string;
   createdAt: string;
 };
 

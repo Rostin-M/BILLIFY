@@ -115,7 +115,7 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 Consumidor Final
               </span>
-              <span className="text-xs text-slate-400">NIT: 222222222</span>
+              <span className="text-xs text-slate-500">NIT: 222222222</span>
             </button>
           </div>
 
@@ -133,10 +133,10 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
                   >
                     <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
                       {c.name}
-                      {c.alias && <span className="ml-1 font-normal text-slate-400">&quot;{c.alias}&quot;</span>}
+                      {c.alias && <span className="ml-1 font-normal text-slate-500">&quot;{c.alias}&quot;</span>}
                     </span>
                     {(c.document ?? c.phone) && (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                      <span className="text-xs text-slate-500 dark:text-slate-500">
                         {[c.document, c.phone].filter(Boolean).join(" · ")}
                       </span>
                     )}
@@ -145,11 +145,11 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
               ))}
             </ul>
           ) : query ? (
-            <p className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">
+            <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-500">
               Sin coincidencias para &quot;{query}&quot;
             </p>
           ) : (
-            <p className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">
+            <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-500">
               Escribe para buscar por nombre o documento
             </p>
           )}

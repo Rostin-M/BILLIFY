@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import { api } from "~/trpc/react";
 import { useSession } from "next-auth/react";
+import { ReceiptPhotoButton } from "~/app/_components/ReceiptPhotoButton";
 
 type Order = { subtotal: number; taxAmount: number; taxLines: unknown; total: number };
 type Guest = { id: string; name: string; description: string | null; orders: Order[] };
@@ -18,7 +19,7 @@ const PAYMENT_LABELS: Record<PaymentMethod, string> = {
 
 const fmt = (v: number) => v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
-type PayGroup = { id: string; guestIds: string[]; paymentMethod: PaymentMethod };
+type PayGroup = { id: string; guestIds: string[]; paymentMethod: PaymentMethod; invoice: boolean; receiptPath: string | null };
 
 type Props = {
   sessionId: string;
@@ -36,8 +37,12 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
   const { data: session } = useSession();
   const cashierName = session?.user?.name ?? "Cajero";
 
+  // Guests kept at the table with no pending rounds have nothing to charge —
+  // exclude them from checkout entirely so they don't show up as $0 rows.
+  const payableGuests = guests.filter((g) => g.orders.length > 0);
+
   const [groups, setGroups] = useState<PayGroup[]>(() =>
-    guests.map((g) => ({ id: g.id, guestIds: [g.id], paymentMethod: "CASH" as const })),
+    payableGuests.map((g) => ({ id: g.id, guestIds: [g.id], paymentMethod: "CASH" as const, invoice: false, receiptPath: null })),
   );
   const [selectedForGroup, setSelectedForGroup] = useState<Set<string>>(new Set());
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
@@ -73,7 +78,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
       setGroups((prev) => {
         const g = prev.find((x) => x.id === grp.id);
         if (!g) return prev;
-        return [...prev.filter((x) => x.id !== grp.id), ...g.guestIds.map((id) => ({ id, guestIds: [id], paymentMethod: g.paymentMethod }))];
+        return [...prev.filter((x) => x.id !== grp.id), ...g.guestIds.map((id) => ({ id, guestIds: [id], paymentMethod: g.paymentMethod, invoice: g.invoice, receiptPath: g.receiptPath }))];
       });
     }
     setSelectedForGroup((prev) => { const next = new Set(prev); next.delete(guestId); return next; });
@@ -87,10 +92,12 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
   function mergeChecked() {
     if (selectedForGroup.size < 2) return;
     const ids = Array.from(selectedForGroup);
-    const method = groups.find((g) => ids.some((id) => g.guestIds.includes(id)))?.paymentMethod ?? "CASH";
+    const source = groups.find((g) => ids.some((id) => g.guestIds.includes(id)));
+    const method = source?.paymentMethod ?? "CASH";
+    const invoice = source?.invoice ?? false;
     setGroups((prev) => {
       const remaining = prev.filter((g) => !g.guestIds.some((id) => ids.includes(id)));
-      return [...remaining, { id: ids[0]!, guestIds: ids, paymentMethod: method }];
+      return [...remaining, { id: ids[0]!, guestIds: ids, paymentMethod: method, invoice, receiptPath: null }];
     });
     setSelectedForGroup(new Set());
   }
@@ -99,29 +106,37 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
     setGroups((prev) => {
       const grp = prev.find((g) => g.id === groupId);
       if (!grp || grp.guestIds.length < 2) return prev;
-      return [...prev.filter((g) => g.id !== groupId), ...grp.guestIds.map((id) => ({ id, guestIds: [id], paymentMethod: grp.paymentMethod }))];
+      return [...prev.filter((g) => g.id !== groupId), ...grp.guestIds.map((id) => ({ id, guestIds: [id], paymentMethod: grp.paymentMethod, invoice: grp.invoice, receiptPath: grp.receiptPath }))];
     });
   }
 
   function setMethod(groupId: string, method: PaymentMethod) {
-    setGroups((prev) => prev.map((g) => g.id === groupId ? { ...g, paymentMethod: method } : g));
+    setGroups((prev) => prev.map((g) => g.id === groupId ? { ...g, paymentMethod: method, receiptPath: method === "TRANSFER" ? g.receiptPath : null } : g));
+  }
+
+  function setInvoice(groupId: string, invoice: boolean) {
+    setGroups((prev) => prev.map((g) => g.id === groupId ? { ...g, invoice } : g));
+  }
+
+  function setReceiptPath(groupId: string, receiptPath: string | null) {
+    setGroups((prev) => prev.map((g) => g.id === groupId ? { ...g, receiptPath } : g));
   }
 
   function groupLabel(grp: PayGroup) {
-    return grp.guestIds.map((id) => guests.find((g) => g.id === id)?.name ?? id).join(" + ");
+    return grp.guestIds.map((id) => payableGuests.find((g) => g.id === id)?.name ?? id).join(" + ");
   }
 
   function groupTotalAmount(grp: PayGroup) {
     return grp.guestIds.reduce((sum, id) => {
-      const g = guests.find((gg) => gg.id === id);
+      const g = payableGuests.find((gg) => gg.id === id);
       return sum + (g ? guestTotal(g) : 0);
     }, 0);
   }
 
   const activeGroups = groups.filter((g) => g.guestIds.every((id) => !excluded.has(id)));
   const mergedGroups = activeGroups.filter((g) => g.guestIds.length > 1);
-  const excludedGuests = guests.filter((g) => excluded.has(g.id));
-  const includedGuests = guests.filter((g) => !excluded.has(g.id));
+  const excludedGuests = payableGuests.filter((g) => excluded.has(g.id));
+  const includedGuests = payableGuests.filter((g) => !excluded.has(g.id));
 
   const grandTotal = includedGuests.reduce((s, g) => s + guestTotal(g), 0);
   const noOrders = includedGuests.length === 0 || includedGuests.every((g) => g.orders.length === 0);
@@ -139,7 +154,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
     checkout.mutate({
       sessionId,
       keepGuests,
-      groups: activeGroups.map((g) => ({ guestIds: g.guestIds, paymentMethod: g.paymentMethod })),
+      groups: activeGroups.map((g) => ({ guestIds: g.guestIds, paymentMethod: g.paymentMethod, invoice: g.invoice, receiptPath: g.receiptPath ?? undefined })),
     });
   }
 
@@ -168,7 +183,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
           <button
             onClick={onClose}
             aria-label="Cerrar"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
           >
             <X className="h-5 w-5" />
           </button>
@@ -187,7 +202,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
               Clientes — desmarca para cobrar después · toca el nombre para agrupar pago
             </p>
             <div className="space-y-2">
-              {guests.map((guest) => {
+              {payableGuests.map((guest) => {
                 if (excluded.has(guest.id)) return null;
                 const grp = groupOf(guest.id);
                 if (grp && grp.guestIds.length > 1) return null;
@@ -212,9 +227,9 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                     >
                       <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                         {guest.name}
-                        {guest.description && <span className="ml-1 text-xs font-normal text-slate-400">· {guest.description}</span>}
+                        {guest.description && <span className="ml-1 text-xs font-normal text-slate-500">· {guest.description}</span>}
                       </p>
-                      <p className="text-xs text-slate-400">{guest.orders.length} ronda{guest.orders.length !== 1 ? "s" : ""}</p>
+                      <p className="text-xs text-slate-500">{guest.orders.length} ronda{guest.orders.length !== 1 ? "s" : ""}</p>
                     </button>
                     <button
                       type="button"
@@ -224,15 +239,32 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                       {fmt(total)}
                     </button>
                     {grp && (
-                      <select
-                        value={grp.paymentMethod}
-                        onChange={(e) => setMethod(grp.id, e.target.value as PaymentMethod)}
-                        className="ml-7 w-full shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white sm:ml-0 sm:w-auto"
-                      >
-                        {(Object.keys(PAYMENT_LABELS) as PaymentMethod[]).map((m) => (
-                          <option key={m} value={m}>{PAYMENT_LABELS[m]}</option>
-                        ))}
-                      </select>
+                      <div className="ml-7 flex w-full flex-wrap items-center gap-2 sm:ml-0 sm:w-auto">
+                        <select
+                          value={grp.paymentMethod}
+                          onChange={(e) => setMethod(grp.id, e.target.value as PaymentMethod)}
+                          className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                        >
+                          {(Object.keys(PAYMENT_LABELS) as PaymentMethod[]).map((m) => (
+                            <option key={m} value={m}>{PAYMENT_LABELS[m]}</option>
+                          ))}
+                        </select>
+                        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                          <input
+                            type="checkbox"
+                            checked={grp.invoice}
+                            onChange={(e) => setInvoice(grp.id, e.target.checked)}
+                            className="h-3.5 w-3.5 cursor-pointer accent-violet-600"
+                          />
+                          Generar factura
+                        </label>
+                        {grp.paymentMethod === "TRANSFER" && (
+                          <ReceiptPhotoButton
+                            value={grp.receiptPath}
+                            onChange={(path) => setReceiptPath(grp.id, path)}
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -269,10 +301,27 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                         <option key={m} value={m}>{PAYMENT_LABELS[m]}</option>
                       ))}
                     </select>
-                    <button onClick={() => splitGroup(grp.id)} className="shrink-0 text-xs text-slate-400 hover:text-red-500">
+                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                      <input
+                        type="checkbox"
+                        checked={grp.invoice}
+                        onChange={(e) => setInvoice(grp.id, e.target.checked)}
+                        className="h-3.5 w-3.5 cursor-pointer accent-violet-600"
+                      />
+                      Factura
+                    </label>
+                    <button onClick={() => splitGroup(grp.id)} className="shrink-0 text-xs text-slate-500 hover:text-red-500">
                       Separar
                     </button>
                   </div>
+                  {grp.paymentMethod === "TRANSFER" && (
+                    <div className="mt-2">
+                      <ReceiptPhotoButton
+                        value={grp.receiptPath}
+                        onChange={(path) => setReceiptPath(grp.id, path)}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -281,7 +330,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
           {/* Deferred guests */}
           {excludedGuests.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-slate-400 dark:text-slate-500">Cobrar más tarde</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-500">Cobrar más tarde</p>
               {excludedGuests.map((guest) => (
                 <div key={guest.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 opacity-60 dark:border-white/5 dark:bg-white/5">
                   <input
@@ -293,7 +342,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                   />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{guest.name}</p>
-                    <p className="text-xs text-slate-400">{fmt(guestTotal(guest))}</p>
+                    <p className="text-xs text-slate-500">{fmt(guestTotal(guest))}</p>
                   </div>
                 </div>
               ))}
@@ -320,7 +369,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
               <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 Mantener clientes en mesa
               </p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-500">
                 Los clientes quedan registrados en la mesa sin pedidos, listos para seguir pidiendo. Podrás cerrar la mesa cuando quieras.
               </p>
             </div>

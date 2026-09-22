@@ -204,17 +204,17 @@ export function TrazabilidadClient() {
                 <option key={a.value} value={a.value}>{a.label}</option>
               ))}
             </select>
-            <span className="text-xs text-slate-400 dark:text-slate-500">
+            <span className="text-xs text-slate-500 dark:text-slate-500">
               Últimas {logs?.length ?? 0} acciones
             </span>
           </div>
 
           {isPending && (
-            <p className="px-5 py-8 text-center text-slate-400 dark:text-slate-500">Cargando...</p>
+            <p className="px-5 py-8 text-center text-slate-500 dark:text-slate-500">Cargando...</p>
           )}
 
           {!isPending && logs?.length === 0 && (
-            <p className="px-5 py-8 text-center text-slate-400 dark:text-slate-500">Sin registros</p>
+            <p className="px-5 py-8 text-center text-slate-500 dark:text-slate-500">Sin registros</p>
           )}
 
           {logs && logs.length > 0 && (
@@ -237,7 +237,7 @@ export function TrazabilidadClient() {
                         <p className="truncate text-sm text-slate-600 dark:text-slate-300">
                           {getDetailSummary(log.action, log.detail)}
                         </p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                        <p className="text-xs text-slate-500 dark:text-slate-500">
                           {formatBogota(log.createdAt)}
                           {log.user?.name ? ` · ${log.user.name}` : ""}
                         </p>
@@ -295,7 +295,7 @@ export function TrazabilidadClient() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
               <h3 className="mb-1 font-semibold text-slate-700 dark:text-slate-200">Ventas</h3>
-              <p className="mb-4 text-sm text-slate-400 dark:text-slate-500">
+              <p className="mb-4 text-sm text-slate-500 dark:text-slate-500">
                 Exporta todas las ventas del período con detalle de productos, cliente, método de pago e IVA.
               </p>
               <button
@@ -309,7 +309,7 @@ export function TrazabilidadClient() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
               <h3 className="mb-1 font-semibold text-slate-700 dark:text-slate-200">Movimientos de caja</h3>
-              <p className="mb-4 text-sm text-slate-400 dark:text-slate-500">
+              <p className="mb-4 text-sm text-slate-500 dark:text-slate-500">
                 Exporta todas las entradas y salidas manuales de caja del período con fecha, descripción y responsable.
               </p>
               <button
@@ -322,7 +322,7 @@ export function TrazabilidadClient() {
             </div>
           </div>
 
-          <p className="text-xs text-slate-400 dark:text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-500">
             Los archivos CSV se generan con codificación UTF-8 (compatible con Excel en español). Las fechas y horas están en zona horaria de Colombia (Bogotá).
           </p>
         </div>

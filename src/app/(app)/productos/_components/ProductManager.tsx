@@ -20,6 +20,10 @@ type ProductForm = {
   lotNumber: string;
   expiresAt: string;
   barcode: string;
+  brand: string;
+  presentation: string;
+  openPrice: boolean;
+  soldByWeight: boolean;
 };
 
 type AdjustForm = { quantity: string; note: string };
@@ -36,6 +40,10 @@ const emptyForm: ProductForm = {
   lotNumber: "",
   expiresAt: "",
   barcode: "",
+  brand: "",
+  presentation: "",
+  openPrice: false,
+  soldByWeight: false,
 };
 
 const emptyAdjust: AdjustForm = { quantity: "", note: "" };
@@ -96,6 +104,10 @@ function parseForm(form: ProductForm) {
     category: form.category.trim() || undefined,
     lotNumber: form.lotNumber.trim() || undefined,
     barcode: form.barcode.trim() || undefined,
+    brand: form.brand.trim() || undefined,
+    presentation: form.presentation.trim() || undefined,
+    openPrice: form.openPrice,
+    soldByWeight: form.soldByWeight,
     expiresAt: form.expiresAt ? new Date(form.expiresAt) : undefined,
   };
 }
@@ -194,7 +206,7 @@ function PriceCalculator({
       <div className="mt-2 space-y-1 text-xs">
         <span className="text-slate-600 dark:text-slate-400">Impuestos que aplican a este producto</span>
         {businessTaxes.length === 0 ? (
-          <p className="text-slate-400 dark:text-slate-500">
+          <p className="text-slate-500 dark:text-slate-500">
             Tu negocio no tiene impuestos configurados en Ajustes.
           </p>
         ) : (
@@ -255,10 +267,12 @@ function ProductFormFields({
   onSelectChange,
   onToggleTaxSlot,
   onBarcodeScanned,
+  onExclusiveCheckChange,
   fieldErrors,
   onApplyCalculator,
   categories,
   businessTaxes,
+  produceModuleEnabled,
 }: Readonly<{
   form: ProductForm;
   onChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) => void;
@@ -266,10 +280,12 @@ function ProductFormFields({
   onSelectChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLSelectElement>) => void;
   onToggleTaxSlot: (slot: number) => void;
   onBarcodeScanned: (code: string) => void;
+  onExclusiveCheckChange: (field: "openPrice" | "soldByWeight") => (e: ChangeEvent<HTMLInputElement>) => void;
   fieldErrors: Record<string, string>;
   onApplyCalculator: (price: number, cost: number, taxSlots: number[]) => void;
   categories: string[];
   businessTaxes: EnabledTax[];
+  produceModuleEnabled: boolean;
 }>) {
   const [showCalc, setShowCalc] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -291,7 +307,7 @@ function ProductFormFields({
         </label>
         <label className="space-y-1 text-sm">
           <span className="text-slate-700 dark:text-slate-300">
-            Categoría <span className="text-slate-400">(opc.)</span>
+            Categoría <span className="text-slate-500">(opc.)</span>
           </span>
           <input
             list="category-options"
@@ -320,11 +336,37 @@ function ProductFormFields({
         </label>
       </div>
 
+      {/* Marca + presentación — ayuda a distinguir el mismo producto en distintas marcas/tamaños */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="space-y-1 text-sm">
+          <span className="text-slate-700 dark:text-slate-300">
+            Marca <span className="text-slate-500">(opc.)</span>
+          </span>
+          <input
+            value={form.brand}
+            onChange={onChange("brand")}
+            className={INPUT}
+            placeholder="Ej: Diana"
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="text-slate-700 dark:text-slate-300">
+            Presentación <span className="text-slate-500">(opc.)</span>
+          </span>
+          <input
+            value={form.presentation}
+            onChange={onChange("presentation")}
+            className={INPUT}
+            placeholder="Ej: Libra, Paca x24"
+          />
+        </label>
+      </div>
+
       {/* Precio + costo */}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-sm">
           <span className="text-slate-700 dark:text-slate-300">
-            Precio de venta (COP) <span className="text-red-500">*</span>
+            {form.soldByWeight ? "Precio por kg (COP)" : "Precio de venta (COP)"} <span className="text-red-500">*</span>
           </span>
           <input
             required
@@ -337,10 +379,15 @@ function ProductFormFields({
             placeholder="2500"
           />
           <FieldError msg={fieldErrors.price} />
+          {form.openPrice && (
+            <p className="text-xs text-slate-500 dark:text-slate-500">
+              Este precio no se usa — en cada venta se pedirá el monto.
+            </p>
+          )}
         </label>
         <label className="space-y-1 text-sm">
           <span className="text-slate-700 dark:text-slate-300">
-            Precio de costo <span className="text-slate-400">(opc.)</span>
+            Precio de costo <span className="text-slate-500">(opc.)</span>
           </span>
           <input
             type="number"
@@ -357,10 +404,10 @@ function ProductFormFields({
       {/* Impuestos del producto — solo los que el negocio tiene configurados */}
       <div className="space-y-1 text-sm">
         <span className="text-slate-700 dark:text-slate-300">
-          Impuestos aplicables <span className="text-slate-400">(opc.)</span>
+          Impuestos aplicables <span className="text-slate-500">(opc.)</span>
         </span>
         {businessTaxes.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-400 dark:border-white/15 dark:text-slate-500">
+          <p className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500 dark:border-white/15 dark:text-slate-500">
             Tu negocio no tiene impuestos configurados. Configúralos en Ajustes para poder asignarlos a este producto.
           </p>
         ) : (
@@ -399,43 +446,80 @@ function ProductFormFields({
         )}
       </div>
 
-      {/* Stock */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-2 text-sm">
+      {/* Venta especial: monto libre o por peso */}
+      <div className="space-y-2 rounded-xl border border-slate-200 p-3 text-sm dark:border-white/10">
+        <span className="text-slate-700 dark:text-slate-300">Venta especial (opc.)</span>
+        <label className="flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            checked={form.openPrice}
+            onChange={onExclusiveCheckChange("openPrice")}
+            className="h-4 w-4 rounded accent-violet-600"
+          />
+          <span className="text-slate-700 dark:text-slate-300">
+            Monto libre <span className="text-slate-500">(ej. confites — se pide el monto en cada venta)</span>
+          </span>
+        </label>
+        {produceModuleEnabled && (
           <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
-              checked={form.trackStock}
-              onChange={onCheckChange("trackStock")}
+              checked={form.soldByWeight}
+              onChange={onExclusiveCheckChange("soldByWeight")}
               className="h-4 w-4 rounded accent-violet-600"
             />
             <span className="text-slate-700 dark:text-slate-300">
-              Controlar stock
+              Se vende por peso (kg) <span className="text-slate-500">(ej. frutas y verduras)</span>
             </span>
           </label>
-          {form.trackStock && (
-            <div>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.stock}
-                onChange={onChange("stock")}
-                className={fieldErrors.stock ? INPUT_ERROR : INPUT}
-                placeholder="0"
-              />
-              <FieldError msg={fieldErrors.stock} />
-            </div>
-          )}
-          {!form.trackStock && (
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              Sin límite de stock (ej. productos de servicio)
+        )}
+      </div>
+
+      {/* Stock */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-2 text-sm">
+          {form.openPrice || form.soldByWeight ? (
+            <p className="text-xs text-slate-500 dark:text-slate-500">
+              Sin control de stock (venta especial)
             </p>
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.trackStock}
+                  onChange={onCheckChange("trackStock")}
+                  className="h-4 w-4 rounded accent-violet-600"
+                />
+                <span className="text-slate-700 dark:text-slate-300">
+                  Controlar stock
+                </span>
+              </label>
+              {form.trackStock && (
+                <div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.stock}
+                    onChange={onChange("stock")}
+                    className={fieldErrors.stock ? INPUT_ERROR : INPUT}
+                    placeholder="0"
+                  />
+                  <FieldError msg={fieldErrors.stock} />
+                </div>
+              )}
+              {!form.trackStock && (
+                <p className="text-xs text-slate-500 dark:text-slate-500">
+                  Sin límite de stock (ej. productos de servicio)
+                </p>
+              )}
+            </>
           )}
         </div>
         <label className="space-y-1 text-sm">
           <span className="text-slate-700 dark:text-slate-300">
-            Lote <span className="text-slate-400">(opc.)</span>
+            Lote <span className="text-slate-500">(opc.)</span>
           </span>
           <input
             value={form.lotNumber}
@@ -446,7 +530,7 @@ function ProductFormFields({
         </label>
         <label className="space-y-1 text-sm">
           <span className="text-slate-700 dark:text-slate-300">
-            Vencimiento <span className="text-slate-400">(opc.)</span>
+            Vencimiento <span className="text-slate-500">(opc.)</span>
           </span>
           <input
             type="date"
@@ -462,7 +546,7 @@ function ProductFormFields({
       {/* Código de barras */}
       <label className="block space-y-1 text-sm">
         <span className="text-slate-700 dark:text-slate-300">
-          Código de barras <span className="text-slate-400">(opc.)</span>
+          Código de barras <span className="text-slate-500">(opc.)</span>
         </span>
         <div className="flex gap-2">
           <input
@@ -499,6 +583,7 @@ type RowMode = "view" | "edit" | "price" | "adjust" | "history";
 
 export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CASHIER" }>) {
   const utils = api.useUtils();
+  const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<ProductForm>(emptyForm);
   const [activeRow, setActiveRow] = useState<{ id: string; mode: RowMode } | null>(null);
@@ -510,6 +595,11 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredProducts = normalizedSearch
+    ? products?.filter((p) => p.name.toLowerCase().includes(normalizedSearch))
+    : products;
 
   const { data: settings } = api.business.getSettings.useQuery(undefined, {
     enabled: userRole === "OWNER",
@@ -652,6 +742,16 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       setter((prev) => ({ ...prev, [field]: e.target.value }));
   }
 
+  // "Monto libre" y "Se vende por peso" son mutuamente excluyentes — activar uno desactiva el otro.
+  function makeExclusiveCheckHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
+    return (field: "openPrice" | "soldByWeight") => (e: ChangeEvent<HTMLInputElement>) =>
+      setter((prev) => ({
+        ...prev,
+        openPrice: field === "openPrice" ? e.target.checked : e.target.checked ? false : prev.openPrice,
+        soldByWeight: field === "soldByWeight" ? e.target.checked : e.target.checked ? false : prev.soldByWeight,
+      }));
+  }
+
   function makeToggleTaxSlotHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
     return (slot: number) =>
       setter((prev) => ({
@@ -677,6 +777,10 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       lotNumber: string | null;
       expiresAt: Date | null;
       barcode: string | null;
+      brand: string | null;
+      presentation: string | null;
+      openPrice: boolean;
+      soldByWeight: boolean;
     },
   ) => {
     if (activeRow?.id === id && activeRow.mode === mode) {
@@ -697,6 +801,10 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
         lotNumber: product.lotNumber ?? "",
         expiresAt: toDateInput(product.expiresAt),
         barcode: product.barcode ?? "",
+        brand: product.brand ?? "",
+        presentation: product.presentation ?? "",
+        openPrice: product.openPrice,
+        soldByWeight: product.soldByWeight,
       });
     }
     if (mode === "price" && product) {
@@ -769,6 +877,19 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
           )}
         </div>
 
+        {/* Buscador */}
+        {products && products.length > 0 && (
+          <div className="mb-4">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar producto por nombre..."
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
+            />
+          </div>
+        )}
+
         {/* Formulario de creación — solo OWNER */}
         {userRole === "OWNER" && showCreate && (
           <form
@@ -785,9 +906,11 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
               onSelectChange={makeSelectHandler(setCreateForm)}
               onToggleTaxSlot={makeToggleTaxSlotHandler(setCreateForm)}
               onBarcodeScanned={(code) => setCreateForm((p) => ({ ...p, barcode: code }))}
+              onExclusiveCheckChange={makeExclusiveCheckHandler(setCreateForm)}
               fieldErrors={createErrors.fieldErrors}
               categories={categories}
               businessTaxes={businessTaxes}
+              produceModuleEnabled={settings?.produceModuleEnabled ?? false}
               onApplyCalculator={(price, cost, taxSlots) =>
                 setCreateForm((p) => ({
                   ...p,
@@ -819,6 +942,10 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
           <p className="text-sm text-slate-500 dark:text-slate-400">
             No hay productos registrados todavía.
           </p>
+        ) : filteredProducts?.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Ningún producto coincide con &quot;{search}&quot;.
+          </p>
         ) : (
           <>
             <div className="mb-1 hidden grid-cols-12 gap-2 px-1 text-xs font-medium text-slate-500 sm:grid dark:text-slate-400">
@@ -829,12 +956,17 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
             </div>
 
             <ul className="divide-y divide-slate-100 dark:divide-white/5">
-              {products?.map((product) => (
+              {filteredProducts?.map((product) => (
                 <li key={product.id}>
                   {/* Fila de lectura */}
                   <div className="grid grid-cols-12 items-start gap-2 py-3">
                     <div className="col-span-12 min-w-0 sm:col-span-4">
                       <p className="truncate text-sm font-medium">{product.name}</p>
+                      {(product.brand ?? product.presentation) && (
+                        <p className="truncate text-xs text-slate-500 dark:text-slate-500">
+                          {[product.brand, product.presentation].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span
                           className={`inline-block rounded-full px-1.5 py-0.5 text-xs font-medium ${
@@ -850,12 +982,22 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                             Sin control stock
                           </span>
                         )}
+                        {product.openPrice && (
+                          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                            Monto libre
+                          </span>
+                        )}
+                        {product.soldByWeight && (
+                          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                            Por peso
+                          </span>
+                        )}
                         {product.category && (
                           <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
                             {product.category}
                           </span>
                         )}
-                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                        <span className="text-xs text-slate-500 dark:text-slate-500">
                           {product.unit}
                         </span>
                       </div>
@@ -874,7 +1016,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                       <p className="text-sm tabular-nums">{formatCOP(product.price)}</p>
                       {/* Costo: solo visible para OWNER */}
                       {userRole === "OWNER" && product.cost != null && (
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                        <p className="text-xs text-slate-500 dark:text-slate-500">
                           Costo: {formatCOP(product.cost)}
                         </p>
                       )}
@@ -977,9 +1119,11 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                           onSelectChange={makeSelectHandler(setEditForm)}
                           onToggleTaxSlot={makeToggleTaxSlotHandler(setEditForm)}
                           onBarcodeScanned={(code) => setEditForm((p) => ({ ...p, barcode: code }))}
+                          onExclusiveCheckChange={makeExclusiveCheckHandler(setEditForm)}
                           fieldErrors={updateErrors.fieldErrors}
                           categories={categories}
                           businessTaxes={businessTaxes}
+                          produceModuleEnabled={settings?.produceModuleEnabled ?? false}
                           onApplyCalculator={(price, cost, taxSlots) =>
                             setEditForm((p) => ({
                               ...p,
@@ -1086,7 +1230,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                         </label>
                         <label className="space-y-1 text-sm sm:min-w-48 sm:flex-[2]">
                           <span className="text-slate-700 dark:text-slate-300">
-                            Motivo <span className="text-slate-400">(opc.)</span>
+                            Motivo <span className="text-slate-500">(opc.)</span>
                           </span>
                           <input
                             value={adjustForm.note}
@@ -1164,15 +1308,15 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                                     {REASON_LABELS[m.reason] ?? m.reason}
                                   </span>
                                   {m.note && (
-                                    <span className="ml-1 text-slate-400 dark:text-slate-500">
+                                    <span className="ml-1 text-slate-500 dark:text-slate-500">
                                       — {m.note}
                                     </span>
                                   )}
-                                  <span className="ml-2 text-slate-400 dark:text-slate-500">
+                                  <span className="ml-2 text-slate-500 dark:text-slate-500">
                                     por {m.user.name ?? "sistema"}
                                   </span>
                                 </div>
-                                <div className="shrink-0 text-right text-slate-400 dark:text-slate-500">
+                                <div className="shrink-0 text-right text-slate-500 dark:text-slate-500">
                                   <p>Stock: {m.stockAfter}</p>
                                   <p>{new Date(m.createdAt).toLocaleDateString("es-CO")}</p>
                                   <p>
@@ -1206,15 +1350,15 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                                   Venta
                                 </span>
                                 {item.sale.invoiceNumber && (
-                                  <span className="ml-1 text-slate-400 dark:text-slate-500">
+                                  <span className="ml-1 text-slate-500 dark:text-slate-500">
                                     — {item.sale.invoiceNumber}
                                   </span>
                                 )}
-                                <span className="ml-2 text-slate-400 dark:text-slate-500">
+                                <span className="ml-2 text-slate-500 dark:text-slate-500">
                                   por {item.sale.user.name ?? "sistema"}
                                 </span>
                               </div>
-                              <div className="shrink-0 text-right text-slate-400 dark:text-slate-500">
+                              <div className="shrink-0 text-right text-slate-500 dark:text-slate-500">
                                 <p>${item.price.toLocaleString("es-CO")}</p>
                                 <p>{new Date(item.sale.createdAt).toLocaleDateString("es-CO")}</p>
                                 <p>

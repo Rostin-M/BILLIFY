@@ -77,7 +77,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
           <span className="hidden max-w-[120px] truncate text-sm font-medium text-slate-700 dark:text-slate-200 sm:block">
             {name ?? "Usuario"}
           </span>
-          <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 16 16" fill="currentColor">
+          <svg className="h-3.5 w-3.5 text-slate-500" viewBox="0 0 16 16" fill="currentColor">
             <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
@@ -88,7 +88,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
             <div className="absolute right-0 top-full z-40 mt-1.5 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
               <div className="border-b border-slate-100 px-3 py-2 dark:border-white/10">
                 <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{name}</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-500">
                   {role === "OWNER" ? "Propietario" : "Cajero"}
                 </p>
               </div>
@@ -158,7 +158,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
                     onChange={(e) => setNext(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
                   />
-                  <span className="text-xs text-slate-400">Mínimo 8 caracteres, una letra y un número</span>
+                  <span className="text-xs text-slate-500">Mínimo 8 caracteres, una letra y un número</span>
                 </label>
 
                 <label className="block space-y-1 text-sm">

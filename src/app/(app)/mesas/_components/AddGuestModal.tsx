@@ -59,7 +59,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
           <button
             onClick={onClose}
             aria-label="Cerrar"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
           >
             <X className="h-5 w-5" />
           </button>
@@ -69,7 +69,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
           {/* Customer search */}
           <div>
             <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-              Vincular a cliente registrado <span className="font-normal text-slate-400">(opcional)</span>
+              Vincular a cliente registrado <span className="font-normal text-slate-500">(opcional)</span>
             </p>
             {selectedCustomer ? (
               <div className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-500/30 dark:bg-violet-900/20">
@@ -112,14 +112,14 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
                             >
                               <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{c.name}</span>
                               {(c.document ?? c.phone) && (
-                                <span className="text-xs text-slate-400">{[c.document, c.phone].filter(Boolean).join(" · ")}</span>
+                                <span className="text-xs text-slate-500">{[c.document, c.phone].filter(Boolean).join(" · ")}</span>
                               )}
                             </button>
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">
+                      <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-500">
                         Sin resultados para &quot;{customerQuery}&quot;
                       </p>
                     )}
@@ -131,13 +131,13 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
 
           <div className="flex items-center gap-2">
             <div className="h-px flex-1 bg-slate-100 dark:bg-white/10" />
-            <span className="text-xs text-slate-400 dark:text-slate-500">datos en la mesa</span>
+            <span className="text-xs text-slate-500 dark:text-slate-500">datos en la mesa</span>
             <div className="h-px flex-1 bg-slate-100 dark:bg-white/10" />
           </div>
 
           <label className="block space-y-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">
-              Nombre <span className="text-slate-400">(opcional — se auto-asigna si no se escribe)</span>
+              Nombre <span className="text-slate-500">(opcional — se auto-asigna si no se escribe)</span>
             </span>
             <input
               value={form.name}
@@ -149,7 +149,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
 
           <label className="block space-y-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">
-              Descripción <span className="text-slate-400">(ej: señor de rojo, mesa del fondo)</span>
+              Descripción <span className="text-slate-500">(ej: señor de rojo, mesa del fondo)</span>
             </span>
             <input
               value={form.description}

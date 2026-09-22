@@ -8,7 +8,7 @@ import { api } from "~/trpc/react";
 
 const CashHistoryPdfButton = dynamic(
   () => import("~/lib/pdf/CashHistoryPdfButton").then((m) => m.CashHistoryPdfButton),
-  { ssr: false, loading: () => <span className="text-xs text-slate-400">Generando…</span> },
+  { ssr: false, loading: () => <span className="text-xs text-slate-500">Generando…</span> },
 );
 
 type Movement = {
@@ -293,7 +293,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Monto</span>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
               <input
                 type="number"
                 min="1"
@@ -353,11 +353,11 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
                     <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
                       {m.description}
                     </p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-500">
                       {formatTime(m.createdAt)}
                       {m.user?.name ? ` · ${m.user.name}` : ""}
                       {" · "}
-                      <span className={`font-medium ${m.type === "EXPENSE" ? "text-red-500" : "text-slate-400"}`}>
+                      <span className={`font-medium ${m.type === "EXPENSE" ? "text-red-500" : "text-slate-500"}`}>
                         {TYPE_LABELS[m.type] ?? m.type}
                       </span>
                     </p>
@@ -369,7 +369,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
               );
             })}
           </ul>
-          <p className="px-5 py-3 text-xs text-slate-400 dark:text-slate-500">
+          <p className="px-5 py-3 text-xs text-slate-500 dark:text-slate-500">
             * Las ventas en efectivo se suman al saldo pero no aparecen aquí como movimientos individuales.
           </p>
         </div>
@@ -381,7 +381,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           <h2 className="px-5 pt-5 font-semibold text-slate-700 dark:text-slate-200">
             Otros medios de pago
           </h2>
-          <p className="px-5 pb-2 text-xs text-slate-400 dark:text-slate-500">
+          <p className="px-5 pb-2 text-xs text-slate-500 dark:text-slate-500">
             Informativo — no se suman al saldo de caja.
           </p>
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
@@ -391,7 +391,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                     {PAYMENT_LABELS[entry.paymentMethod] ?? entry.paymentMethod}
                   </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-500">
                     {entry.count} {entry.count === 1 ? "venta" : "ventas"}
                   </p>
                 </div>

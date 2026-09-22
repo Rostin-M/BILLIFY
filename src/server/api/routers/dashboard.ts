@@ -77,10 +77,12 @@ export const dashboardRouter = createTRPCRouter({
           });
         }
       }
+      // "Más vendidos" = mayor cantidad, no mayor ingreso (un producto barato de alta rotación
+      // importa más para decidir qué reabastecer que uno caro vendido pocas veces).
       const topProducts = [...productMap.entries()]
         .map(([name, data]) => ({ name, ...data }))
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 5);
+        .sort((a, b) => b.quantitySold - a.quantitySold)
+        .slice(0, 20);
 
       const activeCount = inventoryCounts.find((g) => g.isActive)?._count ?? 0;
       const [lowStockCount, outOfStockProducts] = await Promise.all([

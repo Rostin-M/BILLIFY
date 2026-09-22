@@ -42,7 +42,7 @@ export function BottomNav({ role }: Readonly<Props>) {
             className={`flex flex-1 flex-col items-center gap-1 py-2 transition-colors ${
               active
                 ? `${ITEM_ICON_CLASSES[item.color]} font-semibold`
-                : "text-slate-400 dark:text-slate-500"
+                : "text-slate-500 dark:text-slate-500"
             }`}
           >
             <Icon size={22} />
@@ -58,7 +58,7 @@ export function BottomNav({ role }: Readonly<Props>) {
         className={`flex flex-1 flex-col items-center gap-1 py-2 transition-colors ${
           pathname === "/"
             ? "font-semibold text-violet-600 dark:text-violet-400"
-            : "text-slate-400 dark:text-slate-500"
+            : "text-slate-500 dark:text-slate-500"
         }`}
       >
         <Home size={22} />

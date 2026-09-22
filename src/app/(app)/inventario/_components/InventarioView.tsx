@@ -63,16 +63,20 @@ export function InventarioView() {
     ...new Set((products ?? []).map((p) => p.category).filter(Boolean)),
   ] as string[];
 
-  const filtered = (products ?? []).filter((p) => {
-    const matchesQuery = p.name
-      .toLowerCase()
-      .includes(query.toLowerCase().trim());
-    const matchesCategory =
-      !categoryFilter || p.category === categoryFilter;
-    const matchesOutOfStock =
-      !showOnlyOutOfStock || (p.trackStock && p.stock === 0);
-    return matchesQuery && matchesCategory && matchesOutOfStock;
-  });
+  const filtered = (products ?? [])
+    .filter((p) => {
+      const matchesQuery = p.name
+        .toLowerCase()
+        .includes(query.toLowerCase().trim());
+      const matchesCategory =
+        !categoryFilter || p.category === categoryFilter;
+      const matchesOutOfStock =
+        !showOnlyOutOfStock || (p.trackStock && p.stock === 0);
+      return matchesQuery && matchesCategory && matchesOutOfStock;
+    })
+    // El endpoint ordena por más vendidos (útil para las grillas de venta);
+    // aquí para gestión de stock es más útil el orden alfabético por categoría.
+    .sort((a, b) => (a.category ?? "").localeCompare(b.category ?? "") || a.name.localeCompare(b.name));
 
   const counts = {
     disponible: filtered.filter((p) => getStockStatus(p.stock, p.trackStock) === "disponible").length,
@@ -254,7 +258,7 @@ export function InventarioView() {
       </section>
 
       {filtered.length > 0 && (
-        <p className="text-right text-xs text-slate-400 dark:text-slate-500">
+        <p className="text-right text-xs text-slate-500 dark:text-slate-500">
           {filtered.length} producto{filtered.length !== 1 ? "s" : ""} mostrado
           {filtered.length !== 1 ? "s" : ""}
         </p>

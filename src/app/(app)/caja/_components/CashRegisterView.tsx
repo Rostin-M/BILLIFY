@@ -50,10 +50,10 @@ function OtherRegisters({ excludeRegisterId }: Readonly<{ excludeRegisterId?: st
                   <p className="truncate font-medium text-slate-700 dark:text-slate-200">
                     {r.user?.name ?? "Sin nombre"}
                   </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-500">
                     Abierta {openedTime} · Fondo inicial {formatCOP(r.openingBalance)}
                   </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-500">
                     Balance movimientos: {formatCOP(balance)}
                     {r.manualIncome > 0 && ` · +${formatCOP(r.manualIncome)} entradas`}
                     {r.manualExpense > 0 && ` · −${formatCOP(r.manualExpense)} salidas`}
@@ -117,7 +117,7 @@ export function CashRegisterView({ isOwner, business }: Readonly<Props>) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
         <p className="text-base font-medium text-slate-600 dark:text-slate-300">Sin acceso a caja</p>
-        <p className="text-sm text-slate-400 dark:text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-500">
           El propietario no te ha habilitado la gestión de caja. Contacta al propietario si necesitas acceso.
         </p>
       </div>

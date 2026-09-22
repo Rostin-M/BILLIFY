@@ -67,7 +67,7 @@ export function Sidebar({ role, collapsed, onToggle }: Readonly<Props>) {
         className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2"
       >
         {!collapsed && (
-          <p className="mb-1 px-2 pt-1 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <p className="mb-1 px-2 pt-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-500">
             Operaciones
           </p>
         )}
@@ -77,7 +77,7 @@ export function Sidebar({ role, collapsed, onToggle }: Readonly<Props>) {
           <>
             <div className="my-2 border-t border-slate-100 dark:border-white/10" />
             {!collapsed && (
-              <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 {role === "OWNER" ? "Administración" : "Más"}
               </p>
             )}
@@ -90,7 +90,7 @@ export function Sidebar({ role, collapsed, onToggle }: Readonly<Props>) {
         <button
           onClick={onToggle}
           title={collapsed ? "Expandir menú" : "Colapsar menú"}
-          className={`flex w-full items-center rounded-lg px-2 py-2 text-xs text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-white/5 dark:hover:text-slate-300 ${
+          className={`flex w-full items-center rounded-lg px-2 py-2 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-white/5 dark:hover:text-slate-300 ${
             collapsed ? "justify-center" : "gap-2"
           }`}
         >

@@ -41,7 +41,7 @@ export function CashOpenForm() {
               Fondo inicial
             </span>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
                 $
               </span>
               <input
@@ -56,7 +56,7 @@ export function CashOpenForm() {
               />
             </div>
             {openingBalance && !Number.isNaN(Number.parseFloat(openingBalance)) && (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500">
                 {formatCOP(Number.parseFloat(openingBalance))}
               </p>
             )}

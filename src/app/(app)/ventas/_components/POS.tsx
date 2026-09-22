@@ -7,17 +7,22 @@ import { api } from "~/trpc/react";
 import { OfflineBanner } from "./OfflineBanner";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
+import { ReceiptPhotoButton } from "~/app/_components/ReceiptPhotoButton";
+import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
 import { CustomerSelector } from "./CustomerSelector";
 import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
 type SelectedCustomer = { id?: string; name: string; document?: string; email?: string | null; isGuestWithDoc?: boolean };
 
 type CartItem = {
+  cartItemId: string;
   productId: string;
   name: string;
   price: number;
   quantity: number;
   taxSlots: number[];
+  weightKg?: number;
+  customAmount?: number;
 };
 
 type Product = {
@@ -29,6 +34,10 @@ type Product = {
   category: string | null;
   barcode: string | null;
   taxSlots: number[];
+  brand: string | null;
+  presentation: string | null;
+  openPrice: boolean;
+  soldByWeight: boolean;
 };
 
 const QUICK_CART_KEY = "billify_quick_cart";
@@ -54,6 +63,8 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   const [hydrated, setHydrated] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [continuousScan, setContinuousScan] = useState(false);
+  const [receiptPath, setReceiptPath] = useState<string | null>(null);
+  const [specialPrompt, setSpecialPrompt] = useState<{ product: Product; mode: "weight" | "amount" } | null>(null);
 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(QUICK_CART_KEY, []));
@@ -92,7 +103,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   });
 
   const syncFn = useCallback(
-    async (sale: { items: { productId: string; quantity: number }[]; paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER"; customerId?: string; note?: string }) => {
+    async (sale: { items: { productId: string; quantity: number; weightKg?: number; customAmount?: number }[]; paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER"; customerId?: string; note?: string; receiptPath?: string }) => {
       await createSale.mutateAsync({ ...sale, saleType: "QUICK" });
       await utils.sale.list.invalidate();
     },
@@ -112,6 +123,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
     setCart([]);
     setPaymentMethod("CASH");
     setSelectedCustomer(null);
+    setReceiptPath(null);
     localStorage.removeItem(QUICK_CART_KEY);
     localStorage.removeItem(QUICK_PAYMENT_KEY);
     localStorage.removeItem(QUICK_CUSTOMER_KEY);
@@ -124,19 +136,50 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
 
   function addToCart(product: Product) {
     setCart((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
+      const existing = prev.find((i) => i.cartItemId === product.id);
       if (existing) {
         if (product.trackStock && existing.quantity >= product.stock) return prev;
         return prev.map((i) =>
-          i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i,
+          i.cartItemId === product.id ? { ...i, quantity: i.quantity + 1 } : i,
         );
       }
       if (product.trackStock && product.stock === 0) return prev;
       return [
         ...prev,
-        { productId: product.id, name: product.name, price: product.price, quantity: 1, taxSlots: product.taxSlots },
+        { cartItemId: product.id, productId: product.id, name: product.name, price: product.price, quantity: 1, taxSlots: product.taxSlots },
       ];
     });
+    if (search) setSearch("");
+  }
+
+  function addSpecialToCart(product: Product, value: number) {
+    const cartItemId = `${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    if (product.soldByWeight) {
+      const lineTotal = Math.ceil((product.price * value) / 100) * 100;
+      setCart((prev) => [
+        ...prev,
+        { cartItemId, productId: product.id, name: `${product.name} (${value} kg)`, price: lineTotal, quantity: 1, taxSlots: product.taxSlots, weightKg: value },
+      ]);
+    } else {
+      setCart((prev) => [
+        ...prev,
+        { cartItemId, productId: product.id, name: product.name, price: value, quantity: 1, taxSlots: product.taxSlots, customAmount: value },
+      ]);
+    }
+    setSpecialPrompt(null);
+    if (search) setSearch("");
+  }
+
+  function handleProductTap(product: Product) {
+    if (product.openPrice) {
+      setSpecialPrompt({ product, mode: "amount" });
+      return;
+    }
+    if (product.soldByWeight) {
+      setSpecialPrompt({ product, mode: "weight" });
+      return;
+    }
+    addToCart(product);
   }
 
   function handleBarcodeDetected(code: string) {
@@ -146,6 +189,10 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
       showMessage("error", `Ningún producto tiene el código ${code}.`);
       return;
     }
+    if (product.openPrice || product.soldByWeight) {
+      handleProductTap(product);
+      return;
+    }
     addToCart(product);
     showMessage("success", `${product.name} agregado al carrito.`);
   }
@@ -153,18 +200,22 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   function handleContinuousScan(code: string): ScanResult {
     const product = products.find((p: Product) => p.barcode === code);
     if (!product) return { ok: false, code };
+    if (product.openPrice || product.soldByWeight) {
+      handleProductTap(product);
+      return { ok: true, name: `${product.name} — confirma el monto/peso` };
+    }
     addToCart(product);
     return { ok: true, name: product.name };
   }
 
-  function updateQty(productId: string, delta: number) {
+  function updateQty(cartItemId: string, delta: number) {
     setCart((prev) =>
       prev
         .map((i) => {
-          if (i.productId !== productId) return i;
+          if (i.cartItemId !== cartItemId) return i;
           const newQty = i.quantity + delta;
           if (delta > 0) {
-            const product = products.find((p: Product) => p.id === productId);
+            const product = products.find((p: Product) => p.id === i.productId);
             if (product?.trackStock && newQty > product.stock) return i;
           }
           return { ...i, quantity: newQty };
@@ -173,8 +224,8 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
     );
   }
 
-  function removeFromCart(productId: string) {
-    setCart((prev) => prev.filter((i) => i.productId !== productId));
+  function removeFromCart(cartItemId: string) {
+    setCart((prev) => prev.filter((i) => i.cartItemId !== cartItemId));
   }
 
   const { subtotal, taxLines, total } = computeSaleTotals(cart, taxes, autoTax);
@@ -185,9 +236,10 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
     if (cart.length === 0 || creditRequiresCustomer) return;
 
     const saleData = {
-      items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity, weightKg: i.weightKg, customAmount: i.customAmount })),
       paymentMethod,
       customerId: selectedCustomer?.id,
+      receiptPath: receiptPath ?? undefined,
     };
 
     if (!isOnline) {
@@ -211,6 +263,14 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
 
   return (
     <div>
+      {specialPrompt && (
+        <SpecialItemPrompt
+          product={specialPrompt.product}
+          mode={specialPrompt.mode}
+          onConfirm={(value) => addSpecialToCart(specialPrompt.product, value)}
+          onCancel={() => setSpecialPrompt(null)}
+        />
+      )}
       <OfflineBanner
         isOnline={isOnline}
         pendingCount={pendingCount}
@@ -233,6 +293,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
             <button
               type="button"
               onClick={() => setShowScanner(true)}
+              aria-label="Escanear código de barras"
               className="shrink-0 rounded-xl border border-violet-300 bg-white px-4 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
             >
               <Camera className="h-5 w-5" />
@@ -244,23 +305,25 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
           )}
 
           {isLoading ? (
-            <p className="text-center text-slate-400 dark:text-slate-500">Cargando productos...</p>
+            <p className="text-center text-slate-500 dark:text-slate-500">Cargando productos...</p>
           ) : filteredProducts.length === 0 ? (
-            <p className="text-center text-slate-400 dark:text-slate-500">Sin resultados</p>
+            <p className="text-center text-slate-500 dark:text-slate-500">Sin resultados</p>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
               {filteredProducts.map((p: Product) => {
-                const inCart = cart.find((i) => i.productId === p.id);
+                const inCartQty = cart
+                  .filter((i) => i.productId === p.id)
+                  .reduce((s, i) => s + i.quantity, 0);
                 const outOfStock = p.trackStock && p.stock === 0;
                 return (
                   <button
                     key={p.id}
-                    onClick={() => addToCart(p)}
+                    onClick={() => handleProductTap(p)}
                     disabled={outOfStock}
                     className={`flex flex-col rounded-xl border p-3 text-left transition active:scale-95 ${
                       outOfStock
                         ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50 dark:border-white/5 dark:bg-white/5"
-                        : inCart
+                        : inCartQty > 0
                           ? "border-violet-300 bg-violet-50 shadow-sm dark:border-violet-500/50 dark:bg-violet-900/20"
                           : "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/50 dark:border-white/10 dark:bg-white/5 dark:hover:border-violet-500/30 dark:hover:bg-violet-900/10"
                     }`}
@@ -268,17 +331,22 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
                     <span className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">
                       {p.name}
                     </span>
+                    {(p.brand ?? p.presentation) && (
+                      <span className="text-xs text-slate-500 dark:text-slate-500">
+                        {[p.brand, p.presentation].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
                     <span className="mt-1 text-base font-bold text-violet-600 dark:text-violet-400">
-                      {formatCOP(p.price)}
+                      {p.openPrice ? "Monto libre" : p.soldByWeight ? `${formatCOP(p.price)}/kg` : formatCOP(p.price)}
                     </span>
                     <span
-                      className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-400 dark:text-slate-500"}`}
+                      className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-500"}`}
                     >
                       {outOfStock ? "Sin stock" : p.trackStock ? `${p.stock} disponibles` : "∞ disponibles"}
                     </span>
-                    {inCart && (
+                    {inCartQty > 0 && (
                       <span className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
-                        En carrito: {inCart.quantity}
+                        En carrito: {inCartQty}
                       </span>
                     )}
                   </button>
@@ -290,37 +358,27 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
 
         {/* Panel derecho: carrito */}
         <div className="flex flex-col gap-3 lg:w-2/5">
-          {continuousScan ? (
-            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setContinuousScan(true)}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-sm font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
-            >
-              <Camera className="h-4 w-4" /> Activar escaneo continuo
-            </button>
-          )}
-
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Carrito</h2>
               {cart.length > 0 && (
-                <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">
+                <span className="ml-auto text-xs text-slate-500 dark:text-slate-500">
                   guardado automáticamente
                 </span>
               )}
             </div>
 
             {cart.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-400 dark:text-slate-500">
+              <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-500">
                 Toca un producto para agregar
               </p>
             ) : (
               <ul className="flex flex-col gap-2">
-                {cart.map((item) => (
+                {cart.map((item) => {
+                  const isSpecial = item.weightKg != null || item.customAmount != null;
+                  return (
                   <li
-                    key={item.productId}
+                    key={item.cartItemId}
                     className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5"
                   >
                     <div className="min-w-0 flex-1">
@@ -328,35 +386,48 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
                         {item.name}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {formatCOP(item.price)} × {item.quantity} ={" "}
-                        {formatCOP(item.price * item.quantity)}
+                        {isSpecial
+                          ? formatCOP(item.price)
+                          : `${formatCOP(item.price)} × ${item.quantity} = ${formatCOP(item.price * item.quantity)}`}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        onClick={() => updateQty(item.productId, -1)}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
-                      >
-                        −
-                      </button>
-                      <span className="w-5 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQty(item.productId, 1)}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
-                      >
-                        +
-                      </button>
-                      <button
-                        onClick={() => removeFromCart(item.productId)}
-                        className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
-                      >
-                        ×
-                      </button>
+                      {isSpecial ? (
+                        <button
+                          onClick={() => removeFromCart(item.cartItemId)}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                        >
+                          ×
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => updateQty(item.cartItemId, -1)}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                          >
+                            −
+                          </button>
+                          <span className="w-5 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQty(item.cartItemId, 1)}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                          >
+                            +
+                          </button>
+                          <button
+                            onClick={() => removeFromCart(item.cartItemId)}
+                            className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                          >
+                            ×
+                          </button>
+                        </>
+                      )}
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
 
@@ -395,6 +466,11 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
                         Selecciona un cliente registrado para fiar esta venta.
                       </p>
                     )}
+                  </div>
+                )}
+                {paymentMethod === "TRANSFER" && (
+                  <div className="mt-2">
+                    <ReceiptPhotoButton value={receiptPath} onChange={setReceiptPath} />
                   </div>
                 )}
               </div>
@@ -481,12 +557,25 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
               ) : (
                 <button
                   onClick={() => setShowClearConfirm(true)}
-                  className="text-center text-sm text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                  className="text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
                 >
                   Limpiar carrito
                 </button>
               )}
             </>
+          )}
+
+          {/* Cámara al fondo: así el pedido acumulado queda siempre visible arriba mientras se escanea */}
+          {continuousScan ? (
+            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setContinuousScan(true)}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-sm font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
+            >
+              <Camera className="h-4 w-4" /> Activar escaneo continuo
+            </button>
           )}
         </div>
       </div>

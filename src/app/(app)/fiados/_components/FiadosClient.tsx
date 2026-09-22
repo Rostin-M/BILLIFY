@@ -47,14 +47,14 @@ function DebtorDetail({ customerId, debtTotal }: Readonly<{ customerId: string; 
   const { data, isPending } = api.customer.history.useQuery({ customerId });
 
   if (isPending) {
-    return <p className="px-1 py-2 text-xs text-slate-400 dark:text-slate-500">Cargando detalle...</p>;
+    return <p className="px-1 py-2 text-xs text-slate-500 dark:text-slate-500">Cargando detalle...</p>;
   }
 
   const creditSales = (data?.sales ?? []).filter((s) => s.paymentMethod === "CREDIT");
   const payments = data?.payments ?? [];
 
   if (creditSales.length === 0 && payments.length === 0) {
-    return <p className="px-1 py-2 text-xs text-slate-400 dark:text-slate-500">Sin fiados registrados.</p>;
+    return <p className="px-1 py-2 text-xs text-slate-500 dark:text-slate-500">Sin fiados registrados.</p>;
   }
 
   const days = groupByDay(creditSales, payments);
@@ -185,10 +185,10 @@ export function FiadosClient() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                   {c.name}
-                  {c.alias && <span className="ml-1.5 text-xs text-slate-400">&quot;{c.alias}&quot;</span>}
+                  {c.alias && <span className="ml-1.5 text-xs text-slate-500">&quot;{c.alias}&quot;</span>}
                 </p>
                 {c.phone && (
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{c.phone}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-500">{c.phone}</p>
                 )}
               </div>
               <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">

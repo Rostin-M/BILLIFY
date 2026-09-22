@@ -8,7 +8,7 @@ import type { BusinessInfoForPdf, TaxLine } from "~/lib/pdf/FacturaPDF";
 
 const FacturaPdfActions = dynamic(
   () => import("~/lib/pdf/FacturaPdfActions").then((m) => m.FacturaPdfActions),
-  { ssr: false, loading: () => <span className="text-xs text-slate-400">Generando…</span> },
+  { ssr: false, loading: () => <span className="text-xs text-slate-500">Generando…</span> },
 );
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -25,9 +25,22 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
   const [voidReason, setVoidReason] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pdfSaleId, setPdfSaleId] = useState<string | null>(null);
+  const [loadingReceiptId, setLoadingReceiptId] = useState<string | null>(null);
 
   const { data: sales = [], isPending, refetch } = api.sale.list.useQuery({});
   const utils = api.useUtils();
+
+  async function viewReceipt(saleId: string) {
+    setLoadingReceiptId(saleId);
+    try {
+      const { url } = await utils.sale.getReceiptUrl.fetch({ saleId });
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo abrir el comprobante.");
+    } finally {
+      setLoadingReceiptId(null);
+    }
+  }
 
   const voidSale = api.sale.void.useMutation({
     onSuccess: async (data) => {
@@ -53,7 +66,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
   const totalDay = completed.reduce((sum, s) => sum + s.total, 0);
 
   if (isPending) {
-    return <p className="text-center text-sm text-slate-400 dark:text-slate-500">Cargando historial...</p>;
+    return <p className="text-center text-sm text-slate-500 dark:text-slate-500">Cargando historial...</p>;
   }
 
   return (
@@ -79,7 +92,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
       {/* Lista de ventas */}
       {sales.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center dark:border-white/10 dark:bg-white/5">
-          <p className="text-slate-400 dark:text-slate-500">No hay ventas registradas hoy.</p>
+          <p className="text-slate-500 dark:text-slate-500">No hay ventas registradas hoy.</p>
         </div>
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5">
@@ -98,7 +111,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                       className="min-w-0 flex-1 text-left"
                     >
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`text-sm font-semibold ${isVoided ? "text-slate-400 line-through dark:text-slate-500" : "text-slate-800 dark:text-slate-100"}`}>
+                        <span className={`text-sm font-semibold ${isVoided ? "text-slate-500 line-through dark:text-slate-500" : "text-slate-800 dark:text-slate-100"}`}>
                           {sale.invoiceNumber ?? "Venta rápida"}
                         </span>
                         {isVoided && (
@@ -112,7 +125,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">
                         {formatTime(sale.createdAt)} · {PAYMENT_LABELS[sale.paymentMethod] ?? sale.paymentMethod}
                         {sale.customer && ` · ${sale.customer.name}`}
                         {sale.user?.name && ` · ${sale.user.name}`}
@@ -125,7 +138,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                     </button>
 
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
-                      <span className={`text-base font-bold ${isVoided ? "text-slate-400 line-through dark:text-slate-500" : "text-slate-800 dark:text-white"}`}>
+                      <span className={`text-base font-bold ${isVoided ? "text-slate-500 line-through dark:text-slate-500" : "text-slate-800 dark:text-white"}`}>
                         {formatCOP(sale.total)}
                       </span>
                       {!isVoiding && (
@@ -144,6 +157,15 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                               }`}
                             >
                               PDF
+                            </button>
+                          )}
+                          {sale.receiptPath && (
+                            <button
+                              onClick={() => viewReceipt(sale.id)}
+                              disabled={loadingReceiptId === sale.id}
+                              className="rounded-lg border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-500/30 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                            >
+                              {loadingReceiptId === sale.id ? "Abriendo..." : "Comprobante"}
                             </button>
                           )}
                           {isOwner && !isVoided && (
@@ -225,9 +247,9 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                   {/* Detalle expandible de ítems */}
                   {isExpanded && !isVoiding && (
                     <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
-                      <ul className="space-y-1">
+                      <ul className="divide-y divide-slate-200 dark:divide-white/10">
                         {sale.items.map((item, idx) => (
-                          <li key={idx} className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
+                          <li key={idx} className="flex justify-between py-1 text-xs text-slate-600 first:pt-0 last:pb-0 dark:text-slate-300">
                             <span>{item.name} × {item.quantity}</span>
                             <span>{formatCOP(item.subtotal)}</span>
                           </li>
@@ -235,18 +257,18 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                       </ul>
                       {sale.taxAmount > 0 && (
                         <div className="mt-2 border-t border-slate-200 pt-2 dark:border-white/10">
-                          <div className="flex justify-between text-xs text-slate-400">
+                          <div className="flex justify-between text-xs text-slate-500">
                             <span>Subtotal</span>
                             <span>{formatCOP(sale.subtotal)}</span>
                           </div>
-                          <div className="flex justify-between text-xs text-slate-400">
+                          <div className="flex justify-between text-xs text-slate-500">
                             <span>Impuesto</span>
                             <span>{formatCOP(sale.taxAmount)}</span>
                           </div>
                         </div>
                       )}
                       {sale.note && (
-                        <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
                           Nota: {sale.note}
                         </p>
                       )}
@@ -261,7 +283,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
 
       <button
         onClick={() => refetch()}
-        className="w-full rounded-xl border border-slate-200 py-2 text-sm text-slate-400 transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
+        className="w-full rounded-xl border border-slate-200 py-2 text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
       >
         Actualizar
       </button>

@@ -5,6 +5,7 @@ import { businessProcedure, createTRPCRouter } from "~/server/api/trpc";
 import { adjustStock } from "~/server/lib/inventory";
 import { assertCashRegisterNotStale } from "~/server/lib/cashRegisterGuard";
 import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
+import { resolveSaleItem } from "~/server/lib/resolveSaleItem";
 
 const PAYMENT_METHODS = ["CASH", "CARD", "CREDIT", "TRANSFER"] as const;
 
@@ -152,6 +153,21 @@ export const tableSessionRouter = createTRPCRouter({
       return guest;
     }),
 
+  // Rename a guest already seated at the table (e.g. once you learn their real name)
+  renameGuest: businessProcedure
+    .input(z.object({ guestId: z.string().min(1), name: z.string().trim().min(1, "El nombre no puede estar vacío") }))
+    .mutation(async ({ ctx, input }) => {
+      const { businessId } = ctx.session.user;
+      const guest = await ctx.db.tableGuest.findFirst({
+        where: { id: input.guestId, tableSession: { businessId, status: "OPEN" } },
+        select: { id: true },
+      });
+      if (!guest) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado." });
+
+      await ctx.db.tableGuest.update({ where: { id: input.guestId }, data: { name: input.name } });
+      return { message: "Cliente renombrado." };
+    }),
+
   // Remove a guest (only allowed if they have no orders)
   removeGuest: businessProcedure
     .input(z.object({ guestId: z.string().min(1) }))
@@ -171,7 +187,12 @@ export const tableSessionRouter = createTRPCRouter({
   addOrder: businessProcedure
     .input(z.object({
       guestId: z.string().min(1),
-      items: z.array(z.object({ productId: z.string().min(1), quantity: z.number().int().positive() })).min(1),
+      items: z.array(z.object({
+        productId: z.string().min(1),
+        quantity: z.number().int().positive(),
+        weightKg: z.number().positive().optional(),
+        customAmount: z.number().positive().optional(),
+      })).min(1),
       note: z.string().trim().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -186,7 +207,7 @@ export const tableSessionRouter = createTRPCRouter({
       const [products, business] = await Promise.all([
         ctx.db.product.findMany({
           where: { id: { in: input.items.map((i) => i.productId) }, businessId, isActive: true },
-          select: { id: true, name: true, unit: true, price: true, stock: true, trackStock: true, taxSlots: true },
+          select: { id: true, name: true, unit: true, price: true, trackStock: true, taxSlots: true, openPrice: true, soldByWeight: true },
         }),
         ctx.db.business.findUnique({ where: { id: businessId }, select: { taxes: true, autoTax: true } }),
       ]);
@@ -196,26 +217,25 @@ export const tableSessionRouter = createTRPCRouter({
       }
 
       const productMap = new Map(products.map((p) => [p.id, p]));
-      const itemsToCreate = input.items.map((item) => {
-        const p = productMap.get(item.productId)!;
-        const s = p.price * item.quantity;
-        return { productId: item.productId, name: p.name, unit: p.unit, price: p.price, quantity: item.quantity, subtotal: s };
-      });
+      const resolvedItems = input.items.map((item) => resolveSaleItem(productMap.get(item.productId)!, item));
+      const itemsToCreate = resolvedItems.map((resolved) => ({
+        productId: resolved.productId, name: resolved.name, unit: resolved.unit,
+        price: resolved.price, quantity: resolved.quantity, subtotal: resolved.subtotal,
+      }));
 
       const taxConfigs = (business?.taxes as TaxConfig[]) ?? [];
       const { subtotal, taxAmount, taxLines, total } = computeSaleTotals(
-        input.items.map((item) => {
-          const p = productMap.get(item.productId)!;
-          return { price: p.price, quantity: item.quantity, taxSlots: p.taxSlots };
-        }),
+        resolvedItems.map((resolved) => ({
+          price: resolved.price, quantity: resolved.quantity, taxSlots: resolved.taxSlots,
+        })),
         taxConfigs,
         business?.autoTax ?? false,
       );
 
       const order = await ctx.db.$transaction(async (tx) => {
-        for (const item of input.items) {
-          if (productMap.get(item.productId)?.trackStock) {
-            await adjustStock({ tx, productId: item.productId, businessId, userId, quantity: -item.quantity, reason: "TABLE_ORDER", note: `Mesa: ${guest.tableSessionId}` });
+        for (const resolved of resolvedItems) {
+          if (resolved.stockDelta > 0) {
+            await adjustStock({ tx, productId: resolved.productId, businessId, userId, quantity: -resolved.stockDelta, reason: "TABLE_ORDER", note: `Mesa: ${guest.tableSessionId}` });
           }
         }
         return tx.tableOrder.create({
@@ -234,6 +254,32 @@ export const tableSessionRouter = createTRPCRouter({
       }, { timeout: 30000, maxWait: 10000 });
 
       return order;
+    }),
+
+  // Move a round to another guest at the same table (e.g. the wrong person was charged with it)
+  moveOrder: businessProcedure
+    .input(z.object({ orderId: z.string().min(1), toGuestId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const { businessId } = ctx.session.user;
+
+      const order = await ctx.db.tableOrder.findFirst({
+        where: { id: input.orderId, tableSession: { businessId, status: "OPEN" } },
+        select: { id: true, tableSessionId: true, tableGuestId: true },
+      });
+      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido no encontrado." });
+
+      if (order.tableGuestId === input.toGuestId) {
+        return { message: "El pedido ya pertenece a ese cliente." };
+      }
+
+      const toGuest = await ctx.db.tableGuest.findFirst({
+        where: { id: input.toGuestId, tableSessionId: order.tableSessionId },
+        select: { id: true, name: true },
+      });
+      if (!toGuest) throw new TRPCError({ code: "BAD_REQUEST", message: "El cliente destino no pertenece a esta mesa." });
+
+      await ctx.db.tableOrder.update({ where: { id: input.orderId }, data: { tableGuestId: input.toGuestId } });
+      return { message: `Pedido movido a ${toGuest.name}.` };
     }),
 
   // Remove a round — re-increments stock
@@ -272,6 +318,8 @@ export const tableSessionRouter = createTRPCRouter({
         guestIds: z.array(z.string().min(1)).min(1),
         paymentMethod: z.enum(PAYMENT_METHODS),
         note: z.string().trim().optional(),
+        invoice: z.boolean().optional().default(false),
+        receiptPath: z.string().trim().optional(),
       })).min(1),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -371,13 +419,18 @@ export const tableSessionRouter = createTRPCRouter({
           const groupTotal = groupSubtotal + groupTaxAmount;
 
           if (groupTotal > 0 && itemsMap.size > 0) {
-            const year = new Date().getFullYear();
-            const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
-            // Shared consecutive counter: counts ALL invoices (mesa + facturadas) for this business/year
-            const invoiceCount = await tx.sale.count({
-              where: { businessId, invoiceNumber: { not: null }, createdAt: { gte: yearStart } },
-            });
-            const invoiceNumber = generateInvoiceNumber(year, invoiceCount + sales.length + 1);
+            // Por defecto no se genera factura (solo un cobro normal) — el cajero la activa
+            // explícitamente por grupo de pago cuando el cliente la pide.
+            let invoiceNumber: string | null = null;
+            if (group.invoice) {
+              const year = new Date().getFullYear();
+              const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
+              // Shared consecutive counter: counts ALL invoices (mesa + facturadas) for this business/year
+              const invoiceCount = await tx.sale.count({
+                where: { businessId, invoiceNumber: { not: null }, createdAt: { gte: yearStart } },
+              });
+              invoiceNumber = generateInvoiceNumber(year, invoiceCount + sales.length + 1);
+            }
 
             const firstWithCustomer = group.guestIds.map((id) => guestMap.get(id)!).find((g) => g.customerId);
             const guestNames = group.guestIds.map((id) => guestMap.get(id)!.name).join(", ");
@@ -395,6 +448,7 @@ export const tableSessionRouter = createTRPCRouter({
                 taxLines: taxLines.length > 0 ? taxLines : undefined,
                 total: groupTotal,
                 note: noteText,
+                receiptPath: group.paymentMethod === "TRANSFER" ? (group.receiptPath ?? null) : null,
                 tableSessionId: input.sessionId,
                 items: { create: Array.from(itemsMap.values()) },
               },
