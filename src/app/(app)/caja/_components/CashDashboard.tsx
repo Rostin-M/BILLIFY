@@ -78,7 +78,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
     },
   });
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     const amount = Number.parseFloat(form.amount);
     if (Number.isNaN(amount) || amount <= 0) return;

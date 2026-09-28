@@ -355,6 +355,83 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                     ) : (
                       guest.orders.map((order, oi) => {
                         const isOrderExpanded = expandedOrders.has(order.id);
+
+                        let orderActions: React.ReactNode;
+                        if (movingOrderId === order.id) {
+                          orderActions = (
+                            <span className="flex flex-wrap items-center justify-end gap-1.5">
+                              <select
+                                value={moveTargetGuestId}
+                                onChange={(e) => setMoveTargetGuestId(e.target.value)}
+                                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                              >
+                                <option value="">Mover a...</option>
+                                {session.guests.filter((g) => g.id !== guest.id).map((g) => (
+                                  <option key={g.id} value={g.id}>{g.name}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => moveOrder.mutate({ orderId: order.id, toGuestId: moveTargetGuestId })}
+                                disabled={!moveTargetGuestId || moveOrder.isPending}
+                                className="rounded bg-violet-600 px-2 py-0.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-50"
+                              >
+                                Mover
+                              </button>
+                              <button
+                                onClick={() => { setMovingOrderId(null); setMoveTargetGuestId(""); }}
+                                className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10"
+                              >
+                                Cancelar
+                              </button>
+                            </span>
+                          );
+                        } else if (confirmDeleteOrder === order.id) {
+                          orderActions = (
+                            <span className="flex flex-wrap items-center justify-end gap-1.5">
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                ¿Eliminar esta ronda?
+                              </span>
+                              <button
+                                onClick={() => { removeOrder.mutate({ orderId: order.id }); setConfirmDeleteOrder(null); }}
+                                disabled={removeOrder.isPending}
+                                className="rounded bg-red-500 px-2 py-0.5 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
+                              >
+                                Sí, eliminar
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteOrder(null)}
+                                className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10"
+                              >
+                                No
+                              </button>
+                            </span>
+                          );
+                        } else {
+                          orderActions = (
+                            <div className="flex shrink-0 items-center gap-2">
+                              {session.guests.length > 1 && (
+                                <button
+                                  onClick={() => { setMovingOrderId(order.id); setMoveTargetGuestId(""); }}
+                                  className="text-slate-300 hover:text-violet-500 transition"
+                                  title="Mover a otro cliente"
+                                  aria-label="Mover ronda a otro cliente"
+                                >
+                                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setConfirmDeleteOrder(order.id)}
+                                disabled={removeOrder.isPending}
+                                className="text-slate-300 hover:text-red-500 transition disabled:opacity-50"
+                                title="Eliminar ronda"
+                                aria-label="Eliminar ronda"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          );
+                        }
+
                         return (
                         <div key={order.id} className="rounded-xl border border-slate-100 bg-slate-50 dark:border-white/5 dark:bg-white/5">
                           <div className="flex items-center justify-between gap-2 p-3">
@@ -372,74 +449,7 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                                 Ronda #{oi + 1} · <span className="text-slate-700 dark:text-slate-200">{fmt(order.total)}</span>
                               </span>
                             </button>
-                            {movingOrderId === order.id ? (
-                              <span className="flex flex-wrap items-center justify-end gap-1.5">
-                                <select
-                                  value={moveTargetGuestId}
-                                  onChange={(e) => setMoveTargetGuestId(e.target.value)}
-                                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white"
-                                >
-                                  <option value="">Mover a...</option>
-                                  {session.guests.filter((g) => g.id !== guest.id).map((g) => (
-                                    <option key={g.id} value={g.id}>{g.name}</option>
-                                  ))}
-                                </select>
-                                <button
-                                  onClick={() => moveOrder.mutate({ orderId: order.id, toGuestId: moveTargetGuestId })}
-                                  disabled={!moveTargetGuestId || moveOrder.isPending}
-                                  className="rounded bg-violet-600 px-2 py-0.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-50"
-                                >
-                                  Mover
-                                </button>
-                                <button
-                                  onClick={() => { setMovingOrderId(null); setMoveTargetGuestId(""); }}
-                                  className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10"
-                                >
-                                  Cancelar
-                                </button>
-                              </span>
-                            ) : confirmDeleteOrder === order.id ? (
-                              <span className="flex flex-wrap items-center justify-end gap-1.5">
-                                <span className="text-xs text-slate-500 dark:text-slate-400">
-                                  ¿Eliminar esta ronda?
-                                </span>
-                                <button
-                                  onClick={() => { removeOrder.mutate({ orderId: order.id }); setConfirmDeleteOrder(null); }}
-                                  disabled={removeOrder.isPending}
-                                  className="rounded bg-red-500 px-2 py-0.5 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
-                                >
-                                  Sí, eliminar
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDeleteOrder(null)}
-                                  className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10"
-                                >
-                                  No
-                                </button>
-                              </span>
-                            ) : (
-                              <div className="flex shrink-0 items-center gap-2">
-                                {session.guests.length > 1 && (
-                                  <button
-                                    onClick={() => { setMovingOrderId(order.id); setMoveTargetGuestId(""); }}
-                                    className="text-slate-300 hover:text-violet-500 transition"
-                                    title="Mover a otro cliente"
-                                    aria-label="Mover ronda a otro cliente"
-                                  >
-                                    <ArrowRightLeft className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => setConfirmDeleteOrder(order.id)}
-                                  disabled={removeOrder.isPending}
-                                  className="text-slate-300 hover:text-red-500 transition disabled:opacity-50"
-                                  title="Eliminar ronda"
-                                  aria-label="Eliminar ronda"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            )}
+                            {orderActions}
                           </div>
                           {isOrderExpanded && (
                             <div className="border-t border-slate-200 px-3 pb-3 pt-2 dark:border-white/10">

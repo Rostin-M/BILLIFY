@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera } from "lucide-react";
+import { Camera, ScanLine } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useOfflineQueue } from "~/hooks/useOfflineQueue";
 import { api } from "~/trpc/react";
@@ -9,7 +9,7 @@ import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
 import { ReceiptPhotoButton } from "~/app/_components/ReceiptPhotoButton";
 import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
-import { CustomerSelector } from "./CustomerSelector";
+import { CustomerSelector, CONSUMIDOR_FINAL } from "./CustomerSelector";
 import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
 type SelectedCustomer = { id?: string; name: string; document?: string; email?: string | null; isGuestWithDoc?: boolean };
@@ -53,11 +53,373 @@ function loadLS<T>(key: string, fallback: T): T {
   }
 }
 
+const PAYMENT_METHOD_LABELS: Record<"CASH" | "CARD" | "TRANSFER" | "CREDIT", string> = {
+  CASH: "Efectivo",
+  CARD: "Tarjeta",
+  TRANSFER: "Transf.",
+  CREDIT: "Crédito",
+};
+
+function productPriceLabel(p: Product, formatCOP: (v: number) => string): string {
+  if (p.openPrice) return "Monto libre";
+  if (p.soldByWeight) return `${formatCOP(p.price)}/kg`;
+  return formatCOP(p.price);
+}
+
+function stockAvailabilityLabel(p: Product, outOfStock: boolean): string {
+  if (outOfStock) return "Sin stock";
+  if (p.trackStock) return `${p.stock} disponibles`;
+  return "∞ disponibles";
+}
+
+function productTileClassName(outOfStock: boolean, inCartQty: number): string {
+  if (outOfStock) return "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50 dark:border-white/5 dark:bg-white/5";
+  if (inCartQty > 0) return "border-violet-300 bg-violet-50 shadow-sm dark:border-violet-500/50 dark:bg-violet-900/20";
+  return "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/50 dark:border-white/10 dark:bg-white/5 dark:hover:border-violet-500/30 dark:hover:bg-violet-900/10";
+}
+
+function ProductGrid({
+  isLoading,
+  filteredProducts,
+  cart,
+  onProductTap,
+  formatCOP,
+}: Readonly<{
+  isLoading: boolean;
+  filteredProducts: Product[];
+  cart: CartItem[];
+  onProductTap: (p: Product) => void;
+  formatCOP: (v: number) => string;
+}>) {
+  if (isLoading) {
+    return <p className="text-center text-slate-500 dark:text-slate-500">Cargando productos...</p>;
+  }
+  if (filteredProducts.length === 0) {
+    return <p className="text-center text-slate-500 dark:text-slate-500">Sin resultados</p>;
+  }
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+      {filteredProducts.map((p) => {
+        const inCartQty = cart.filter((i) => i.productId === p.id).reduce((s, i) => s + i.quantity, 0);
+        const outOfStock = p.trackStock && p.stock === 0;
+        return (
+          <button
+            key={p.id}
+            onClick={() => onProductTap(p)}
+            disabled={outOfStock}
+            className={`flex flex-col rounded-xl border p-3 text-left transition active:scale-95 ${productTileClassName(outOfStock, inCartQty)}`}
+          >
+            <span className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">{p.name}</span>
+            {(p.brand ?? p.presentation) && (
+              <span className="text-xs text-slate-500 dark:text-slate-500">
+                {[p.brand, p.presentation].filter(Boolean).join(" · ")}
+              </span>
+            )}
+            <span className="mt-1 text-base font-bold text-violet-600 dark:text-violet-400">
+              {productPriceLabel(p, formatCOP)}
+            </span>
+            <span className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-500"}`}>
+              {stockAvailabilityLabel(p, outOfStock)}
+            </span>
+            {inCartQty > 0 && (
+              <span className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
+                En carrito: {inCartQty}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CartList({
+  cart,
+  onUpdateQty,
+  onRemove,
+  formatCOP,
+}: Readonly<{
+  cart: CartItem[];
+  onUpdateQty: (cartItemId: string, delta: number) => void;
+  onRemove: (cartItemId: string) => void;
+  formatCOP: (v: number) => string;
+}>) {
+  if (cart.length === 0) {
+    return (
+      <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-500">
+        Toca un producto para agregar
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {cart.map((item) => {
+        const isSpecial = item.weightKg != null || item.customAmount != null;
+        return (
+          <li key={item.cartItemId} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{item.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {isSpecial
+                  ? formatCOP(item.price)
+                  : `${formatCOP(item.price)} × ${item.quantity} = ${formatCOP(item.price * item.quantity)}`}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {isSpecial ? (
+                <button
+                  onClick={() => onRemove(item.cartItemId)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                >
+                  ×
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onUpdateQty(item.cartItemId, -1)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                  >
+                    −
+                  </button>
+                  <span className="w-5 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {item.quantity}
+                  </span>
+                  <button
+                    onClick={() => onUpdateQty(item.cartItemId, 1)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                  >
+                    +
+                  </button>
+                  <button
+                    onClick={() => onRemove(item.cartItemId)}
+                    className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                  >
+                    ×
+                  </button>
+                </>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function ScanControls({
+  search,
+  onSearchChange,
+  onSingleScan,
+  continuousScan,
+  onToggleContinuousScan,
+}: Readonly<{
+  search: string;
+  onSearchChange: (v: string) => void;
+  onSingleScan: () => void;
+  continuousScan: boolean;
+  onToggleContinuousScan: () => void;
+}>) {
+  return (
+    <div className="flex gap-2">
+      <input
+        type="search"
+        placeholder="Buscar producto..."
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
+      />
+      <button
+        type="button"
+        onClick={onSingleScan}
+        aria-label="Escanear código de barras"
+        className="shrink-0 rounded-xl border border-violet-300 bg-white px-3.5 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
+      >
+        <Camera className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        onClick={onToggleContinuousScan}
+        aria-label={continuousScan ? "Detener escaneo continuo" : "Activar escaneo continuo"}
+        title={continuousScan ? "Detener escaneo continuo" : "Activar escaneo continuo"}
+        className={`shrink-0 rounded-xl border px-3.5 py-3 text-base font-semibold shadow-sm transition ${
+          continuousScan
+            ? "border-violet-500 bg-violet-600 text-white hover:bg-violet-500"
+            : "border-violet-300 bg-white text-violet-700 hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
+        }`}
+      >
+        <ScanLine className="h-5 w-5" />
+      </button>
+    </div>
+  );
+}
+
+function TotalsAndPayment({
+  cart,
+  paymentMethod,
+  onPaymentMethodChange,
+  creditRequiresCustomer,
+  receiptPath,
+  onReceiptPathChange,
+  subtotal,
+  taxLines,
+  total,
+  formatCOP,
+  statusMessage,
+  confirmButtonLabel,
+  onConfirm,
+  isPending,
+  isOnline,
+  showClearConfirm,
+  onShowClearConfirm,
+  onClearCart,
+}: Readonly<{
+  cart: CartItem[];
+  paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER";
+  onPaymentMethodChange: (m: "CASH" | "CARD" | "CREDIT" | "TRANSFER") => void;
+  creditRequiresCustomer: boolean;
+  receiptPath: string | null;
+  onReceiptPathChange: (v: string | null) => void;
+  subtotal: number;
+  taxLines: { name: string; rate: number; amount: number }[];
+  total: number;
+  formatCOP: (v: number) => string;
+  statusMessage: { type: "success" | "error"; text: string } | null;
+  confirmButtonLabel: string;
+  onConfirm: () => void;
+  isPending: boolean;
+  isOnline: boolean;
+  showClearConfirm: boolean;
+  onShowClearConfirm: (v: boolean) => void;
+  onClearCart: () => void;
+}>) {
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Método de pago */}
+      {cart.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Método de pago
+          </p>
+          <div className="flex gap-2">
+            {(["CASH", "CARD", "TRANSFER", "CREDIT"] as const).map((method) => (
+              <button
+                key={method}
+                onClick={() => onPaymentMethodChange(method)}
+                className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition ${
+                  paymentMethod === method
+                    ? "border-violet-400 bg-violet-100 text-violet-700 dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-transparent dark:text-slate-400 dark:hover:border-white/20"
+                }`}
+              >
+                {PAYMENT_METHOD_LABELS[method]}
+              </button>
+            ))}
+          </div>
+          {paymentMethod === "CREDIT" && creditRequiresCustomer && (
+            <p className="mt-1 text-xs text-red-500">
+              Selecciona un cliente registrado (arriba, en &quot;Cliente&quot;) para fiar esta venta.
+            </p>
+          )}
+          {paymentMethod === "TRANSFER" && (
+            <div className="mt-2">
+              <ReceiptPhotoButton value={receiptPath} onChange={onReceiptPathChange} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Desglose de totales */}
+      {cart.length > 0 && (
+        <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
+          {taxLines.length > 0 && (
+            <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+              <span>Subtotal</span>
+              <span>{formatCOP(subtotal)}</span>
+            </div>
+          )}
+          {taxLines.map((t) => (
+            <div key={`${t.name}-${t.rate}`} className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+              <span>{t.name} ({t.rate}%)</span>
+              <span>{formatCOP(t.amount)}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-500 dark:text-slate-400">Total</span>
+            <span className="text-xl font-bold text-slate-900 dark:text-white">
+              {formatCOP(total)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Mensajes */}
+      {statusMessage && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+            statusMessage.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700 dark:border-green-500/30 dark:bg-green-900/20 dark:text-green-300"
+              : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300"
+          }`}
+        >
+          {statusMessage.text}
+        </div>
+      )}
+
+      {/* Botón confirmar */}
+      <button
+        onClick={onConfirm}
+        disabled={cart.length === 0 || creditRequiresCustomer || isPending}
+        className={`w-full rounded-2xl px-6 py-4 text-lg font-bold text-white shadow-lg transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
+          !isOnline
+            ? "bg-amber-500 hover:bg-amber-400"
+            : "bg-violet-600 hover:bg-violet-500"
+        }`}
+      >
+        {confirmButtonLabel}
+      </button>
+
+      {/* Limpiar carrito con confirmación */}
+      {cart.length > 0 && (
+        <>
+          {showClearConfirm ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm dark:border-red-500/30 dark:bg-red-900/10">
+              <p className="mb-2 font-medium text-red-700 dark:text-red-300">
+                ¿Borrar el carrito? Se perderán los ítems actuales.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={onClearCart}
+                  className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
+                >
+                  Sí, limpiar
+                </button>
+                <button
+                  onClick={() => onShowClearConfirm(false)}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => onShowClearConfirm(true)}
+              className="text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+            >
+              Limpiar carrito
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: boolean }>) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "CREDIT" | "TRANSFER">("CASH");
-  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(CONSUMIDOR_FINAL);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -69,7 +431,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(QUICK_CART_KEY, []));
     setPaymentMethod(loadLS<"CASH" | "CARD" | "CREDIT" | "TRANSFER">(QUICK_PAYMENT_KEY, "CASH"));
-    setSelectedCustomer(loadLS<SelectedCustomer | null>(QUICK_CUSTOMER_KEY, null));
+    setSelectedCustomer(loadLS<SelectedCustomer | null>(QUICK_CUSTOMER_KEY, CONSUMIDOR_FINAL));
     setHydrated(true);
   }, []);
 
@@ -122,7 +484,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   function clearCart() {
     setCart([]);
     setPaymentMethod("CASH");
-    setSelectedCustomer(null);
+    setSelectedCustomer(CONSUMIDOR_FINAL);
     setReceiptPath(null);
     localStorage.removeItem(QUICK_CART_KEY);
     localStorage.removeItem(QUICK_PAYMENT_KEY);
@@ -153,7 +515,7 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   }
 
   function addSpecialToCart(product: Product, value: number) {
-    const cartItemId = `${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const cartItemId = `${product.id}-${crypto.randomUUID()}`;
     if (product.soldByWeight) {
       const lineTotal = Math.ceil((product.price * value) / 100) * 100;
       setCart((prev) => [
@@ -261,6 +623,16 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
 
   const isPending = createSale.isPending || isSyncing;
 
+  const cartTotalSuffix = cart.length > 0 ? ` · ${formatCOP(total)}` : "";
+  let confirmButtonLabel: string;
+  if (isPending) {
+    confirmButtonLabel = "Procesando...";
+  } else if (!isOnline) {
+    confirmButtonLabel = `Guardar sin conexión${cartTotalSuffix}`;
+  } else {
+    confirmButtonLabel = `Confirmar venta${cartTotalSuffix}`;
+  }
+
   return (
     <div>
       {specialPrompt && (
@@ -279,85 +651,109 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
         onManualSync={processQueue}
       />
 
-      <div className="flex h-full flex-col gap-4 lg:flex-row">
-        {/* Panel izquierdo: catálogo */}
-        <div className="flex flex-col gap-3 lg:w-3/5">
-          <div className="flex gap-2">
-            <input
-              type="search"
-              placeholder="Buscar producto..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
-            />
-            <button
-              type="button"
-              onClick={() => setShowScanner(true)}
-              aria-label="Escanear código de barras"
-              className="shrink-0 rounded-xl border border-violet-300 bg-white px-4 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
-            >
-              <Camera className="h-5 w-5" />
-            </button>
-          </div>
+      {/* Cliente — siempre visible arriba de todo, identificado o Consumidor Final */}
+      <div className="mb-3">
+        <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">Cliente</p>
+        <CustomerSelector value={selectedCustomer} onChange={setSelectedCustomer} />
+      </div>
 
+      {/* ===== Móvil: todo en una columna, contenido y sin perder de vista el carrito ===== */}
+      <div className="flex flex-col gap-3 pb-4 lg:hidden">
+        <ScanControls
+          search={search}
+          onSearchChange={setSearch}
+          onSingleScan={() => setShowScanner(true)}
+          continuousScan={continuousScan}
+          onToggleContinuousScan={() => setContinuousScan((v) => !v)}
+        />
+        {showScanner && (
+          <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
+        )}
+        {continuousScan && (
+          <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
+        )}
+
+        {/* Carrito — contenido, siempre visible sin bajar hasta el fondo */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <div className="mb-2 flex items-center gap-2">
+            <h2 className="font-semibold text-slate-700 dark:text-slate-200">Carrito</h2>
+            {cart.length > 0 && (
+              <span className="ml-auto text-xs text-slate-500 dark:text-slate-500">
+                guardado automáticamente
+              </span>
+            )}
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            <CartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
+          </div>
+        </div>
+
+        {/* Total + método de pago — fijo encima del menú inferior, siempre visible */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <TotalsAndPayment
+            cart={cart}
+            paymentMethod={paymentMethod}
+            onPaymentMethodChange={setPaymentMethod}
+            creditRequiresCustomer={creditRequiresCustomer}
+            receiptPath={receiptPath}
+            onReceiptPathChange={setReceiptPath}
+            subtotal={subtotal}
+            taxLines={taxLines}
+            total={total}
+            formatCOP={formatCOP}
+            statusMessage={statusMessage}
+            confirmButtonLabel={confirmButtonLabel}
+            onConfirm={confirmSale}
+            isPending={isPending}
+            isOnline={isOnline}
+            showClearConfirm={showClearConfirm}
+            onShowClearConfirm={setShowClearConfirm}
+            onClearCart={clearCart}
+          />
+        </div>
+
+        {/* Productos — contenidos en su propia caja con scroll, no se riegan por toda la pantalla */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <div className="max-h-[42vh] overflow-y-auto">
+            <ProductGrid
+              isLoading={isLoading}
+              filteredProducts={filteredProducts}
+              cart={cart}
+              onProductTap={handleProductTap}
+              formatCOP={formatCOP}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Escritorio: catálogo a la izquierda, carrito y pago a la derecha ===== */}
+      <div className="hidden gap-4 lg:flex">
+        <div className="flex flex-col gap-3 lg:w-3/5">
+          <ScanControls
+            search={search}
+            onSearchChange={setSearch}
+            onSingleScan={() => setShowScanner(true)}
+            continuousScan={continuousScan}
+            onToggleContinuousScan={() => setContinuousScan((v) => !v)}
+          />
           {showScanner && (
             <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
           )}
-
-          {isLoading ? (
-            <p className="text-center text-slate-500 dark:text-slate-500">Cargando productos...</p>
-          ) : filteredProducts.length === 0 ? (
-            <p className="text-center text-slate-500 dark:text-slate-500">Sin resultados</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-              {filteredProducts.map((p: Product) => {
-                const inCartQty = cart
-                  .filter((i) => i.productId === p.id)
-                  .reduce((s, i) => s + i.quantity, 0);
-                const outOfStock = p.trackStock && p.stock === 0;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => handleProductTap(p)}
-                    disabled={outOfStock}
-                    className={`flex flex-col rounded-xl border p-3 text-left transition active:scale-95 ${
-                      outOfStock
-                        ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50 dark:border-white/5 dark:bg-white/5"
-                        : inCartQty > 0
-                          ? "border-violet-300 bg-violet-50 shadow-sm dark:border-violet-500/50 dark:bg-violet-900/20"
-                          : "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/50 dark:border-white/10 dark:bg-white/5 dark:hover:border-violet-500/30 dark:hover:bg-violet-900/10"
-                    }`}
-                  >
-                    <span className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">
-                      {p.name}
-                    </span>
-                    {(p.brand ?? p.presentation) && (
-                      <span className="text-xs text-slate-500 dark:text-slate-500">
-                        {[p.brand, p.presentation].filter(Boolean).join(" · ")}
-                      </span>
-                    )}
-                    <span className="mt-1 text-base font-bold text-violet-600 dark:text-violet-400">
-                      {p.openPrice ? "Monto libre" : p.soldByWeight ? `${formatCOP(p.price)}/kg` : formatCOP(p.price)}
-                    </span>
-                    <span
-                      className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-500"}`}
-                    >
-                      {outOfStock ? "Sin stock" : p.trackStock ? `${p.stock} disponibles` : "∞ disponibles"}
-                    </span>
-                    {inCartQty > 0 && (
-                      <span className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
-                        En carrito: {inCartQty}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div className="max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+            <ProductGrid
+              isLoading={isLoading}
+              filteredProducts={filteredProducts}
+              cart={cart}
+              onProductTap={handleProductTap}
+              formatCOP={formatCOP}
+            />
+          </div>
         </div>
 
-        {/* Panel derecho: carrito */}
         <div className="flex flex-col gap-3 lg:w-2/5">
+          {continuousScan && (
+            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
+          )}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Carrito</h2>
@@ -367,216 +763,32 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
                 </span>
               )}
             </div>
-
-            {cart.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-500">
-                Toca un producto para agregar
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {cart.map((item) => {
-                  const isSpecial = item.weightKg != null || item.customAmount != null;
-                  return (
-                  <li
-                    key={item.cartItemId}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {item.name}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {isSpecial
-                          ? formatCOP(item.price)
-                          : `${formatCOP(item.price)} × ${item.quantity} = ${formatCOP(item.price * item.quantity)}`}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {isSpecial ? (
-                        <button
-                          onClick={() => removeFromCart(item.cartItemId)}
-                          className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
-                        >
-                          ×
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => updateQty(item.cartItemId, -1)}
-                            className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
-                          >
-                            −
-                          </button>
-                          <span className="w-5 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQty(item.cartItemId, 1)}
-                            className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
-                          >
-                            +
-                          </button>
-                          <button
-                            onClick={() => removeFromCart(item.cartItemId)}
-                            className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
-                          >
-                            ×
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            {/* Método de pago */}
-            {cart.length > 0 && (
-              <div className="mt-3">
-                <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Método de pago
-                </p>
-                <div className="flex gap-2">
-                  {(["CASH", "CARD", "TRANSFER", "CREDIT"] as const).map((method) => (
-                    <button
-                      key={method}
-                      onClick={() => setPaymentMethod(method)}
-                      className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition ${
-                        paymentMethod === method
-                          ? "border-violet-400 bg-violet-100 text-violet-700 dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-transparent dark:text-slate-400 dark:hover:border-white/20"
-                      }`}
-                    >
-                      {method === "CASH"
-                        ? "Efectivo"
-                        : method === "CARD"
-                          ? "Tarjeta"
-                          : method === "TRANSFER"
-                            ? "Transf."
-                            : "Crédito"}
-                    </button>
-                  ))}
-                </div>
-                {paymentMethod === "CREDIT" && (
-                  <div className="mt-2">
-                    <CustomerSelector value={selectedCustomer} onChange={setSelectedCustomer} />
-                    {creditRequiresCustomer && (
-                      <p className="mt-1 text-xs text-red-500">
-                        Selecciona un cliente registrado para fiar esta venta.
-                      </p>
-                    )}
-                  </div>
-                )}
-                {paymentMethod === "TRANSFER" && (
-                  <div className="mt-2">
-                    <ReceiptPhotoButton value={receiptPath} onChange={setReceiptPath} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Desglose de totales */}
-            {cart.length > 0 && (
-              <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
-                {taxLines.length > 0 && (
-                  <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
-                    <span>Subtotal</span>
-                    <span>{formatCOP(subtotal)}</span>
-                  </div>
-                )}
-                {taxLines.map((t) => (
-                  <div key={`${t.name}-${t.rate}`} className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
-                    <span>{t.name} ({t.rate}%)</span>
-                    <span>{formatCOP(t.amount)}</span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-500 dark:text-slate-400">Total</span>
-                  <span className="text-xl font-bold text-slate-900 dark:text-white">
-                    {formatCOP(total)}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Mensajes */}
-          {statusMessage && (
-            <div
-              className={`rounded-xl border px-4 py-3 text-sm font-medium ${
-                statusMessage.type === "success"
-                  ? "border-green-200 bg-green-50 text-green-700 dark:border-green-500/30 dark:bg-green-900/20 dark:text-green-300"
-                  : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300"
-              }`}
-            >
-              {statusMessage.text}
+            <div className="max-h-64 overflow-y-auto">
+              <CartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
             </div>
-          )}
-
-          {/* Botón confirmar */}
-          <button
-            onClick={confirmSale}
-            disabled={cart.length === 0 || creditRequiresCustomer || isPending}
-            className={`w-full rounded-2xl px-6 py-4 text-lg font-bold text-white shadow-lg transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
-              !isOnline
-                ? "bg-amber-500 hover:bg-amber-400"
-                : "bg-violet-600 hover:bg-violet-500"
-            }`}
-          >
-            {isPending
-              ? "Procesando..."
-              : !isOnline
-                ? `Guardar sin conexión${cart.length > 0 ? ` · ${formatCOP(total)}` : ""}`
-                : `Confirmar venta${cart.length > 0 ? ` · ${formatCOP(total)}` : ""}`}
-          </button>
-
-          {/* Limpiar carrito con confirmación */}
-          {cart.length > 0 && (
-            <>
-              {showClearConfirm ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm dark:border-red-500/30 dark:bg-red-900/10">
-                  <p className="mb-2 font-medium text-red-700 dark:text-red-300">
-                    ¿Borrar el carrito? Se perderán los ítems actuales.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={clearCart}
-                      className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
-                    >
-                      Sí, limpiar
-                    </button>
-                    <button
-                      onClick={() => setShowClearConfirm(false)}
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowClearConfirm(true)}
-                  className="text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
-                >
-                  Limpiar carrito
-                </button>
-              )}
-            </>
-          )}
-
-          {/* Cámara al fondo: así el pedido acumulado queda siempre visible arriba mientras se escanea */}
-          {continuousScan ? (
-            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setContinuousScan(true)}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-sm font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
-            >
-              <Camera className="h-4 w-4" /> Activar escaneo continuo
-            </button>
-          )}
+            <div className="mt-3">
+              <TotalsAndPayment
+                cart={cart}
+                paymentMethod={paymentMethod}
+                onPaymentMethodChange={setPaymentMethod}
+                creditRequiresCustomer={creditRequiresCustomer}
+                receiptPath={receiptPath}
+                onReceiptPathChange={setReceiptPath}
+                subtotal={subtotal}
+                taxLines={taxLines}
+                total={total}
+                formatCOP={formatCOP}
+                statusMessage={statusMessage}
+                confirmButtonLabel={confirmButtonLabel}
+                onConfirm={confirmSale}
+                isPending={isPending}
+                isOnline={isOnline}
+                showClearConfirm={showClearConfirm}
+                onShowClearConfirm={setShowClearConfirm}
+                onClearCart={clearCart}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -30,7 +30,7 @@ function LoginForm() {
       setForm((prev) => ({ ...prev, [field]: event.target.value }));
     };
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setLoading(true);

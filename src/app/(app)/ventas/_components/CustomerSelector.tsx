@@ -16,7 +16,7 @@ type Props = {
   onChange: (customer: SelectedCustomer | null) => void;
 };
 
-const CONSUMIDOR_FINAL: SelectedCustomer = {
+export const CONSUMIDOR_FINAL: SelectedCustomer = {
   name: "Consumidor Final",
   document: "222222222",
 };
@@ -84,6 +84,10 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
     );
   }
 
+  const noResultsMessage = query
+    ? `Sin coincidencias para "${query}"`
+    : "Escribe para buscar por nombre o documento";
+
   return (
     <div ref={containerRef} className="relative">
       <input
@@ -144,13 +148,9 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
                 </li>
               ))}
             </ul>
-          ) : query ? (
-            <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-500">
-              Sin coincidencias para &quot;{query}&quot;
-            </p>
           ) : (
             <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-500">
-              Escribe para buscar por nombre o documento
+              {noResultsMessage}
             </p>
           )}
 

@@ -255,7 +255,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                             checked={grp.invoice}
                             onChange={(e) => setInvoice(grp.id, e.target.checked)}
                             className="h-3.5 w-3.5 cursor-pointer accent-violet-600"
-                          />
+                          />{" "}
                           Generar factura
                         </label>
                         {grp.paymentMethod === "TRANSFER" && (
@@ -307,7 +307,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                         checked={grp.invoice}
                         onChange={(e) => setInvoice(grp.id, e.target.checked)}
                         className="h-3.5 w-3.5 cursor-pointer accent-violet-600"
-                      />
+                      />{" "}
                       Factura
                     </label>
                     <button onClick={() => splitGroup(grp.id)} className="shrink-0 text-xs text-slate-500 hover:text-red-500">
@@ -363,6 +363,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
               type="checkbox"
               checked={keepGuests}
               onChange={(e) => setKeepGuests(e.target.checked)}
+              aria-label="Mantener clientes en mesa"
               className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-violet-600"
             />
             <div>

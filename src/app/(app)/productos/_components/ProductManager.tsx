@@ -4,7 +4,7 @@ import { Camera } from "lucide-react";
 import { type ChangeEvent, useState } from "react";
 import { toast } from "sonner";
 
-import { api } from "~/trpc/react";
+import { api, type RouterOutputs } from "~/trpc/react";
 import { parseZodError } from "~/lib/parseZodError";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 
@@ -579,7 +579,429 @@ function ProductFormFields({
   );
 }
 
+function ProductEditPanel({
+  formProps,
+  formError,
+  isPending,
+  onSubmit,
+  onCancel,
+}: Readonly<{
+  formProps: Parameters<typeof ProductFormFields>[0];
+  formError?: string | null;
+  isPending: boolean;
+  onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}>) {
+  return (
+    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
+      <form onSubmit={onSubmit} className="space-y-3">
+        <ProductFormFields {...formProps} />
+        {formError && (
+          <p className="text-xs text-red-600 dark:text-red-400">{formError}</p>
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="submit"
+            disabled={isPending}
+            className="min-h-11 rounded-lg bg-violet-600 px-3 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
+          >
+            {isPending ? "Guardando..." : "Guardar"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ProductPricePanel({
+  currentPrice,
+  priceForm,
+  onPriceChange,
+  onSubmit,
+  isPending,
+  errorMessage,
+  onCancel,
+}: Readonly<{
+  currentPrice: number;
+  priceForm: string;
+  onPriceChange: (value: string) => void;
+  onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void;
+  isPending: boolean;
+  errorMessage?: string;
+  onCancel: () => void;
+}>) {
+  return (
+    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
+      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+        El cambio quedará registrado con tu nombre y la hora exacta.
+      </p>
+      <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <label className="flex-1 space-y-1 text-sm sm:min-w-40">
+          <span className="text-slate-700 dark:text-slate-300">
+            Nuevo precio (COP)
+          </span>
+          <input
+            required
+            type="number"
+            min="1"
+            step="1"
+            value={priceForm}
+            onChange={(e) => onPriceChange(e.target.value)}
+            className={INPUT}
+            placeholder={String(currentPrice)}
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={isPending}
+            className="min-h-11 flex-1 rounded-lg bg-violet-600 px-3 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-60 sm:flex-none"
+          >
+            {isPending ? "Guardando..." : "Guardar precio"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+      {errorMessage && (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
+      )}
+    </div>
+  );
+}
+
+function ProductAdjustPanel({
+  adjustForm,
+  onQuantityChange,
+  onNoteChange,
+  onSubmit,
+  isPending,
+  errorMessage,
+  onCancel,
+}: Readonly<{
+  adjustForm: AdjustForm;
+  onQuantityChange: (value: string) => void;
+  onNoteChange: (value: string) => void;
+  onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void;
+  isPending: boolean;
+  errorMessage?: string;
+  onCancel: () => void;
+}>) {
+  return (
+    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
+      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+        Usa número positivo para agregar stock, negativo para reducirlo.
+        Este movimiento queda registrado con tu nombre en el historial.
+      </p>
+      <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <label className="flex-1 space-y-1 text-sm sm:min-w-32">
+          <span className="text-slate-700 dark:text-slate-300">
+            Cantidad (+/-)
+          </span>
+          <input
+            required
+            type="number"
+            value={adjustForm.quantity}
+            onChange={(e) => onQuantityChange(e.target.value)}
+            className={INPUT}
+            placeholder="Ej: 10 o -3"
+          />
+        </label>
+        <label className="space-y-1 text-sm sm:min-w-48 sm:flex-[2]">
+          <span className="text-slate-700 dark:text-slate-300">
+            Motivo <span className="text-slate-500">(opc.)</span>
+          </span>
+          <input
+            value={adjustForm.note}
+            onChange={(e) => onNoteChange(e.target.value)}
+            className={INPUT}
+            placeholder="Ej: Recepción de pedido"
+          />
+        </label>
+        <div className="flex gap-2 sm:items-end">
+          <button
+            type="submit"
+            disabled={isPending}
+            className="min-h-11 flex-1 rounded-lg bg-amber-500 px-3 text-sm font-medium text-white transition hover:bg-amber-400 disabled:opacity-60 sm:flex-none"
+          >
+            {isPending ? "Ajustando..." : "Aplicar ajuste"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+      {errorMessage && (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
+      )}
+    </div>
+  );
+}
+
+type ProductListItem = NonNullable<RouterOutputs["product"]["list"]>[number];
+
+function ProductBadges({ product }: Readonly<{ product: ProductListItem }>) {
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span
+        className={`inline-block rounded-full px-1.5 py-0.5 text-xs font-medium ${
+          product.isActive
+            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+            : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+        }`}
+      >
+        {product.isActive ? "Activo" : "Inactivo"}
+      </span>
+      {!product.trackStock && (
+        <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">
+          Sin control stock
+        </span>
+      )}
+      {product.openPrice && (
+        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+          Monto libre
+        </span>
+      )}
+      {product.soldByWeight && (
+        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+          Por peso
+        </span>
+      )}
+      {product.category && (
+        <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+          {product.category}
+        </span>
+      )}
+      <span className="text-xs text-slate-500 dark:text-slate-500">
+        {product.unit}
+      </span>
+    </div>
+  );
+}
+
+function ProductRowActions({
+  product,
+  userRole,
+  activeRow,
+  openRow,
+  setActive,
+}: Readonly<{
+  product: ProductListItem;
+  userRole: "OWNER" | "CASHIER";
+  activeRow: { id: string; mode: RowMode } | null;
+  openRow: (id: string, mode: RowMode, product?: ProductListItem) => void;
+  setActive: { mutate: (input: { productId: string; isActive: boolean }) => void; isPending: boolean };
+}>) {
+  const isRowMode = (mode: RowMode) => activeRow?.id === product.id && activeRow.mode === mode;
+  return (
+    <div className="col-span-12 flex flex-wrap gap-1.5 pt-1 sm:col-span-5 sm:justify-end sm:pt-0.5">
+      {/* OWNER: edición completa */}
+      {userRole === "OWNER" && (
+        <button
+          type="button"
+          onClick={() => openRow(product.id, "edit", product)}
+          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+            isRowMode("edit")
+              ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300"
+              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+          }`}
+        >
+          Editar
+        </button>
+      )}
+
+      {/* CASHIER: solo actualizar precio */}
+      {userRole === "CASHIER" && (
+        <button
+          type="button"
+          onClick={() => openRow(product.id, "price", product)}
+          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+            isRowMode("price")
+              ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300"
+              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+          }`}
+        >
+          Precio
+        </button>
+      )}
+
+      {/* Ajustar stock — ambos roles */}
+      {product.trackStock && (
+        <button
+          type="button"
+          onClick={() => openRow(product.id, "adjust")}
+          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+            isRowMode("adjust")
+              ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+          }`}
+        >
+          Ajustar
+        </button>
+      )}
+
+      {/* Historial — ambos roles */}
+      <button
+        type="button"
+        onClick={() => openRow(product.id, "history")}
+        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+          isRowMode("history")
+            ? "border-slate-400 bg-slate-100 text-slate-700 dark:border-white/30 dark:bg-white/15 dark:text-slate-200"
+            : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+        }`}
+      >
+        Historial
+      </button>
+
+      {/* Activar/Desactivar — solo OWNER */}
+      {userRole === "OWNER" && (
+        <button
+          type="button"
+          onClick={() => setActive.mutate({ productId: product.id, isActive: !product.isActive })}
+          disabled={setActive.isPending}
+          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+            product.isActive
+              ? "bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+              : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
+          }`}
+        >
+          {product.isActive ? "Desactivar" : "Activar"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 type RowMode = "view" | "edit" | "price" | "adjust" | "history";
+
+type MovementsQuery = { isLoading: boolean; isError: boolean; data: RouterOutputs["product"]["listMovements"] | undefined };
+type SalesQuery = { isLoading: boolean; isError: boolean; data: RouterOutputs["product"]["listProductSales"] | undefined };
+
+function MovementsHistory({ movementsQuery }: Readonly<{ movementsQuery: MovementsQuery }>) {
+  if (!movementsQuery.data || movementsQuery.data.length === 0) {
+    return <p className="text-xs text-slate-500 dark:text-slate-400">Sin movimientos registrados todavía.</p>;
+  }
+  return (
+    <ul className="space-y-0.5">
+      {movementsQuery.data.slice(0, 10).map((m, i) => (
+        <li
+          key={m.id}
+          className={`flex items-start justify-between gap-4 rounded px-2 py-1.5 text-xs ${
+            i % 2 === 0 ? "bg-slate-50 dark:bg-white/5" : "bg-white dark:bg-transparent"
+          }`}
+        >
+          <div className="min-w-0">
+            <span
+              className={`font-medium tabular-nums ${
+                m.quantity > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+              }`}
+            >
+              {m.quantity > 0 ? "+" : ""}
+              {m.quantity}
+            </span>
+            <span className="ml-2 text-slate-500 dark:text-slate-400">
+              {REASON_LABELS[m.reason] ?? m.reason}
+            </span>
+            {m.note && (
+              <span className="ml-1 text-slate-500 dark:text-slate-500">
+                — {m.note}
+              </span>
+            )}
+            <span className="ml-2 text-slate-500 dark:text-slate-500">
+              por {m.user.name ?? "sistema"}
+            </span>
+          </div>
+          <div className="shrink-0 text-right text-slate-500 dark:text-slate-500">
+            <p>Stock: {m.stockAfter}</p>
+            <p>{new Date(m.createdAt).toLocaleDateString("es-CO")}</p>
+            <p>
+              {new Date(m.createdAt).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SalesHistoryList({ salesQuery }: Readonly<{ salesQuery: SalesQuery }>) {
+  if (!salesQuery.data || salesQuery.data.length === 0) {
+    return <p className="text-xs text-slate-500 dark:text-slate-400">Sin ventas registradas todavía.</p>;
+  }
+  return (
+    <ul className="space-y-0.5">
+      {salesQuery.data.slice(0, 10).map((item, i) => (
+        <li
+          key={item.id}
+          className={`flex items-start justify-between gap-4 rounded px-2 py-1.5 text-xs ${
+            i % 2 === 0 ? "bg-slate-50 dark:bg-white/5" : "bg-white dark:bg-transparent"
+          }`}
+        >
+          <div className="min-w-0">
+            <span className="font-medium tabular-nums text-red-600 dark:text-red-400">
+              -{item.quantity}
+            </span>
+            <span className="ml-2 text-slate-500 dark:text-slate-400">
+              Venta
+            </span>
+            {item.sale.invoiceNumber && (
+              <span className="ml-1 text-slate-500 dark:text-slate-500">
+                — {item.sale.invoiceNumber}
+              </span>
+            )}
+            <span className="ml-2 text-slate-500 dark:text-slate-500">
+              por {item.sale.user.name ?? "sistema"}
+            </span>
+          </div>
+          <div className="shrink-0 text-right text-slate-500 dark:text-slate-500">
+            <p>${item.price.toLocaleString("es-CO")}</p>
+            <p>{new Date(item.sale.createdAt).toLocaleDateString("es-CO")}</p>
+            <p>
+              {new Date(item.sale.createdAt).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// Reemplaza la cadena de 5 ternarios anidados que había aquí (cargando / error / con-stock / sin-stock,
+// cada uno con su propio "vacío o lista") por una serie de retornos tempranos, mucho más legible.
+function ProductHistoryPanel({
+  trackStock,
+  movementsQuery,
+  salesQuery,
+}: Readonly<{ trackStock: boolean; movementsQuery: MovementsQuery; salesQuery: SalesQuery }>) {
+  const query = trackStock ? movementsQuery : salesQuery;
+
+  if (query.isLoading) {
+    return <p className="text-xs text-slate-500 dark:text-slate-400">Cargando historial...</p>;
+  }
+  if (query.isError) {
+    return <p className="text-xs text-red-500 dark:text-red-400">No se pudo cargar el historial. Intenta de nuevo.</p>;
+  }
+  if (trackStock) {
+    return <MovementsHistory movementsQuery={movementsQuery} />;
+  }
+  return <SalesHistoryList salesQuery={salesQuery} />;
+}
 
 export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CASHIER" }>) {
   const utils = api.useUtils();
@@ -744,12 +1166,15 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
 
   // "Monto libre" y "Se vende por peso" son mutuamente excluyentes — activar uno desactiva el otro.
   function makeExclusiveCheckHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
-    return (field: "openPrice" | "soldByWeight") => (e: ChangeEvent<HTMLInputElement>) =>
-      setter((prev) => ({
-        ...prev,
-        openPrice: field === "openPrice" ? e.target.checked : e.target.checked ? false : prev.openPrice,
-        soldByWeight: field === "soldByWeight" ? e.target.checked : e.target.checked ? false : prev.soldByWeight,
-      }));
+    return (field: "openPrice" | "soldByWeight") => (e: ChangeEvent<HTMLInputElement>) => {
+      const checked = e.target.checked;
+      setter((prev) => {
+        if (field === "openPrice") {
+          return { ...prev, openPrice: checked, soldByWeight: checked ? false : prev.soldByWeight };
+        }
+        return { ...prev, soldByWeight: checked, openPrice: checked ? false : prev.openPrice };
+      });
+    };
   }
 
   function makeToggleTaxSlotHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
@@ -857,6 +1282,15 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
   const createErrors = parseZodError(createProduct.error?.message ?? "");
   const updateErrors = parseZodError(updateProduct.error?.message ?? "");
 
+  let listStatusMessage: string | null = null;
+  if (loadingList) {
+    listStatusMessage = "Cargando productos...";
+  } else if (products?.length === 0) {
+    listStatusMessage = "No hay productos registrados todavía.";
+  } else if (filteredProducts?.length === 0) {
+    listStatusMessage = `Ningún producto coincide con "${search}".`;
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
@@ -936,16 +1370,8 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
         )}
 
         {/* Lista */}
-        {loadingList ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Cargando productos...</p>
-        ) : products?.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            No hay productos registrados todavía.
-          </p>
-        ) : filteredProducts?.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Ningún producto coincide con &quot;{search}&quot;.
-          </p>
+        {listStatusMessage ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">{listStatusMessage}</p>
         ) : (
           <>
             <div className="mb-1 hidden grid-cols-12 gap-2 px-1 text-xs font-medium text-slate-500 sm:grid dark:text-slate-400">
@@ -967,40 +1393,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                           {[product.brand, product.presentation].filter(Boolean).join(" · ")}
                         </p>
                       )}
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <span
-                          className={`inline-block rounded-full px-1.5 py-0.5 text-xs font-medium ${
-                            product.isActive
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
-                              : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                          }`}
-                        >
-                          {product.isActive ? "Activo" : "Inactivo"}
-                        </span>
-                        {!product.trackStock && (
-                          <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">
-                            Sin control stock
-                          </span>
-                        )}
-                        {product.openPrice && (
-                          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
-                            Monto libre
-                          </span>
-                        )}
-                        {product.soldByWeight && (
-                          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
-                            Por peso
-                          </span>
-                        )}
-                        {product.category && (
-                          <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
-                            {product.category}
-                          </span>
-                        )}
-                        <span className="text-xs text-slate-500 dark:text-slate-500">
-                          {product.unit}
-                        </span>
-                      </div>
+                      <ProductBadges product={product} />
                       {(product.lotNumber != null || product.expiresAt != null) && (
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                           {[
@@ -1026,349 +1419,74 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                     </p>
 
                     {/* Botones de acción — condicionados por rol */}
-                    <div className="col-span-12 flex flex-wrap gap-1.5 pt-1 sm:col-span-5 sm:justify-end sm:pt-0.5">
-                      {/* OWNER: edición completa */}
-                      {userRole === "OWNER" && (
-                        <button
-                          type="button"
-                          onClick={() => openRow(product.id, "edit", product)}
-                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-                            activeRow?.id === product.id && activeRow.mode === "edit"
-                              ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300"
-                              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-                          }`}
-                        >
-                          Editar
-                        </button>
-                      )}
-
-                      {/* CASHIER: solo actualizar precio */}
-                      {userRole === "CASHIER" && (
-                        <button
-                          type="button"
-                          onClick={() => openRow(product.id, "price", product)}
-                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-                            activeRow?.id === product.id && activeRow.mode === "price"
-                              ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300"
-                              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-                          }`}
-                        >
-                          Precio
-                        </button>
-                      )}
-
-                      {/* Ajustar stock — ambos roles */}
-                      {product.trackStock && (
-                        <button
-                          type="button"
-                          onClick={() => openRow(product.id, "adjust")}
-                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-                            activeRow?.id === product.id && activeRow.mode === "adjust"
-                              ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-                              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-                          }`}
-                        >
-                          Ajustar
-                        </button>
-                      )}
-
-                      {/* Historial — ambos roles */}
-                      <button
-                        type="button"
-                        onClick={() => openRow(product.id, "history")}
-                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-                          activeRow?.id === product.id && activeRow.mode === "history"
-                            ? "border-slate-400 bg-slate-100 text-slate-700 dark:border-white/30 dark:bg-white/15 dark:text-slate-200"
-                            : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-                        }`}
-                      >
-                        Historial
-                      </button>
-
-                      {/* Activar/Desactivar — solo OWNER */}
-                      {userRole === "OWNER" && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setActive.mutate({
-                              productId: product.id,
-                              isActive: !product.isActive,
-                            })
-                          }
-                          disabled={setActive.isPending}
-                          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                            product.isActive
-                              ? "bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
-                              : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
-                          }`}
-                        >
-                          {product.isActive ? "Desactivar" : "Activar"}
-                        </button>
-                      )}
-                    </div>
+                    <ProductRowActions
+                      product={product}
+                      userRole={userRole}
+                      activeRow={activeRow}
+                      openRow={openRow}
+                      setActive={setActive}
+                    />
                   </div>
 
                   {/* Panel: Editar completo (solo OWNER) */}
                   {activeRow?.id === product.id && activeRow.mode === "edit" && (
-                    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
-                      <form onSubmit={handleUpdate} className="space-y-3">
-                        <ProductFormFields
-                          form={editForm}
-                          onChange={makeChangeHandler(setEditForm)}
-                          onCheckChange={makeCheckHandler(setEditForm)}
-                          onSelectChange={makeSelectHandler(setEditForm)}
-                          onToggleTaxSlot={makeToggleTaxSlotHandler(setEditForm)}
-                          onBarcodeScanned={(code) => setEditForm((p) => ({ ...p, barcode: code }))}
-                          onExclusiveCheckChange={makeExclusiveCheckHandler(setEditForm)}
-                          fieldErrors={updateErrors.fieldErrors}
-                          categories={categories}
-                          businessTaxes={businessTaxes}
-                          produceModuleEnabled={settings?.produceModuleEnabled ?? false}
-                          onApplyCalculator={(price, cost, taxSlots) =>
-                            setEditForm((p) => ({
-                              ...p,
-                              price: String(price),
-                              cost: String(cost),
-                              taxSlots,
-                            }))
-                          }
-                        />
-                        {updateErrors.formError && (
-                          <p className="text-xs text-red-600 dark:text-red-400">
-                            {updateErrors.formError}
-                          </p>
-                        )}
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <button
-                            type="submit"
-                            disabled={updateProduct.isPending}
-                            className="min-h-11 rounded-lg bg-violet-600 px-3 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
-                          >
-                            {updateProduct.isPending ? "Guardando..." : "Guardar"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={closeRow}
-                            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </form>
-                    </div>
+                    <ProductEditPanel
+                      formProps={{
+                        form: editForm,
+                        onChange: makeChangeHandler(setEditForm),
+                        onCheckChange: makeCheckHandler(setEditForm),
+                        onSelectChange: makeSelectHandler(setEditForm),
+                        onToggleTaxSlot: makeToggleTaxSlotHandler(setEditForm),
+                        onBarcodeScanned: (code) => setEditForm((p) => ({ ...p, barcode: code })),
+                        onExclusiveCheckChange: makeExclusiveCheckHandler(setEditForm),
+                        fieldErrors: updateErrors.fieldErrors,
+                        categories,
+                        businessTaxes,
+                        produceModuleEnabled: settings?.produceModuleEnabled ?? false,
+                        onApplyCalculator: (price, cost, taxSlots) =>
+                          setEditForm((p) => ({ ...p, price: String(price), cost: String(cost), taxSlots })),
+                      }}
+                      formError={updateErrors.formError}
+                      isPending={updateProduct.isPending}
+                      onSubmit={handleUpdate}
+                      onCancel={closeRow}
+                    />
                   )}
 
                   {/* Panel: Actualizar precio (CASHIER y OWNER si quiere) */}
                   {activeRow?.id === product.id && activeRow.mode === "price" && (
-                    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
-                      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-                        El cambio quedará registrado con tu nombre y la hora exacta.
-                      </p>
-                      <form onSubmit={handleUpdatePrice} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-                        <label className="flex-1 space-y-1 text-sm sm:min-w-40">
-                          <span className="text-slate-700 dark:text-slate-300">
-                            Nuevo precio (COP)
-                          </span>
-                          <input
-                            required
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={priceForm}
-                            onChange={(e) => setPriceForm(e.target.value)}
-                            className={INPUT}
-                            placeholder={String(product.price)}
-                          />
-                        </label>
-                        <div className="flex gap-2">
-                          <button
-                            type="submit"
-                            disabled={updatePrice.isPending}
-                            className="min-h-11 flex-1 rounded-lg bg-violet-600 px-3 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-60 sm:flex-none"
-                          >
-                            {updatePrice.isPending ? "Guardando..." : "Guardar precio"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={closeRow}
-                            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </form>
-                      {updatePrice.error && (
-                        <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                          {updatePrice.error.message}
-                        </p>
-                      )}
-                    </div>
+                    <ProductPricePanel
+                      currentPrice={product.price}
+                      priceForm={priceForm}
+                      onPriceChange={setPriceForm}
+                      onSubmit={handleUpdatePrice}
+                      isPending={updatePrice.isPending}
+                      errorMessage={updatePrice.error?.message}
+                      onCancel={closeRow}
+                    />
                   )}
 
                   {/* Panel: Ajustar stock (ambos roles) */}
                   {activeRow?.id === product.id && activeRow.mode === "adjust" && (
-                    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
-                      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-                        Usa número positivo para agregar stock, negativo para reducirlo.
-                        Este movimiento queda registrado con tu nombre en el historial.
-                      </p>
-                      <form onSubmit={handleAdjust} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                        <label className="flex-1 space-y-1 text-sm sm:min-w-32">
-                          <span className="text-slate-700 dark:text-slate-300">
-                            Cantidad (+/-)
-                          </span>
-                          <input
-                            required
-                            type="number"
-                            value={adjustForm.quantity}
-                            onChange={(e) =>
-                              setAdjustForm((p) => ({ ...p, quantity: e.target.value }))
-                            }
-                            className={INPUT}
-                            placeholder="Ej: 10 o -3"
-                          />
-                        </label>
-                        <label className="space-y-1 text-sm sm:min-w-48 sm:flex-[2]">
-                          <span className="text-slate-700 dark:text-slate-300">
-                            Motivo <span className="text-slate-500">(opc.)</span>
-                          </span>
-                          <input
-                            value={adjustForm.note}
-                            onChange={(e) =>
-                              setAdjustForm((p) => ({ ...p, note: e.target.value }))
-                            }
-                            className={INPUT}
-                            placeholder="Ej: Recepción de pedido"
-                          />
-                        </label>
-                        <div className="flex gap-2 sm:items-end">
-                          <button
-                            type="submit"
-                            disabled={adjustStock.isPending}
-                            className="min-h-11 flex-1 rounded-lg bg-amber-500 px-3 text-sm font-medium text-white transition hover:bg-amber-400 disabled:opacity-60 sm:flex-none"
-                          >
-                            {adjustStock.isPending ? "Ajustando..." : "Aplicar ajuste"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={closeRow}
-                            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </form>
-                      {adjustStock.error && (
-                        <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                          {adjustStock.error.message}
-                        </p>
-                      )}
-                    </div>
+                    <ProductAdjustPanel
+                      adjustForm={adjustForm}
+                      onQuantityChange={(value) => setAdjustForm((p) => ({ ...p, quantity: value }))}
+                      onNoteChange={(value) => setAdjustForm((p) => ({ ...p, note: value }))}
+                      onSubmit={handleAdjust}
+                      isPending={adjustStock.isPending}
+                      errorMessage={adjustStock.error?.message}
+                      onCancel={closeRow}
+                    />
                   )}
 
                   {/* Panel: Historial (movimientos para tracked, ventas para no-tracked) */}
                   {activeRow?.id === product.id && activeRow.mode === "history" && (
                     <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
-                      {(product.trackStock ? movementsQuery : salesQuery).isLoading ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Cargando historial...
-                        </p>
-                      ) : (product.trackStock ? movementsQuery : salesQuery).isError ? (
-                        <p className="text-xs text-red-500 dark:text-red-400">
-                          No se pudo cargar el historial. Intenta de nuevo.
-                        </p>
-                      ) : product.trackStock ? (
-                        movementsQuery.data?.length === 0 ? (
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Sin movimientos registrados todavía.
-                          </p>
-                        ) : (
-                          <ul className="space-y-0.5">
-                            {movementsQuery.data?.slice(0, 10).map((m, i) => (
-                              <li
-                                key={m.id}
-                                className={`flex items-start justify-between gap-4 rounded px-2 py-1.5 text-xs ${
-                                  i % 2 === 0
-                                    ? "bg-slate-50 dark:bg-white/5"
-                                    : "bg-white dark:bg-transparent"
-                                }`}
-                              >
-                                <div className="min-w-0">
-                                  <span
-                                    className={`font-medium tabular-nums ${
-                                      m.quantity > 0
-                                        ? "text-emerald-600 dark:text-emerald-400"
-                                        : "text-red-600 dark:text-red-400"
-                                    }`}
-                                  >
-                                    {m.quantity > 0 ? "+" : ""}
-                                    {m.quantity}
-                                  </span>
-                                  <span className="ml-2 text-slate-500 dark:text-slate-400">
-                                    {REASON_LABELS[m.reason] ?? m.reason}
-                                  </span>
-                                  {m.note && (
-                                    <span className="ml-1 text-slate-500 dark:text-slate-500">
-                                      — {m.note}
-                                    </span>
-                                  )}
-                                  <span className="ml-2 text-slate-500 dark:text-slate-500">
-                                    por {m.user.name ?? "sistema"}
-                                  </span>
-                                </div>
-                                <div className="shrink-0 text-right text-slate-500 dark:text-slate-500">
-                                  <p>Stock: {m.stockAfter}</p>
-                                  <p>{new Date(m.createdAt).toLocaleDateString("es-CO")}</p>
-                                  <p>
-                                    {new Date(m.createdAt).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
-                                  </p>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        )
-                      ) : salesQuery.data?.length === 0 ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Sin ventas registradas todavía.
-                        </p>
-                      ) : (
-                        <ul className="space-y-0.5">
-                          {salesQuery.data?.slice(0, 10).map((item, i) => (
-                            <li
-                              key={item.id}
-                              className={`flex items-start justify-between gap-4 rounded px-2 py-1.5 text-xs ${
-                                i % 2 === 0
-                                  ? "bg-slate-50 dark:bg-white/5"
-                                  : "bg-white dark:bg-transparent"
-                              }`}
-                            >
-                              <div className="min-w-0">
-                                <span className="font-medium tabular-nums text-red-600 dark:text-red-400">
-                                  -{item.quantity}
-                                </span>
-                                <span className="ml-2 text-slate-500 dark:text-slate-400">
-                                  Venta
-                                </span>
-                                {item.sale.invoiceNumber && (
-                                  <span className="ml-1 text-slate-500 dark:text-slate-500">
-                                    — {item.sale.invoiceNumber}
-                                  </span>
-                                )}
-                                <span className="ml-2 text-slate-500 dark:text-slate-500">
-                                  por {item.sale.user.name ?? "sistema"}
-                                </span>
-                              </div>
-                              <div className="shrink-0 text-right text-slate-500 dark:text-slate-500">
-                                <p>${item.price.toLocaleString("es-CO")}</p>
-                                <p>{new Date(item.sale.createdAt).toLocaleDateString("es-CO")}</p>
-                                <p>
-                                  {new Date(item.sale.createdAt).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
-                                </p>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      <ProductHistoryPanel
+                        trackStock={product.trackStock}
+                        movementsQuery={movementsQuery}
+                        salesQuery={salesQuery}
+                      />
                     </div>
                   )}
                 </li>

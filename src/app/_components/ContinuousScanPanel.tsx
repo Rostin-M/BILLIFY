@@ -32,7 +32,7 @@ export function ContinuousScanPanel({ onScan, onClose }: Readonly<Props>) {
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-75" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-500" />
-          </span>
+          </span>{" "}
           Escaneo continuo
         </p>
         <button

@@ -5,6 +5,13 @@ import { z } from "zod";
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { assertCashRegisterNotStale } from "~/server/lib/cashRegisterGuard";
 
+// Entradas suman al saldo, salidas restan; cualquier otro tipo de movimiento no afecta el saldo.
+function signedMovementAmount(m: { type: string; amount: number }): number {
+  if (m.type === "INCOME") return m.amount;
+  if (m.type === "EXPENSE") return -m.amount;
+  return 0;
+}
+
 /**
  * Ventas anuladas, ventas a crédito y abonos registrados dentro de la jornada
  * de una caja — para el reporte de cierre y la vista en curso, así el dueño
@@ -304,7 +311,7 @@ export const cashRegisterRouter = createTRPCRouter({
         });
         const cashSalesTotal = cashSalesAgg._sum.total ?? 0;
         const manualBalance = register.movements.reduce(
-          (sum, m) => sum + (m.type === "INCOME" ? m.amount : m.type === "EXPENSE" ? -m.amount : 0),
+          (sum, m) => sum + signedMovementAmount(m),
           0,
         );
         const currentBalance = register.openingBalance + cashSalesTotal + manualBalance;
@@ -430,7 +437,7 @@ export const cashRegisterRouter = createTRPCRouter({
       const cashSalesCount = cashSalesAgg._count;
 
       const manualBalance = register.movements.reduce(
-        (sum, m) => sum + (m.type === "INCOME" ? m.amount : m.type === "EXPENSE" ? -m.amount : 0),
+        (sum, m) => sum + signedMovementAmount(m),
         0,
       );
 

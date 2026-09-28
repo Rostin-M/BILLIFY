@@ -51,7 +51,7 @@ export function EmployeeManager() {
       setForm((prev) => ({ ...prev, [field]: event.target.value }));
     };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     createEmployee.mutate(form);
   };

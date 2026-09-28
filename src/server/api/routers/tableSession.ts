@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter } from "~/server/api/trpc";
@@ -8,9 +9,159 @@ import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 import { resolveSaleItem } from "~/server/lib/resolveSaleItem";
 
 const PAYMENT_METHODS = ["CASH", "CARD", "CREDIT", "TRANSFER"] as const;
+type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 function generateInvoiceNumber(year: number, sequence: number): string {
   return `F-${year}-${String(sequence).padStart(5, "0")}`;
+}
+
+type CheckoutTaxLine = { name: string; rate: number; amount: number };
+type CheckoutOrderItem = { productId: string; name: string; unit: string; price: number; quantity: number; subtotal: number };
+type CheckoutOrder = { subtotal: number; taxAmount: number; taxLines: unknown; total: number; items: CheckoutOrderItem[] };
+type CheckoutGuest = { id: string; name: string; customerId: string | null; orders: CheckoutOrder[] };
+type CheckoutGroupInput = {
+  guestIds: string[];
+  paymentMethod: PaymentMethod;
+  note?: string;
+  invoice: boolean;
+  receiptPath?: string;
+};
+
+// Las ventas a crédito deben quedar asociadas a un único cliente registrado,
+// igual que en sale.create — de lo contrario la deuda no queda rastreable.
+function assertValidCreditGroups(groups: CheckoutGroupInput[], guestMap: Map<string, CheckoutGuest>) {
+  for (const group of groups) {
+    if (group.paymentMethod !== "CREDIT") continue;
+    const customerIds = new Set(
+      group.guestIds.map((id) => guestMap.get(id)!.customerId).filter((id): id is string => !!id),
+    );
+    if (customerIds.size === 0) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Las ventas a crédito requieren un cliente registrado. Identifica al cliente en la mesa antes de cobrar a crédito.",
+      });
+    }
+    if (customerIds.size > 1 || customerIds.size !== group.guestIds.length) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Todos los clientes del grupo a crédito deben ser el mismo cliente registrado.",
+      });
+    }
+  }
+}
+
+// Vuelca los ítems y las líneas de impuesto de una ronda dentro de los acumulados del grupo
+// de pago. Devuelve el subtotal de la ronda para que el llamador lo sume.
+function accumulateOrderIntoGroup(
+  order: CheckoutOrder,
+  itemsMap: Map<string, CheckoutOrderItem>,
+  taxLinesMap: Map<string, CheckoutTaxLine>,
+): number {
+  for (const item of order.items) {
+    const ex = itemsMap.get(item.productId);
+    if (ex) { ex.quantity += item.quantity; ex.subtotal += item.subtotal; }
+    else itemsMap.set(item.productId, { ...item });
+  }
+  if (Array.isArray(order.taxLines)) {
+    for (const line of order.taxLines as CheckoutTaxLine[]) {
+      const key = `${line.name}|${line.rate}`;
+      const ex = taxLinesMap.get(key);
+      if (ex) ex.amount += line.amount; else taxLinesMap.set(key, { ...line });
+    }
+  }
+  return order.subtotal;
+}
+
+// Suma las rondas de todos los clientes de un grupo de pago en una sola línea de ítems
+// agregados y un solo desglose de impuestos combinado.
+function aggregateGroupOrders(group: CheckoutGroupInput, guestMap: Map<string, CheckoutGuest>) {
+  const itemsMap = new Map<string, CheckoutOrderItem>();
+  const taxLinesMap = new Map<string, CheckoutTaxLine>();
+  let groupSubtotal = 0;
+
+  for (const guestId of group.guestIds) {
+    for (const order of guestMap.get(guestId)!.orders) {
+      groupSubtotal += accumulateOrderIntoGroup(order, itemsMap, taxLinesMap);
+    }
+  }
+
+  const taxLines = Array.from(taxLinesMap.values());
+  const groupTaxAmount = taxLines.reduce((s, t) => s + t.amount, 0);
+  return { itemsMap, groupSubtotal, taxLines, groupTaxAmount, groupTotal: groupSubtotal + groupTaxAmount };
+}
+
+// Crea la venta de un grupo de pago (si tiene algo que cobrar) y libera a sus clientes de la mesa.
+// Devuelve la venta creada, o null si el grupo no tenía nada que cobrar.
+async function processCheckoutGroup(params: {
+  tx: Prisma.TransactionClient;
+  businessId: string;
+  userId: string;
+  sessionId: string;
+  sessionName: string;
+  group: CheckoutGroupInput;
+  guestMap: Map<string, CheckoutGuest>;
+  keepGuests: boolean;
+  salesSoFar: number;
+}) {
+  const { tx, businessId, userId, sessionId, sessionName, group, guestMap, keepGuests, salesSoFar } = params;
+  const { itemsMap, groupSubtotal, taxLines, groupTaxAmount, groupTotal } = aggregateGroupOrders(group, guestMap);
+
+  let sale: { id: string; invoiceNumber: string | null; total: number } | null = null;
+
+  if (groupTotal > 0 && itemsMap.size > 0) {
+    // Por defecto no se genera factura (solo un cobro normal) — el cajero la activa
+    // explícitamente por grupo de pago cuando el cliente la pide.
+    let invoiceNumber: string | null = null;
+    if (group.invoice) {
+      const year = new Date().getFullYear();
+      const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
+      // Shared consecutive counter: counts ALL invoices (mesa + facturadas) for this business/year
+      const invoiceCount = await tx.sale.count({
+        where: { businessId, invoiceNumber: { not: null }, createdAt: { gte: yearStart } },
+      });
+      invoiceNumber = generateInvoiceNumber(year, invoiceCount + salesSoFar + 1);
+    }
+
+    const firstWithCustomer = group.guestIds.map((id) => guestMap.get(id)!).find((g) => g.customerId);
+    const guestNames = group.guestIds.map((id) => guestMap.get(id)!.name).join(", ");
+    const rawNote = group.note?.trim();
+    const noteText = rawNote !== undefined && rawNote.length > 0 ? rawNote : `Mesa: ${sessionName} · ${guestNames}`;
+
+    sale = await tx.sale.create({
+      data: {
+        businessId, userId,
+        customerId: firstWithCustomer?.customerId ?? null,
+        saleType: "TABLE",
+        invoiceNumber,
+        paymentMethod: group.paymentMethod,
+        subtotal: groupSubtotal, taxAmount: groupTaxAmount,
+        taxLines: taxLines.length > 0 ? taxLines : undefined,
+        total: groupTotal,
+        note: noteText,
+        receiptPath: group.paymentMethod === "TRANSFER" ? (group.receiptPath ?? null) : null,
+        tableSessionId: sessionId,
+        items: { create: Array.from(itemsMap.values()) },
+      },
+      select: { id: true, invoiceNumber: true, total: true },
+    });
+
+    await tx.auditLog.create({
+      data: { businessId, userId, action: "CREATE_SALE", entityType: "Sale", entityId: sale.id, detail: { saleType: "TABLE", tableSessionId: sessionId, invoiceNumber, total: groupTotal, paymentMethod: group.paymentMethod, keepGuests } },
+    });
+  }
+
+  // Clear paid guests: remove their orders (cascade to items).
+  // With keepGuests: keep the guest record so they can order again.
+  // Without keepGuests: delete the guest entirely (cascade deletes orders).
+  for (const guestId of group.guestIds) {
+    if (keepGuests) {
+      await tx.tableOrder.deleteMany({ where: { tableGuestId: guestId } });
+    } else {
+      await tx.tableGuest.delete({ where: { id: guestId } });
+    }
+  }
+
+  return sale;
 }
 
 export const tableSessionRouter = createTRPCRouter({
@@ -360,118 +511,19 @@ export const tableSessionRouter = createTRPCRouter({
       }
 
       const guestMap = new Map(session.guests.map((g) => [g.id, g]));
-
-      // Las ventas a crédito deben quedar asociadas a un único cliente registrado,
-      // igual que en sale.create — de lo contrario la deuda no queda rastreable.
-      for (const group of input.groups) {
-        if (group.paymentMethod !== "CREDIT") continue;
-        const customerIds = new Set(
-          group.guestIds.map((id) => guestMap.get(id)!.customerId).filter((id): id is string => !!id),
-        );
-        if (customerIds.size === 0) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Las ventas a crédito requieren un cliente registrado. Identifica al cliente en la mesa antes de cobrar a crédito.",
-          });
-        }
-        if (customerIds.size > 1 || customerIds.size !== group.guestIds.length) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Todos los clientes del grupo a crédito deben ser el mismo cliente registrado.",
-          });
-        }
-      }
+      assertValidCreditGroups(input.groups, guestMap);
 
       const result = await ctx.db.$transaction(async (tx) => {
         const sales: { id: string; invoiceNumber: string | null; total: number }[] = [];
 
         for (const group of input.groups) {
-          type ItemAgg = { productId: string; name: string; unit: string; price: number; quantity: number; subtotal: number };
-          const itemsMap = new Map<string, ItemAgg>();
-          let groupSubtotal = 0;
-
-          for (const guestId of group.guestIds) {
-            for (const order of guestMap.get(guestId)!.orders) {
-              groupSubtotal += order.subtotal;
-              for (const item of order.items) {
-                const ex = itemsMap.get(item.productId);
-                if (ex) { ex.quantity += item.quantity; ex.subtotal += item.subtotal; }
-                else itemsMap.set(item.productId, { ...item });
-              }
-            }
-          }
-
-          type TaxLine = { name: string; rate: number; amount: number };
-          const taxLinesMap = new Map<string, TaxLine>();
-          for (const guestId of group.guestIds) {
-            for (const order of guestMap.get(guestId)!.orders) {
-              if (Array.isArray(order.taxLines)) {
-                for (const line of order.taxLines as TaxLine[]) {
-                  const key = `${line.name}|${line.rate}`;
-                  const ex = taxLinesMap.get(key);
-                  if (ex) ex.amount += line.amount; else taxLinesMap.set(key, { ...line });
-                }
-              }
-            }
-          }
-          const taxLines = Array.from(taxLinesMap.values());
-          const groupTaxAmount = taxLines.reduce((s, t) => s + t.amount, 0);
-          const groupTotal = groupSubtotal + groupTaxAmount;
-
-          if (groupTotal > 0 && itemsMap.size > 0) {
-            // Por defecto no se genera factura (solo un cobro normal) — el cajero la activa
-            // explícitamente por grupo de pago cuando el cliente la pide.
-            let invoiceNumber: string | null = null;
-            if (group.invoice) {
-              const year = new Date().getFullYear();
-              const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
-              // Shared consecutive counter: counts ALL invoices (mesa + facturadas) for this business/year
-              const invoiceCount = await tx.sale.count({
-                where: { businessId, invoiceNumber: { not: null }, createdAt: { gte: yearStart } },
-              });
-              invoiceNumber = generateInvoiceNumber(year, invoiceCount + sales.length + 1);
-            }
-
-            const firstWithCustomer = group.guestIds.map((id) => guestMap.get(id)!).find((g) => g.customerId);
-            const guestNames = group.guestIds.map((id) => guestMap.get(id)!.name).join(", ");
-            const rawNote = group.note?.trim();
-            const noteText = rawNote !== undefined && rawNote.length > 0 ? rawNote : `Mesa: ${session.name} · ${guestNames}`;
-
-            const sale = await tx.sale.create({
-              data: {
-                businessId, userId,
-                customerId: firstWithCustomer?.customerId ?? null,
-                saleType: "TABLE",
-                invoiceNumber,
-                paymentMethod: group.paymentMethod,
-                subtotal: groupSubtotal, taxAmount: groupTaxAmount,
-                taxLines: taxLines.length > 0 ? taxLines : undefined,
-                total: groupTotal,
-                note: noteText,
-                receiptPath: group.paymentMethod === "TRANSFER" ? (group.receiptPath ?? null) : null,
-                tableSessionId: input.sessionId,
-                items: { create: Array.from(itemsMap.values()) },
-              },
-              select: { id: true, invoiceNumber: true, total: true },
-            });
-
-            await tx.auditLog.create({
-              data: { businessId, userId, action: "CREATE_SALE", entityType: "Sale", entityId: sale.id, detail: { saleType: "TABLE", tableSessionId: input.sessionId, invoiceNumber, total: groupTotal, paymentMethod: group.paymentMethod, keepGuests: input.keepGuests } },
-            });
-
-            sales.push(sale);
-          }
-
-          // Clear paid guests: remove their orders (cascade to items).
-          // With keepGuests: keep the guest record so they can order again.
-          // Without keepGuests: delete the guest entirely (cascade deletes orders).
-          for (const guestId of group.guestIds) {
-            if (input.keepGuests) {
-              await tx.tableOrder.deleteMany({ where: { tableGuestId: guestId } });
-            } else {
-              await tx.tableGuest.delete({ where: { id: guestId } });
-            }
-          }
+          const sale = await processCheckoutGroup({
+            tx, businessId, userId,
+            sessionId: input.sessionId, sessionName: session.name,
+            group, guestMap, keepGuests: input.keepGuests,
+            salesSoFar: sales.length,
+          });
+          if (sale) sales.push(sale);
         }
 
         let tableClosed = false;
@@ -486,11 +538,14 @@ export const tableSessionRouter = createTRPCRouter({
         return { sales, tableClosed };
       }, { timeout: 60000, maxWait: 20000 });
 
-      const verb = result.tableClosed
-        ? `Mesa "${session.name}" cerrada.`
-        : input.keepGuests
-          ? "Cobro registrado. Los clientes permanecen en mesa."
-          : "Cobro parcial registrado.";
+      let verb: string;
+      if (result.tableClosed) {
+        verb = `Mesa "${session.name}" cerrada.`;
+      } else if (input.keepGuests) {
+        verb = "Cobro registrado. Los clientes permanecen en mesa.";
+      } else {
+        verb = "Cobro parcial registrado.";
+      }
       return { message: `${verb} ${result.sales.length} venta(s) generada(s).`, sales: result.sales, tableClosed: result.tableClosed };
     }),
 

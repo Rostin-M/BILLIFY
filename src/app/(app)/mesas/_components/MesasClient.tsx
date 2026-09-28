@@ -59,7 +59,7 @@ export function MesasClient({ business }: Readonly<Props>) {
     },
   });
 
-  function handleCreate(e: React.FormEvent) {
+  function handleCreate(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     const name = newName.trim() || suggestedName;
     createSession.mutate({ name });
@@ -73,6 +73,11 @@ export function MesasClient({ business }: Readonly<Props>) {
   if (isLoading) {
     return <p className="text-center text-sm text-slate-500 dark:text-slate-500 py-10">Cargando mesas...</p>;
   }
+
+  const tablePlural = sessions.length !== 1 ? "s" : "";
+  const sessionsLabel = sessions.length === 0
+    ? "No hay mesas abiertas"
+    : `${sessions.length} mesa${tablePlural} abierta${tablePlural}`;
 
   return (
     <div className="space-y-4">
@@ -105,7 +110,7 @@ export function MesasClient({ business }: Readonly<Props>) {
       ) : (
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {sessions.length === 0 ? "No hay mesas abiertas" : `${sessions.length} mesa${sessions.length !== 1 ? "s" : ""} abierta${sessions.length !== 1 ? "s" : ""}`}
+            {sessionsLabel}
           </p>
           <button
             onClick={openCreate}

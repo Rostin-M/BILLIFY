@@ -15,6 +15,11 @@ type Props = {
 export function OfflineBanner({ isOnline, pendingCount, isSyncing, syncErrors, onManualSync }: Readonly<Props>) {
   if (isOnline && pendingCount === 0 && syncErrors.length === 0) return null;
 
+  const pendingWord = pendingCount === 1 ? "venta pendiente" : "ventas pendientes";
+  const pendingLabel = isSyncing
+    ? "Sincronizando ventas..."
+    : `${pendingCount} ${pendingWord} de sincronización`;
+
   return (
     <div className="mb-4 space-y-2">
       {/* Sin conexión */}
@@ -42,9 +47,7 @@ export function OfflineBanner({ isOnline, pendingCount, isSyncing, syncErrors, o
           )}
           <div className="flex-1">
             <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-              {isSyncing
-                ? "Sincronizando ventas..."
-                : `${pendingCount} ${pendingCount === 1 ? "venta pendiente" : "ventas pendientes"} de sincronización`}
+              {pendingLabel}
             </p>
             {!isSyncing && isOnline && (
               <p className="text-xs text-blue-600 dark:text-blue-400">

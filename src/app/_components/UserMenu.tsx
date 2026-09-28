@@ -57,7 +57,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
     changePassword.reset();
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (mismatch) return;
     changePassword.mutate({ currentPassword: current, newPassword: next });

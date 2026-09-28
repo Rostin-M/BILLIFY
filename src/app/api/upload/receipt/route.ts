@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "~/server/auth";
 import { createSupabaseServiceClient, RECEIPTS_BUCKET } from "~/lib/supabase-server";
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ext = EXT_BY_TYPE[file.type] ?? "jpg";
-  const path = `${businessId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const path = `${businessId}/${Date.now()}-${randomUUID()}.${ext}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const { error: uploadError } = await supabase.storage

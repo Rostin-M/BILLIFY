@@ -112,7 +112,7 @@ export default function RegisterPage() {
               <span className="font-semibold text-slate-700 dark:text-slate-200">
                 {registeredEmail}
               </span>
-              . Ingresa el código para activar tu cuenta.
+              {". Ingresa el código para activar tu cuenta."}
             </p>
           </header>
 

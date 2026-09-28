@@ -12,7 +12,7 @@ export function CashOpenForm() {
     onSuccess: () => utils.cashRegister.getActive.invalidate(),
   });
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     const amount = Number.parseFloat(openingBalance);
     if (Number.isNaN(amount) || amount < 0) return;

@@ -39,7 +39,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
     setForm({ name: "", description: "", document: "", phone: "" });
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     addGuest.mutate({
       sessionId,

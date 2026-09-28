@@ -1,12 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Camera, CheckCircle2 } from "lucide-react";
+import { Camera, CheckCircle2, ScanLine } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import type { BusinessInfoForPdf, SaleForPdf } from "~/lib/pdf/FacturaPDF";
-import { CustomerSelector } from "./CustomerSelector";
+import { CustomerSelector, CONSUMIDOR_FINAL } from "./CustomerSelector";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
 import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig } from "~/lib/pricing";
@@ -60,6 +60,336 @@ function loadLS<T>(key: string, fallback: T): T {
   }
 }
 
+function tileClassName(outOfStock: boolean, inCart: boolean): string {
+  if (outOfStock) return "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50 dark:border-white/5 dark:bg-white/5";
+  if (inCart) return "border-violet-300 bg-violet-50 shadow-sm dark:border-violet-500/50 dark:bg-violet-900/20";
+  return "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/50 dark:border-white/10 dark:bg-white/5 dark:hover:border-violet-500/30 dark:hover:bg-violet-900/10";
+}
+
+function stockLabel(p: Product, outOfStock: boolean): string {
+  if (outOfStock) return "Sin stock";
+  if (p.trackStock) return `${p.stock} disp.`;
+  return "∞ disp.";
+}
+
+function ScanControls({
+  search,
+  onSearchChange,
+  onSingleScan,
+  continuousScan,
+  onToggleContinuousScan,
+}: Readonly<{
+  search: string;
+  onSearchChange: (v: string) => void;
+  onSingleScan: () => void;
+  continuousScan: boolean;
+  onToggleContinuousScan: () => void;
+}>) {
+  return (
+    <div className="flex gap-2">
+      <input
+        type="search"
+        placeholder="Buscar producto..."
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
+      />
+      <button
+        type="button"
+        onClick={onSingleScan}
+        aria-label="Escanear código de barras"
+        className="shrink-0 rounded-xl border border-violet-300 bg-white px-3.5 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
+      >
+        <Camera className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        onClick={onToggleContinuousScan}
+        aria-label={continuousScan ? "Detener escaneo continuo" : "Activar escaneo continuo"}
+        title={continuousScan ? "Detener escaneo continuo" : "Activar escaneo continuo"}
+        className={`shrink-0 rounded-xl border px-3.5 py-3 text-base font-semibold shadow-sm transition ${
+          continuousScan
+            ? "border-violet-500 bg-violet-600 text-white hover:bg-violet-500"
+            : "border-violet-300 bg-white text-violet-700 hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
+        }`}
+      >
+        <ScanLine className="h-5 w-5" />
+      </button>
+    </div>
+  );
+}
+
+function InvoiceProductGrid({
+  statusMessage,
+  filteredProducts,
+  cart,
+  onAdd,
+  formatCOP,
+}: Readonly<{
+  statusMessage: string | null;
+  filteredProducts: Product[];
+  cart: CartItem[];
+  onAdd: (p: Product) => void;
+  formatCOP: (v: number) => string;
+}>) {
+  if (statusMessage) {
+    return <p className="text-center text-slate-500 dark:text-slate-500">{statusMessage}</p>;
+  }
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+      {filteredProducts.map((p) => {
+        const inCart = cart.find((i) => i.productId === p.id);
+        const outOfStock = p.trackStock && p.stock === 0;
+        return (
+          <button
+            key={p.id}
+            onClick={() => onAdd(p)}
+            disabled={outOfStock}
+            className={`flex flex-col rounded-xl border p-3 text-left transition active:scale-95 ${tileClassName(outOfStock, !!inCart)}`}
+          >
+            <span className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">
+              {p.name}
+            </span>
+            <span className="mt-1 text-base font-bold text-violet-600 dark:text-violet-400">
+              {formatCOP(p.price)}
+            </span>
+            <span className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-500"}`}>
+              {stockLabel(p, outOfStock)}
+            </span>
+            {inCart && (
+              <span className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
+                En factura: {inCart.quantity}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function InvoiceCartList({
+  cart,
+  onUpdateQty,
+  onRemove,
+  formatCOP,
+}: Readonly<{
+  cart: CartItem[];
+  onUpdateQty: (productId: string, delta: number) => void;
+  onRemove: (productId: string) => void;
+  formatCOP: (v: number) => string;
+}>) {
+  if (cart.length === 0) {
+    return (
+      <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-500">
+        Toca un producto para agregar a la factura
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {cart.map((item) => (
+        <li
+          key={item.productId}
+          className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+              {item.name}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {formatCOP(item.price)} × {item.quantity}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              onClick={() => onUpdateQty(item.productId, -1)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+            >
+              −
+            </button>
+            <span className="w-5 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {item.quantity}
+            </span>
+            <button
+              onClick={() => onUpdateQty(item.productId, 1)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+            >
+              +
+            </button>
+            <button
+              onClick={() => onRemove(item.productId)}
+              className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+            >
+              ×
+            </button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FactureBottom({
+  cart,
+  paymentMethod,
+  onPaymentMethodChange,
+  note,
+  onNoteChange,
+  subtotal,
+  taxLines,
+  total,
+  formatCOP,
+  errorMessage,
+  confirmButtonLabel,
+  onConfirm,
+  isPending,
+  creditRequiresCustomer,
+  showClearConfirm,
+  onShowClearConfirm,
+  onClearCart,
+}: Readonly<{
+  cart: CartItem[];
+  paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER";
+  onPaymentMethodChange: (m: "CASH" | "CARD" | "CREDIT" | "TRANSFER") => void;
+  note: string;
+  onNoteChange: (v: string) => void;
+  subtotal: number;
+  taxLines: { name: string; rate: number; amount: number }[];
+  total: number;
+  formatCOP: (v: number) => string;
+  errorMessage?: string;
+  confirmButtonLabel: string;
+  onConfirm: () => void;
+  isPending: boolean;
+  creditRequiresCustomer: boolean;
+  showClearConfirm: boolean;
+  onShowClearConfirm: (v: boolean) => void;
+  onClearCart: () => void;
+}>) {
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Método de pago */}
+      {cart.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Método de pago
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {(["CASH", "CARD", "TRANSFER", "CREDIT"] as const).map((method) => (
+              <button
+                key={method}
+                onClick={() => onPaymentMethodChange(method)}
+                className={`rounded-lg border px-2 py-2 text-xs font-medium transition ${
+                  paymentMethod === method
+                    ? "border-violet-400 bg-violet-100 text-violet-700 dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-transparent dark:text-slate-400 dark:hover:border-white/20"
+                }`}
+              >
+                {PAYMENT_LABELS[method]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Nota */}
+      {cart.length > 0 && (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+            {paymentMethod === "CREDIT" ? "Nota del crédito (opcional)" : "Nota (opcional)"}
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => onNoteChange(e.target.value)}
+            rows={2}
+            placeholder={
+              paymentMethod === "CREDIT"
+                ? "Ej: paga el viernes"
+                : "Referencia de pago, observación..."
+            }
+            className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900/30"
+          />
+        </div>
+      )}
+
+      {/* Desglose fiscal */}
+      {cart.length > 0 && (
+        <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
+          {taxLines.length > 0 && (
+            <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+              <span>Subtotal</span>
+              <span>{formatCOP(subtotal)}</span>
+            </div>
+          )}
+          {taxLines.map((t) => (
+            <div key={`${t.name}-${t.rate}`} className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+              <span>{t.name} ({t.rate}%)</span>
+              <span>{formatCOP(t.amount)}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between border-t border-slate-100 pt-2 dark:border-white/10">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Total</span>
+            <span className="text-xl font-bold text-slate-900 dark:text-white">
+              {formatCOP(total)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
+      {errorMessage && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300">
+          {errorMessage}
+        </div>
+      )}
+
+      {/* Botón confirmar */}
+      <button
+        onClick={onConfirm}
+        disabled={cart.length === 0 || creditRequiresCustomer || isPending}
+        className="w-full rounded-2xl bg-violet-600 px-6 py-4 text-lg font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {confirmButtonLabel}
+      </button>
+
+      {/* Limpiar con confirmación */}
+      {cart.length > 0 && (
+        <>
+          {showClearConfirm ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm dark:border-red-500/30 dark:bg-red-900/10">
+              <p className="mb-2 font-medium text-red-700 dark:text-red-300">
+                ¿Borrar toda la factura? Se perderán los ítems actuales.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={onClearCart}
+                  className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
+                >
+                  Sí, limpiar
+                </button>
+                <button
+                  onClick={() => onShowClearConfirm(false)}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => onShowClearConfirm(true)}
+              className="text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+            >
+              Limpiar factura
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 type Props = {
   taxes: TaxConfig[];
   autoTax: boolean;
@@ -71,7 +401,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "CREDIT" | "TRANSFER">("CASH");
-  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(CONSUMIDOR_FINAL);
   const [note, setNote] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -81,7 +411,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(CART_KEY, []));
-    setSelectedCustomer(loadLS<SelectedCustomer | null>(CUSTOMER_KEY, null));
+    setSelectedCustomer(loadLS<SelectedCustomer | null>(CUSTOMER_KEY, CONSUMIDOR_FINAL));
     setNote(loadLS<string>(NOTE_KEY, ""));
     setPaymentMethod(loadLS<"CASH" | "CARD" | "CREDIT" | "TRANSFER">(PAYMENT_KEY, "CASH"));
     setHydrated(true);
@@ -163,10 +493,17 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     p.name.toLowerCase().includes(search.toLowerCase()),
   );
 
+  let catalogStatusMessage: string | null = null;
+  if (isLoading) {
+    catalogStatusMessage = "Cargando productos...";
+  } else if (filteredProducts.length === 0) {
+    catalogStatusMessage = "Sin resultados";
+  }
+
   function clearCart() {
     setCart([]);
     setNote("");
-    setSelectedCustomer(null);
+    setSelectedCustomer(CONSUMIDOR_FINAL);
     setPaymentMethod("CASH");
     localStorage.removeItem(CART_KEY);
     localStorage.removeItem(CUSTOMER_KEY);
@@ -248,6 +585,15 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   const formatCOP = (v: number) =>
     v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
+  let confirmButtonLabel: string;
+  if (createSale.isPending) {
+    confirmButtonLabel = "Generando factura...";
+  } else if (cart.length > 0) {
+    confirmButtonLabel = `Emitir factura · ${formatCOP(total)}`;
+  } else {
+    confirmButtonLabel = "Emitir factura";
+  }
+
   return (
     <>
       {/* Modal post-emisión */}
@@ -291,290 +637,150 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
         </div>
       )}
 
-      <div className="flex h-full flex-col gap-4 lg:flex-row">
-        {/* Catálogo */}
-        <div className="flex flex-col gap-3 lg:w-3/5">
-          <div className="flex gap-2">
-            <input
-              type="search"
-              placeholder="Buscar producto..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
-            />
-            <button
-              type="button"
-              onClick={() => setShowScanner(true)}
-              className="shrink-0 rounded-xl border border-violet-300 bg-white px-4 py-3 text-base font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
-            >
-              <Camera className="h-5 w-5" />
-            </button>
-          </div>
+      {/* Cliente */}
+      <div className="mb-3">
+        <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+          Cliente{" "}
+          {paymentMethod === "CREDIT" ? (
+            <span className="text-red-500">*</span>
+          ) : (
+            <span className="text-slate-500">(opcional)</span>
+          )}
+        </p>
+        <CustomerSelector value={selectedCustomer} onChange={setSelectedCustomer} />
+        {creditRequiresCustomer && (
+          <p className="mt-1 text-xs text-red-500">
+            Selecciona un cliente registrado (arriba, en &quot;Cliente&quot;) para fiar esta venta. No se puede usar &quot;Consumidor Final&quot; ni &quot;Solo documento&quot;.
+          </p>
+        )}
+      </div>
 
+      {/* ===== Móvil ===== */}
+      <div className="flex flex-col gap-3 pb-4 lg:hidden">
+        <ScanControls
+          search={search}
+          onSearchChange={setSearch}
+          onSingleScan={() => setShowScanner(true)}
+          continuousScan={continuousScan}
+          onToggleContinuousScan={() => setContinuousScan((v) => !v)}
+        />
+        {showScanner && (
+          <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
+        )}
+        {continuousScan && (
+          <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
+        )}
+
+        {/* Detalle contenido */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+              FACTURA
+            </span>
+            <h2 className="font-semibold text-slate-700 dark:text-slate-200">Detalle</h2>
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            <InvoiceCartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
+          </div>
+        </div>
+
+        {/* Total + pago */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <FactureBottom
+            cart={cart}
+            paymentMethod={paymentMethod}
+            onPaymentMethodChange={setPaymentMethod}
+            note={note}
+            onNoteChange={setNote}
+            subtotal={subtotal}
+            taxLines={taxLines}
+            total={total}
+            formatCOP={formatCOP}
+            errorMessage={createSale.error?.message}
+            confirmButtonLabel={confirmButtonLabel}
+            onConfirm={confirmSale}
+            isPending={createSale.isPending}
+            creditRequiresCustomer={creditRequiresCustomer}
+            showClearConfirm={showClearConfirm}
+            onShowClearConfirm={setShowClearConfirm}
+            onClearCart={clearCart}
+          />
+        </div>
+
+        {/* Productos contenidos */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <div className="max-h-[42vh] overflow-y-auto">
+            <InvoiceProductGrid
+              statusMessage={catalogStatusMessage}
+              filteredProducts={filteredProducts}
+              cart={cart}
+              onAdd={addToCart}
+              formatCOP={formatCOP}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Escritorio ===== */}
+      <div className="hidden gap-4 lg:flex">
+        <div className="flex flex-col gap-3 lg:w-3/5">
+          <ScanControls
+            search={search}
+            onSearchChange={setSearch}
+            onSingleScan={() => setShowScanner(true)}
+            continuousScan={continuousScan}
+            onToggleContinuousScan={() => setContinuousScan((v) => !v)}
+          />
           {showScanner && (
             <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
           )}
-
-          {isLoading ? (
-            <p className="text-center text-slate-500 dark:text-slate-500">Cargando productos...</p>
-          ) : filteredProducts.length === 0 ? (
-            <p className="text-center text-slate-500 dark:text-slate-500">Sin resultados</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-              {filteredProducts.map((p: Product) => {
-                const inCart = cart.find((i) => i.productId === p.id);
-                const outOfStock = p.trackStock && p.stock === 0;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => addToCart(p)}
-                    disabled={outOfStock}
-                    className={`flex flex-col rounded-xl border p-3 text-left transition active:scale-95 ${
-                      outOfStock
-                        ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50 dark:border-white/5 dark:bg-white/5"
-                        : inCart
-                          ? "border-violet-300 bg-violet-50 shadow-sm dark:border-violet-500/50 dark:bg-violet-900/20"
-                          : "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/50 dark:border-white/10 dark:bg-white/5 dark:hover:border-violet-500/30 dark:hover:bg-violet-900/10"
-                    }`}
-                  >
-                    <span className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">
-                      {p.name}
-                    </span>
-                    <span className="mt-1 text-base font-bold text-violet-600 dark:text-violet-400">
-                      {formatCOP(p.price)}
-                    </span>
-                    <span
-                      className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-500"}`}
-                    >
-                      {outOfStock ? "Sin stock" : p.trackStock ? `${p.stock} disp.` : "∞ disp."}
-                    </span>
-                    {inCart && (
-                      <span className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
-                        En factura: {inCart.quantity}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div className="max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+            <InvoiceProductGrid
+              statusMessage={catalogStatusMessage}
+              filteredProducts={filteredProducts}
+              cart={cart}
+              onAdd={addToCart}
+              formatCOP={formatCOP}
+            />
+          </div>
         </div>
 
-        {/* Panel de factura */}
         <div className="flex flex-col gap-3 lg:w-2/5">
-          {continuousScan ? (
+          {continuousScan && (
             <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setContinuousScan(true)}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-sm font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
-            >
-              <Camera className="h-4 w-4" /> Activar escaneo continuo
-            </button>
           )}
-
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
             <div className="mb-3 flex items-center gap-2">
               <span className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
                 FACTURA
               </span>
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Detalle</h2>
-              {cart.length > 0 && (
-                <span className="ml-auto text-xs text-slate-500 dark:text-slate-500">
-                  guardado automáticamente
-                </span>
-              )}
             </div>
-
-            {/* Ítems */}
-            {cart.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-500">
-                Toca un producto para agregar a la factura
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {cart.map((item) => (
-                  <li
-                    key={item.productId}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {item.name}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {formatCOP(item.price)} × {item.quantity}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        onClick={() => updateQty(item.productId, -1)}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
-                      >
-                        −
-                      </button>
-                      <span className="w-5 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQty(item.productId, 1)}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
-                      >
-                        +
-                      </button>
-                      <button
-                        onClick={() => removeFromCart(item.productId)}
-                        className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {/* Cliente */}
-            <div className="mt-4">
-              <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                Cliente{" "}
-                {paymentMethod === "CREDIT" ? (
-                  <span className="text-red-500">*</span>
-                ) : (
-                  <span className="text-slate-500">(opcional)</span>
-                )}
-              </p>
-              <CustomerSelector value={selectedCustomer} onChange={setSelectedCustomer} />
-              {creditRequiresCustomer && (
-                <p className="mt-1 text-xs text-red-500">
-                  Selecciona un cliente registrado para fiar esta venta. No se puede usar &quot;Consumidor Final&quot; ni &quot;Solo documento&quot;.
-                </p>
-              )}
+            <div className="max-h-64 overflow-y-auto">
+              <InvoiceCartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
             </div>
-
-            {/* Método de pago */}
-            {cart.length > 0 && (
-              <div className="mt-4">
-                <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Método de pago
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["CASH", "CARD", "TRANSFER", "CREDIT"] as const).map((method) => (
-                    <button
-                      key={method}
-                      onClick={() => setPaymentMethod(method)}
-                      className={`rounded-lg border px-2 py-2 text-xs font-medium transition ${
-                        paymentMethod === method
-                          ? "border-violet-400 bg-violet-100 text-violet-700 dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-transparent dark:text-slate-400 dark:hover:border-white/20"
-                      }`}
-                    >
-                      {PAYMENT_LABELS[method]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Nota */}
-            {cart.length > 0 && (
-              <div className="mt-3">
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {paymentMethod === "CREDIT" ? "Nota del crédito (opcional)" : "Nota (opcional)"}
-                </label>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={2}
-                  placeholder={
-                    paymentMethod === "CREDIT"
-                      ? "Ej: paga el viernes"
-                      : "Referencia de pago, observación..."
-                  }
-                  className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900/30"
-                />
-              </div>
-            )}
-
-            {/* Desglose fiscal */}
-            {cart.length > 0 && (
-              <div className="mt-4 space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
-                {taxLines.length > 0 && (
-                  <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
-                    <span>Subtotal</span>
-                    <span>{formatCOP(subtotal)}</span>
-                  </div>
-                )}
-                {taxLines.map((t) => (
-                  <div key={`${t.name}-${t.rate}`} className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
-                    <span>{t.name} ({t.rate}%)</span>
-                    <span>{formatCOP(t.amount)}</span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2 dark:border-white/10">
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">Total</span>
-                  <span className="text-xl font-bold text-slate-900 dark:text-white">
-                    {formatCOP(total)}
-                  </span>
-                </div>
-              </div>
-            )}
+            <div className="mt-3">
+              <FactureBottom
+                cart={cart}
+                paymentMethod={paymentMethod}
+                onPaymentMethodChange={setPaymentMethod}
+                note={note}
+                onNoteChange={setNote}
+                subtotal={subtotal}
+                taxLines={taxLines}
+                total={total}
+                formatCOP={formatCOP}
+                errorMessage={createSale.error?.message}
+                confirmButtonLabel={confirmButtonLabel}
+                onConfirm={confirmSale}
+                isPending={createSale.isPending}
+                creditRequiresCustomer={creditRequiresCustomer}
+                showClearConfirm={showClearConfirm}
+                onShowClearConfirm={setShowClearConfirm}
+                onClearCart={clearCart}
+              />
+            </div>
           </div>
-
-          {/* Error */}
-          {createSale.error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300">
-              {createSale.error.message}
-            </div>
-          )}
-
-          {/* Botón confirmar */}
-          <button
-            onClick={confirmSale}
-            disabled={cart.length === 0 || creditRequiresCustomer || createSale.isPending}
-            className="w-full rounded-2xl bg-violet-600 px-6 py-4 text-lg font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {createSale.isPending
-              ? "Generando factura..."
-              : cart.length > 0
-                ? `Emitir factura · ${formatCOP(total)}`
-                : "Emitir factura"}
-          </button>
-
-          {/* Limpiar con confirmación */}
-          {cart.length > 0 && (
-            <>
-              {showClearConfirm ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm dark:border-red-500/30 dark:bg-red-900/10">
-                  <p className="mb-2 font-medium text-red-700 dark:text-red-300">
-                    ¿Borrar toda la factura? Se perderán los ítems actuales.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={clearCart}
-                      className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
-                    >
-                      Sí, limpiar
-                    </button>
-                    <button
-                      onClick={() => setShowClearConfirm(false)}
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowClearConfirm(true)}
-                  className="text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
-                >
-                  Limpiar factura
-                </button>
-              )}
-            </>
-          )}
         </div>
       </div>
     </>

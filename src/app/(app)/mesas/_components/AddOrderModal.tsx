@@ -56,7 +56,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   }
 
   function addSpecialToCart(p: Product, value: number) {
-    const cartItemId = `${p.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const cartItemId = `${p.id}-${crypto.randomUUID()}`;
     if (p.soldByWeight) {
       const lineTotal = Math.ceil((p.price * value) / 100) * 100;
       setCart((prev) => [...prev, { cartItemId, productId: p.id, name: `${p.name} (${value} kg)`, price: lineTotal, quantity: 1, weightKg: value }]);
@@ -102,6 +102,8 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   }
 
   const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const subtotalSuffix = cart.length > 0 ? ` · ${fmt(subtotal)}` : "";
+  const confirmLabel = addOrder.isPending ? "Registrando..." : `Confirmar pedido${subtotalSuffix}`;
 
   return (
     <>
@@ -164,6 +166,15 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
                     stockLabel = "∞";
                   }
 
+                  let priceLabel: string;
+                  if (p.openPrice) {
+                    priceLabel = "Monto libre";
+                  } else if (p.soldByWeight) {
+                    priceLabel = `${fmt(p.price)}/kg`;
+                  } else {
+                    priceLabel = fmt(p.price);
+                  }
+
                   return (
                     <button
                       key={p.id}
@@ -176,7 +187,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
                         <span className="text-xs text-slate-500">{[p.brand, p.presentation].filter(Boolean).join(" · ")}</span>
                       )}
                       <span className="mt-0.5 font-bold text-violet-600 dark:text-violet-400">
-                        {p.openPrice ? "Monto libre" : p.soldByWeight ? `${fmt(p.price)}/kg` : fmt(p.price)}
+                        {priceLabel}
                       </span>
                       <span className={`text-xs mt-0.5 ${outOfStock ? "text-red-500" : "text-slate-500"}`}>
                         {stockLabel}
@@ -239,7 +250,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
               disabled={cart.length === 0 || addOrder.isPending}
               className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {addOrder.isPending ? "Registrando..." : `Confirmar pedido${cart.length > 0 ? ` · ${fmt(subtotal)}` : ""}`}
+              {confirmLabel}
             </button>
           </div>
         </div>

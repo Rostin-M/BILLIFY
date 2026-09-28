@@ -42,7 +42,7 @@ export function SpecialItemPrompt({ product, mode, onConfirm, onCancel }: Readon
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && valid) onConfirm(mode === "weight" ? parsed : parsed);
+              if (e.key === "Enter" && valid) onConfirm(parsed);
             }}
             placeholder={mode === "weight" ? "0.0" : "3000"}
             className={`w-full rounded-xl border border-slate-200 bg-white py-3 text-lg outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white ${mode === "amount" ? "pl-7 pr-4" : "px-4"}`}

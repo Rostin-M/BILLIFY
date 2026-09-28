@@ -261,7 +261,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
       });
     };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     const maxReg = Number.parseInt(form.maxCashRegisters, 10);
     if (Number.isNaN(maxReg)) return;
@@ -471,6 +471,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
               type="checkbox"
               checked={form.autoTax}
               onChange={handleAutoTax}
+              aria-label="Calcular impuesto en facturas"
               className="h-4 w-4 rounded accent-violet-600"
             />
             <div>
@@ -547,6 +548,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                       name="invoiceTaxDetail"
                       checked={form.invoiceTaxDetail === "SUMMARY"}
                       onChange={() => setForm((prev) => ({ ...prev, invoiceTaxDetail: "SUMMARY" }))}
+                      aria-label="Solo el total al final (actual)"
                       className="mt-0.5 h-4 w-4 accent-violet-600"
                     />
                     <span>
@@ -564,6 +566,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
                       name="invoiceTaxDetail"
                       checked={form.invoiceTaxDetail === "PER_ITEM"}
                       onChange={() => setForm((prev) => ({ ...prev, invoiceTaxDetail: "PER_ITEM" }))}
+                      aria-label="Desglosado por producto"
                       className="mt-0.5 h-4 w-4 accent-violet-600"
                     />
                     <span>
@@ -648,6 +651,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
               type="checkbox"
               checked={form.produceModuleEnabled}
               onChange={(e) => setForm((prev) => ({ ...prev, produceModuleEnabled: e.target.checked }))}
+              aria-label="Habilitar venta por peso"
               className="h-4 w-4 rounded accent-violet-600"
             />
             <div>

@@ -17,6 +17,7 @@ const ACTION_META: Record<string, { label: string; color: string }> = {
 
 const MOVEMENT_TYPE_LABELS: Record<string, string> = { OPENING: "Fondo inicial", INCOME: "Entrada", EXPENSE: "Salida" };
 const PAYMENT_LABELS: Record<string, string> = { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER: "Transferencia", CREDIT: "Crédito" };
+const SALE_STATUS_LABELS: Record<string, string> = { COMPLETED: "Completada", VOIDED: "Anulada" };
 
 type Tab = "registro" | "exportar";
 
@@ -85,7 +86,7 @@ export function TrazabilidadClient() {
         escapeCSV(formatBogota(s.createdAt)),
         escapeCSV(s.invoiceNumber),
         escapeCSV(s.saleType === "INVOICED" ? "Factura" : "Rápida"),
-        escapeCSV(s.status === "COMPLETED" ? "Completada" : s.status === "VOIDED" ? "Anulada" : s.status),
+        escapeCSV(SALE_STATUS_LABELS[s.status] ?? s.status),
         escapeCSV(PAYMENT_LABELS[s.paymentMethod] ?? s.paymentMethod),
         escapeCSV(s.customer?.name),
         escapeCSV(s.customer?.document),

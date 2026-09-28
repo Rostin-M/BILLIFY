@@ -110,6 +110,37 @@ export type SaleForPdf = {
 };
 
 export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfoForPdf; sale: SaleForPdf }>) {
+  let totalsSection: React.ReactNode = null;
+  if ((sale.taxLines?.length ?? 0) > 0) {
+    totalsSection = (
+      <>
+        <View style={s.totalRow}>
+          <Text style={s.totalLabel}>Subtotal</Text>
+          <Text style={s.totalValue}>{formatCOP(sale.subtotal)}</Text>
+        </View>
+        {(sale.taxLines ?? []).map((tax, i) => (
+          <View key={i} style={s.totalRow}>
+            <Text style={s.totalLabel}>{tax.name} ({tax.rate}%)</Text>
+            <Text style={s.totalValue}>{formatCOP(tax.amount)}</Text>
+          </View>
+        ))}
+      </>
+    );
+  } else if (sale.taxAmount > 0) {
+    totalsSection = (
+      <>
+        <View style={s.totalRow}>
+          <Text style={s.totalLabel}>Subtotal</Text>
+          <Text style={s.totalValue}>{formatCOP(sale.subtotal)}</Text>
+        </View>
+        <View style={s.totalRow}>
+          <Text style={s.totalLabel}>Impuesto</Text>
+          <Text style={s.totalValue}>{formatCOP(sale.taxAmount)}</Text>
+        </View>
+      </>
+    );
+  }
+
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -198,31 +229,7 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
 
         {/* Totales */}
         <View style={s.totalsArea}>
-          {(sale.taxLines?.length ?? 0) > 0 ? (
-            <>
-              <View style={s.totalRow}>
-                <Text style={s.totalLabel}>Subtotal</Text>
-                <Text style={s.totalValue}>{formatCOP(sale.subtotal)}</Text>
-              </View>
-              {(sale.taxLines ?? []).map((tax, i) => (
-                <View key={i} style={s.totalRow}>
-                  <Text style={s.totalLabel}>{tax.name} ({tax.rate}%)</Text>
-                  <Text style={s.totalValue}>{formatCOP(tax.amount)}</Text>
-                </View>
-              ))}
-            </>
-          ) : sale.taxAmount > 0 ? (
-            <>
-              <View style={s.totalRow}>
-                <Text style={s.totalLabel}>Subtotal</Text>
-                <Text style={s.totalValue}>{formatCOP(sale.subtotal)}</Text>
-              </View>
-              <View style={s.totalRow}>
-                <Text style={s.totalLabel}>Impuesto</Text>
-                <Text style={s.totalValue}>{formatCOP(sale.taxAmount)}</Text>
-              </View>
-            </>
-          ) : null}
+          {totalsSection}
           <View style={s.grandRow}>
             <Text style={s.grandLabel}>TOTAL</Text>
             <Text style={s.grandValue}>{formatCOP(sale.total)}</Text>
