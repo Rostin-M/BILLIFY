@@ -8,7 +8,7 @@
     "check": "next lint && tsc --noEmit",
     "db:generate": "prisma migrate dev",
     "db:migrate": "prisma migrate deploy",
-    "db:push": "prisma db push",
+    "db:backup": "bash scripts/backup.sh",
     "db:studio": "prisma studio",
     "dev": "next dev",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
@@ -22,7 +22,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.7.2",
     "@getbrevo/brevo": "^5.0.4",
     "@prisma/client": "^6.6.0",
     "@react-pdf/renderer": "^4.5.1",
@@ -36,14 +35,12 @@
     "@zxing/library": "^0.23.0",
     "bcryptjs": "^3.0.3",
     "lucide-react": "^1.17.0",
-    "next": "^15.2.3",
-    "next-auth": "5.0.0-beta.25",
+    "next": "15.5.26",
+    "next-auth": "5.0.0-beta.32",
     "next-themes": "^0.4.6",
-    "nodemailer": "^6.10.1",
     "prisma": "^6.19.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "resend": "^6.12.3",
     "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "superjson": "^2.2.1",
@@ -53,12 +50,11 @@
     "@eslint/eslintrc": "^3.3.1",
     "@tailwindcss/postcss": "^4.0.15",
     "@types/node": "^20.14.10",
-    "@types/nodemailer": "^8.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.23.0",
-    "eslint-config-next": "^15.2.3",
-    "postcss": "^8.5.3",
+    "eslint-config-next": "15.5.26",
+    "postcss": "^8.5.28",
     "prettier": "^3.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
     "tailwindcss": "^4.0.15",
@@ -68,5 +64,9 @@
   "ct3aMetadata": {
     "initVersion": "7.40.0"
   },
-  "packageManager": "npm@11.14.1"
+  "packageManager": "npm@11.14.1",
+  "overrides": {
+    "postcss": "$postcss",
+    "sharp": "^0.35.5"
+  }
 }

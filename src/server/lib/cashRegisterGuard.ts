@@ -37,3 +37,34 @@ export async function assertCashRegisterNotStale(
     });
   }
 }
+
+/**
+ * Caja a la que se asigna una venta nueva (llamar dentro de la transacción que la crea):
+ * la caja OPEN del propio vendedor; si no tiene, la única caja OPEN del negocio cuando hay
+ * exactamente una; en cualquier otro caso null (no se adivina a qué cajero le entró el dinero).
+ *
+ * FOR KEY SHARE: si la caja se está cerrando en paralelo (cierre con FOR UPDATE), esta lectura
+ * espera al cierre y, al releer la fila ya CLOSED, deja de encontrarla — la venta nunca queda
+ * ligada a una caja cuyo saldo ya se contó. No bloquea otras ventas simultáneas.
+ */
+export async function resolveSaleCashRegisterId(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  userId: string,
+): Promise<string | null> {
+  const own = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "cash_registers"
+     WHERE "business_id" = ${businessId} AND "user_id" = ${userId} AND "status" = 'OPEN'
+     LIMIT 1
+     FOR KEY SHARE
+  `;
+  if (own[0]) return own[0].id;
+
+  const open = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "cash_registers"
+     WHERE "business_id" = ${businessId} AND "status" = 'OPEN'
+     LIMIT 2
+     FOR KEY SHARE
+  `;
+  return open.length === 1 ? open[0]!.id : null;
+}

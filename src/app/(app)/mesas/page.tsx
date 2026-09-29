@@ -1,19 +1,17 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { db } from "~/server/db";
 import { api, HydrateClient } from "~/trpc/server";
 import { MesasClient } from "./_components/MesasClient";
 import { PageLayout } from "~/app/_components/PageLayout";
 
 export default async function MesasPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
-  if (!session.user.businessId) redirect("/");
+  const user = await requirePageUser();
+  if (!user.businessId) redirect("/");
 
   const business = await db.business.findUnique({
-    where: { id: session.user.businessId },
+    where: { id: user.businessId },
     select: { name: true, document: true, logoUrl: true },
   });
 

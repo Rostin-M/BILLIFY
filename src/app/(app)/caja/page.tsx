@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { db } from "~/server/db";
 import { api, HydrateClient } from "~/trpc/server";
 import { CashRegisterView } from "./_components/CashRegisterView";
@@ -8,16 +8,14 @@ import { CashHistory } from "./_components/CashHistory";
 import { PageLayout } from "~/app/_components/PageLayout";
 
 export default async function CajaPage() {
-  const session = await auth();
+  const user = await requirePageUser();
+  if (!user.businessId) redirect("/");
 
-  if (!session?.user) redirect("/auth/login");
-  if (!session.user.businessId) redirect("/");
-
-  const isOwner = session.user.role === "OWNER";
+  const isOwner = user.role === "OWNER";
 
   const [business] = await Promise.all([
     db.business.findUnique({
-      where: { id: session.user.businessId },
+      where: { id: user.businessId },
       select: { name: true, document: true, logoUrl: true },
     }),
   ]);

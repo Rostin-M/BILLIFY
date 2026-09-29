@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
-
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { api, HydrateClient } from "~/trpc/server";
 import { ProductManager } from "./_components/ProductManager";
 import { PageLayout } from "~/app/_components/PageLayout";
@@ -8,13 +6,11 @@ import { PageLayout } from "~/app/_components/PageLayout";
 export const metadata = { title: "Catálogo — BILLIFY" };
 
 export default async function ProductosPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
+  const user = await requirePageUser();
 
   void api.product.list.prefetch();
 
-  const isOwner = session.user.role === "OWNER";
+  const isOwner = user.role === "OWNER";
 
   return (
     <HydrateClient>
@@ -28,7 +24,7 @@ export default async function ProductosPage() {
                 : "Consulta el catálogo y actualiza precios o stock."
             }
           />
-          <ProductManager userRole={session.user.role} />
+          <ProductManager userRole={user.role} />
         </div>
       </main>
     </HydrateClient>

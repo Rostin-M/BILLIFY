@@ -8,7 +8,7 @@ export const auditLogRouter = createTRPCRouter({
     .input(
       z.object({
         limit: z.number().int().min(1).max(200).default(100),
-        action: z.string().optional(),
+        action: z.string().trim().max(64).optional(),
       }),
     )
     .query(async ({ ctx, input }) => {

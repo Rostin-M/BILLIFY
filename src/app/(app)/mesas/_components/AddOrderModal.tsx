@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "~/trpc/react";
 import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
 
@@ -24,6 +24,11 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [specialPrompt, setSpecialPrompt] = useState<{ product: Product; mode: "weight" | "amount" } | null>(null);
+  // Clave de idempotencia del pedido: se reutiliza en reintentos y se descarta si cambia el pedido.
+  const orderKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    orderKeyRef.current = null;
+  }, [cart, note]);
 
   const { data: products = [], isLoading } = api.product.search.useQuery();
   const utils = api.useUtils();
@@ -92,12 +97,14 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   }
 
   function confirm() {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || addOrder.isPending) return;
     setError(null);
+    orderKeyRef.current ??= crypto.randomUUID();
     addOrder.mutate({
       guestId,
       items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity, weightKg: i.weightKg, customAmount: i.customAmount })),
       note: note.trim() || undefined,
+      idempotencyKey: orderKeyRef.current,
     });
   }
 

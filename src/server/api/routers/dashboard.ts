@@ -11,7 +11,7 @@ export const dashboardRouter = createTRPCRouter({
       const { from, to } = getPeriodRangeBogota(input.period);
       const prevFrom = new Date(from.getTime() - (to.getTime() - from.getTime()));
 
-      const [completedSales, voidedCount, inventoryCounts, activeRegister, lastClosed, prevSalesAgg] =
+      const [completedSales, voidedCount, inventoryCounts, openRegisters, lastClosed, prevSalesAgg] =
         await Promise.all([
           ctx.db.sale.findMany({
             where: { businessId, status: "COMPLETED", createdAt: { gte: from, lte: to } },
@@ -31,9 +31,10 @@ export const dashboardRouter = createTRPCRouter({
             where: { businessId },
             _count: true,
           }),
-          ctx.db.cashRegister.findFirst({
+          // Todas las cajas abiertas: el saldo del tablero es la suma de sus saldos individuales.
+          ctx.db.cashRegister.findMany({
             where: { businessId, status: "OPEN" },
-            select: { openingBalance: true, openedAt: true },
+            select: { id: true, openingBalance: true, movements: { select: { type: true, amount: true } } },
           }),
           ctx.db.cashRegister.findFirst({
             where: { businessId, status: "CLOSED" },
@@ -99,31 +100,29 @@ export const dashboardRouter = createTRPCRouter({
       let currentCashBalance: number | null = null;
       let cashManualIncome: number | null = null;
       let cashManualExpense: number | null = null;
-      if (activeRegister) {
-        const [cashSalesAgg, movements] = await Promise.all([
-          ctx.db.sale.aggregate({
-            where: {
-              businessId,
-              paymentMethod: "CASH",
-              status: "COMPLETED",
-              createdAt: { gte: activeRegister.openedAt },
-            },
-            _sum: { total: true },
-          }),
-          ctx.db.cashMovement.findMany({
-            where: { business: { id: businessId }, cashRegister: { openedAt: activeRegister.openedAt } },
-            select: { type: true, amount: true },
-          }),
-        ]);
+      if (openRegisters.length > 0) {
+        // Ventas en efectivo de cada caja abierta (Sale.cashRegisterId), no de todo el negocio
+        // desde la apertura: con varias cajas, cada venta cuenta una sola vez.
+        const cashSalesAgg = await ctx.db.sale.aggregate({
+          where: {
+            businessId,
+            cashRegisterId: { in: openRegisters.map((r) => r.id) },
+            paymentMethod: "CASH",
+            status: "COMPLETED",
+          },
+          _sum: { total: true },
+        });
 
         const cashSales = cashSalesAgg._sum.total ?? 0;
+        const movements = openRegisters.flatMap((r) => r.movements);
+        const openingBalance = openRegisters.reduce((sum, r) => sum + r.openingBalance, 0);
         const manualIncome = movements
           .filter((m) => m.type === "INCOME")
           .reduce((sum, m) => sum + m.amount, 0);
         const manualExpense = movements
           .filter((m) => m.type === "EXPENSE")
           .reduce((sum, m) => sum + m.amount, 0);
-        currentCashBalance = activeRegister.openingBalance + cashSales + manualIncome - manualExpense;
+        currentCashBalance = openingBalance + cashSales + manualIncome - manualExpense;
         cashManualIncome = manualIncome;
         cashManualExpense = manualExpense;
       }
@@ -139,7 +138,7 @@ export const dashboardRouter = createTRPCRouter({
         },
         inventory: { totalActive: activeCount, lowStock, outOfStock, outOfStockNames: outOfStockProducts.map((p) => p.name) },
         cashRegister: {
-          isOpen: !!activeRegister,
+          isOpen: openRegisters.length > 0,
           currentBalance: currentCashBalance,
           manualIncome: cashManualIncome,
           manualExpense: cashManualExpense,

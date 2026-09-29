@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, CircleDot } from "lucide-react";
 import { toast } from "sonner";
@@ -63,8 +63,16 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
 
   const utils = api.useUtils();
 
+  // Clave de idempotencia del movimiento en curso: se reutiliza si el usuario reintenta el
+  // mismo movimiento y se descarta al editar el formulario.
+  const movementKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    movementKeyRef.current = null;
+  }, [form]);
+
   const addMovement = api.cashRegister.addMovement.useMutation({
     onSuccess: async (data) => {
+      movementKeyRef.current = null;
       setForm({ type: "INCOME", amount: "", description: "" });
       toast.success(data.message);
       await utils.cashRegister.getActive.invalidate();
@@ -81,8 +89,9 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
   function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     const amount = Number.parseFloat(form.amount);
-    if (Number.isNaN(amount) || amount <= 0) return;
-    addMovement.mutate({ type: form.type, amount, description: form.description });
+    if (Number.isNaN(amount) || amount <= 0 || addMovement.isPending) return;
+    movementKeyRef.current ??= crypto.randomUUID();
+    addMovement.mutate({ type: form.type, amount, description: form.description, idempotencyKey: movementKeyRef.current });
   }
 
   const formatCOP = (v: number) =>
@@ -132,7 +141,9 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           </p>
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
-          <CashHistoryPdfButton registerId={register.id} business={business} openedAt={register.openedAt} />
+          {canClose && (
+            <CashHistoryPdfButton registerId={register.id} business={business} openedAt={register.openedAt} />
+          )}
           {canClose && !isClosing && (
             <button
               onClick={() => setIsClosing(true)}
@@ -259,12 +270,17 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
         </div>
       </div>
 
-      {/* Registrar movimiento */}
+      {/* Registrar movimiento — solo en la caja propia (el owner puede operar cualquiera) */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
         <h2 className="mb-4 font-semibold text-slate-700 dark:text-slate-200">
           Registrar movimiento
         </h2>
 
+        {!canClose ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Esta caja es de otro usuario. Para registrar entradas o salidas abre tu propia caja.
+          </p>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-3">
           {/* Tipo */}
           <div className="grid grid-cols-2 gap-2">
@@ -336,6 +352,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
             {addMovement.isPending ? "Guardando..." : "Registrar movimiento"}
           </button>
         </form>
+        )}
       </div>
 
       {/* Movimientos del día */}

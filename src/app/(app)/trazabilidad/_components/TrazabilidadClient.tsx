@@ -54,7 +54,10 @@ export function TrazabilidadClient() {
 
   function escapeCSV(v: string | null | undefined): string {
     if (v === null || v === undefined || v === "") return "";
-    return `"${String(v).replace(/"/g, '""')}"`;
+    let s = String(v);
+    // Evita inyección de fórmulas al abrir el CSV en Excel/Sheets.
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return `"${s.replace(/"/g, '""')}"`;
   }
 
   function downloadBlob(content: string, filename: string) {

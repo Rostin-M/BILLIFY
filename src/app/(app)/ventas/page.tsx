@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Lock } from "lucide-react";
 import { redirect } from "next/navigation";
 
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { db } from "~/server/db";
 import { api, HydrateClient } from "~/trpc/server";
 import { VentasClient } from "./_components/VentasClient";
@@ -10,14 +10,12 @@ import { PageLayout } from "~/app/_components/PageLayout";
 import { resolveInvoiceContact } from "~/lib/invoiceContact";
 
 export default async function VentasPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
-  if (!session.user.businessId) redirect("/");
+  const user = await requirePageUser();
+  if (!user.businessId) redirect("/");
 
   const [business, owner, activeRegister] = await Promise.all([
     db.business.findUnique({
-      where: { id: session.user.businessId },
+      where: { id: user.businessId },
       select: {
         name: true,
         document: true,
@@ -33,11 +31,11 @@ export default async function VentasPage() {
       },
     }),
     db.user.findFirst({
-      where: { businessId: session.user.businessId, role: "OWNER" },
+      where: { businessId: user.businessId, role: "OWNER" },
       select: { phone: true, email: true },
     }),
     db.cashRegister.findFirst({
-      where: { businessId: session.user.businessId, status: "OPEN" },
+      where: { businessId: user.businessId, status: "OPEN" },
       select: { id: true },
     }),
   ]);
@@ -70,8 +68,10 @@ export default async function VentasPage() {
             <VentasClient
               taxes={(business?.taxes as { name: string; rate: number; enabled: boolean }[]) ?? []}
               autoTax={business?.autoTax ?? false}
-              isOwner={session.user.role === "OWNER"}
-              userName={session.user.name ?? null}
+              isOwner={user.role === "OWNER"}
+              userName={user.name ?? null}
+              userId={user.id}
+              businessId={user.businessId}
               business={{
                 name: business?.name ?? "",
                 document: business?.document ?? "",

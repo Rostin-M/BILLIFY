@@ -1,101 +1,91 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "~/server/auth";
+import { randomUUID } from "node:crypto";
+import { type NextRequest } from "next/server";
+
+import { createSupabaseServiceClient, LOGO_BUCKET, objectPathFromPublicUrl } from "~/lib/supabase-server";
 import { db } from "~/server/db";
-import { createSupabaseServiceClient, LOGO_BUCKET } from "~/lib/supabase-server";
+import { guardUpload, jsonNoStore, readImageUpload } from "../_shared";
 
-const ALLOWED_TYPES = ["image/png", "image/webp", "image/svg+xml"];
-const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
-const LOGO_PATH = (businessId: string) => `${businessId}/logo`;
+const MAX_SIZE = 2 * 1024 * 1024; // 2 MB, igual que el límite del bucket
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.businessId) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-  const businessId = session.user.businessId;
+const GENERIC_ERROR = "No se pudo guardar el logo. Inténtalo de nuevo.";
 
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  if (!file) {
-    return NextResponse.json({ error: "Archivo requerido" }, { status: 400 });
-  }
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json(
-      { error: "Formato no permitido. Usa PNG, WebP o SVG." },
-      { status: 400 },
-    );
-  }
-  if (file.size > MAX_SIZE) {
-    return NextResponse.json(
-      { error: "El archivo supera el límite de 2 MB." },
-      { status: 400 },
-    );
-  }
-
-  const supabase = createSupabaseServiceClient();
-  const path = LOGO_PATH(businessId);
-
-  // Eliminar logo anterior si existe
-  const business = await db.business.findUnique({
-    where: { id: businessId },
-    select: { logoUrl: true },
-  });
-  if (business?.logoUrl) {
-    await supabase.storage.from(LOGO_BUCKET).remove([path]);
-  }
-
-  // Subir nuevo logo
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const { error: uploadError } = await supabase.storage
-    .from(LOGO_BUCKET)
-    .upload(path, buffer, {
-      contentType: file.type,
-      upsert: true,
-    });
-
-  if (uploadError) {
-    return NextResponse.json(
-      { error: `Error al subir: ${uploadError.message}` },
-      { status: 500 },
-    );
-  }
-
-  const { data: urlData } = supabase.storage
-    .from(LOGO_BUCKET)
-    .getPublicUrl(path);
-
-  // Agregar cache-buster para que el navegador no use versión anterior
-  const logoUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-
-  await db.business.update({
-    where: { id: businessId },
-    data: { logoUrl },
-  });
-
-  return NextResponse.json({ logoUrl });
+/** Borra el logo anterior solo si su ruta está dentro de la carpeta del negocio. */
+async function removeOldLogo(
+  supabase: ReturnType<typeof createSupabaseServiceClient>,
+  businessId: string,
+  oldUrl: string | null | undefined,
+) {
+  if (!oldUrl) return;
+  const oldPath = objectPathFromPublicUrl(oldUrl, LOGO_BUCKET);
+  if (!oldPath?.startsWith(`${businessId}/`)) return;
+  const { error } = await supabase.storage.from(LOGO_BUCKET).remove([oldPath]);
+  if (error) console.error("[upload:logo] no se pudo borrar el logo anterior:", error.message);
 }
 
-export async function DELETE(_req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.businessId) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-  const businessId = session.user.businessId;
+export async function POST(req: NextRequest) {
+  const guard = await guardUpload(req, { ownerOnly: true });
+  if (!guard.ok) return guard.response;
+  const { businessId } = guard.user;
 
-  const business = await db.business.findUnique({
-    where: { id: businessId },
-    select: { logoUrl: true },
+  const upload = await readImageUpload(req, MAX_SIZE, {
+    tooLarge: "El archivo supera el límite de 2 MB.",
+    badType: "Formato no permitido. Usa PNG, JPG o WebP.",
   });
+  if (!upload.ok) return upload.response;
+  const { buffer, image } = upload;
 
-  if (business?.logoUrl) {
+  // Nombre único por subida: evita cachés viejas y que se pise otro archivo.
+  const path = `${businessId}/${Date.now()}-${randomUUID()}.${image.ext}`;
+
+  try {
     const supabase = createSupabaseServiceClient();
-    await supabase.storage.from(LOGO_BUCKET).remove([LOGO_PATH(businessId)]);
+    const { error: uploadError } = await supabase.storage
+      .from(LOGO_BUCKET)
+      .upload(path, buffer, { contentType: image.contentType, upsert: false });
+    if (uploadError) {
+      console.error("[upload:logo] fallo al subir:", uploadError.message);
+      return jsonNoStore({ error: GENERIC_ERROR }, 500);
+    }
+
+    const { data: urlData } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(path);
+    const logoUrl = urlData.publicUrl;
+
+    const previous = await db.business.findUnique({
+      where: { id: businessId },
+      select: { logoUrl: true },
+    });
+    await db.business.update({ where: { id: businessId }, data: { logoUrl } });
+
+    // Se borra el anterior después de guardar el nuevo, para no dejar al negocio sin logo.
+    await removeOldLogo(supabase, businessId, previous?.logoUrl);
+
+    return jsonNoStore({ logoUrl });
+  } catch (err) {
+    console.error("[upload:logo] error de almacenamiento:", err instanceof Error ? err.message : "desconocido");
+    return jsonNoStore({ error: GENERIC_ERROR }, 500);
   }
+}
 
-  await db.business.update({
-    where: { id: businessId },
-    data: { logoUrl: null },
-  });
+export async function DELETE(req: NextRequest) {
+  const guard = await guardUpload(req, { ownerOnly: true });
+  if (!guard.ok) return guard.response;
+  const { businessId } = guard.user;
 
-  return NextResponse.json({ ok: true });
+  try {
+    const business = await db.business.findUnique({
+      where: { id: businessId },
+      select: { logoUrl: true },
+    });
+
+    await db.business.update({ where: { id: businessId }, data: { logoUrl: null } });
+
+    if (business?.logoUrl) {
+      await removeOldLogo(createSupabaseServiceClient(), businessId, business.logoUrl);
+    }
+
+    return jsonNoStore({ ok: true });
+  } catch (err) {
+    console.error("[upload:logo] error al eliminar:", err instanceof Error ? err.message : "desconocido");
+    return jsonNoStore({ error: "No se pudo eliminar el logo." }, 500);
+  }
 }

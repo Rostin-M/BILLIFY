@@ -5,7 +5,6 @@ import { businessRouter } from "~/server/api/routers/business";
 import { cashRegisterRouter } from "~/server/api/routers/cashRegister";
 import { customerRouter } from "~/server/api/routers/customer";
 import { dashboardRouter } from "~/server/api/routers/dashboard";
-import { postRouter } from "~/server/api/routers/post";
 import { productRouter } from "~/server/api/routers/product";
 import { saleRouter } from "~/server/api/routers/sale";
 import { tableSessionRouter } from "~/server/api/routers/tableSession";
@@ -25,7 +24,6 @@ export const appRouter = createTRPCRouter({
   cashRegister: cashRegisterRouter,
   customer: customerRouter,
   dashboard: dashboardRouter,
-  post: postRouter,
   product: productRouter,
   sale: saleRouter,
   tableSession: tableSessionRouter,
@@ -39,7 +37,7 @@ export type AppRouter = typeof appRouter;
  * Create a server-side caller for the tRPC API.
  * @example
  * const trpc = createCaller(createContext);
- * const res = await trpc.post.all();
- *       ^? Post[]
+ * const res = await trpc.product.list();
+ *       ^? Product[]
  */
 export const createCaller = createCallerFactory(appRouter);

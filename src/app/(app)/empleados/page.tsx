@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
-
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { api, HydrateClient } from "~/trpc/server";
 import { EmployeeManager } from "./_components/EmployeeManager";
 import { PageLayout } from "~/app/_components/PageLayout";
@@ -8,10 +6,7 @@ import { PageLayout } from "~/app/_components/PageLayout";
 export const metadata = { title: "Empleados — BILLIFY" };
 
 export default async function EmpleadosPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
-  if (session.user.role !== "OWNER") redirect("/");
+  await requirePageUser({ roles: ["OWNER"] });
 
   void api.user.list.prefetch();
 

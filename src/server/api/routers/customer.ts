@@ -1,20 +1,49 @@
 import { TRPCError } from "@trpc/server";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
+import { idempotencyKeySchema, runIdempotent } from "~/server/lib/idempotency";
 
 const customerSchema = z.object({
-  name: z.string().trim().min(2, "El nombre es obligatorio"),
-  alias: z.string().trim().optional(),
-  document: z.string().trim().optional(),
-  email: z.string().trim().email("El correo no es válido. Ej: nombre@dominio.com").optional().or(z.literal("")),
-  phone: z.string().trim().optional(),
+  name: z.string().trim().min(2, "El nombre es obligatorio").max(120, "El nombre es demasiado largo"),
+  alias: z.string().trim().max(120).optional(),
+  document: z.string().trim().max(20, "El documento es demasiado largo").optional(),
+  email: z
+    .string()
+    .trim()
+    .max(254)
+    .email("El correo no es válido. Ej: nombre@dominio.com")
+    .optional()
+    .or(z.literal("")),
+  phone: z.string().trim().max(20, "El teléfono es demasiado largo").optional(),
 });
+
+// Deuda = ventas a crédito completadas − abonos, siempre acotado al negocio.
+async function computeCustomerDebt(db: Prisma.TransactionClient, businessId: string, customerId: string) {
+  const [creditTotal, paidTotal] = await Promise.all([
+    db.sale.aggregate({
+      where: { businessId, customerId, paymentMethod: "CREDIT", status: "COMPLETED" },
+      _sum: { total: true },
+    }),
+    db.customerPayment.aggregate({
+      where: { businessId, customerId },
+      _sum: { amount: true },
+    }),
+  ]);
+  return (creditTotal._sum.total ?? 0) - (paidTotal._sum.amount ?? 0);
+}
+
+function paymentMessage(customerName: string, remainingDebt: number): string {
+  return remainingDebt <= 0.01
+    ? `Deuda de ${customerName} saldada por completo.`
+    : `Abono registrado. Deuda restante: ${remainingDebt.toFixed(0)}.`;
+}
 
 export const customerRouter = createTRPCRouter({
   // Búsqueda rápida para el POS — ambos roles
   search: businessProcedure
-    .input(z.object({ q: z.string().trim().default("") }))
+    .input(z.object({ q: z.string().trim().max(120).default("") }))
     .query(async ({ ctx, input }) => {
       const { businessId } = ctx.session.user;
 
@@ -104,7 +133,7 @@ export const customerRouter = createTRPCRouter({
     if (debtorIds.length === 0) return [];
 
     const customers = await ctx.db.customer.findMany({
-      where: { id: { in: debtorIds.map((d) => d.customerId) } },
+      where: { id: { in: debtorIds.map((d) => d.customerId) }, businessId },
       select: { id: true, name: true, alias: true, phone: true },
     });
     const customerMap = new Map(customers.map((c) => [c.id, c]));
@@ -147,7 +176,7 @@ export const customerRouter = createTRPCRouter({
 
   // Editar cliente — solo OWNER
   update: ownerProcedure
-    .input(customerSchema.extend({ id: z.string().min(1) }))
+    .input(customerSchema.extend({ id: z.string().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
 
@@ -187,7 +216,7 @@ export const customerRouter = createTRPCRouter({
 
   // Activar / desactivar — solo OWNER
   setActive: ownerProcedure
-    .input(z.object({ customerId: z.string().min(1), isActive: z.boolean() }))
+    .input(z.object({ customerId: z.string().min(1).max(64), isActive: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
 
@@ -223,7 +252,7 @@ export const customerRouter = createTRPCRouter({
 
   // Historial de ventas por cliente — ambos roles
   history: businessProcedure
-    .input(z.object({ customerId: z.string().min(1) }))
+    .input(z.object({ customerId: z.string().min(1).max(64) }))
     .query(async ({ ctx, input }) => {
       const { businessId } = ctx.session.user;
 
@@ -238,7 +267,7 @@ export const customerRouter = createTRPCRouter({
 
       const [sales, payments] = await Promise.all([
         ctx.db.sale.findMany({
-          where: { customerId: input.customerId, status: "COMPLETED" },
+          where: { businessId, customerId: input.customerId, status: "COMPLETED" },
           select: {
             id: true,
             invoiceNumber: true,
@@ -252,7 +281,7 @@ export const customerRouter = createTRPCRouter({
           take: 20,
         }),
         ctx.db.customerPayment.findMany({
-          where: { customerId: input.customerId },
+          where: { businessId, customerId: input.customerId },
           select: { id: true, amount: true, note: true, createdAt: true, user: { select: { name: true } } },
           orderBy: { createdAt: "desc" },
           take: 20,
@@ -273,76 +302,85 @@ export const customerRouter = createTRPCRouter({
   addPayment: businessProcedure
     .input(
       z.object({
-        customerId: z.string().min(1),
-        amount: z.number().positive("El monto debe ser mayor a cero"),
-        note: z.string().trim().optional(),
+        customerId: z.string().min(1).max(64),
+        amount: z
+          .number()
+          .finite()
+          .positive("El monto debe ser mayor a cero")
+          .max(1e9, "Monto demasiado grande"),
+        note: z.string().trim().max(500).optional(),
+        idempotencyKey: idempotencyKeySchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
 
-      const customer = await ctx.db.customer.findFirst({
-        where: { id: input.customerId, businessId },
-        select: { id: true, name: true },
-      });
+      const registerPayment = () =>
+        ctx.db.$transaction(async (tx) => {
+          // Bloquear al cliente: dos abonos simultáneos se procesan uno tras otro y el segundo
+          // ya ve la deuda descontada por el primero (no se puede abonar más de lo que se debe).
+          const locked = await tx.$queryRaw<{ id: string; name: string }[]>`
+            SELECT "id", "name" FROM "customers"
+             WHERE "id" = ${input.customerId} AND "business_id" = ${businessId}
+             FOR UPDATE
+          `;
+          const customer = locked[0];
+          if (!customer) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado en este negocio." });
+          }
 
-      if (!customer) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado en este negocio." });
-      }
+          const currentDebt = await computeCustomerDebt(tx, businessId, customer.id);
 
-      const [creditTotal, paidTotal] = await Promise.all([
-        ctx.db.sale.aggregate({
-          where: { businessId, customerId: input.customerId, paymentMethod: "CREDIT", status: "COMPLETED" },
-          _sum: { total: true },
-        }),
-        ctx.db.customerPayment.aggregate({
-          where: { businessId, customerId: input.customerId },
-          _sum: { amount: true },
-        }),
-      ]);
+          if (currentDebt <= 0.01) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Este cliente no tiene deuda pendiente." });
+          }
+          if (input.amount > currentDebt + 0.01) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `El abono no puede ser mayor a la deuda actual (${currentDebt.toFixed(0)}).`,
+            });
+          }
 
-      const currentDebt = (creditTotal._sum.total ?? 0) - (paidTotal._sum.amount ?? 0);
+          const payment = await tx.customerPayment.create({
+            data: {
+              businessId,
+              customerId: customer.id,
+              userId,
+              amount: input.amount,
+              note: input.note ?? null,
+              idempotencyKey: input.idempotencyKey ?? null,
+            },
+            select: { id: true },
+          });
 
-      if (currentDebt <= 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Este cliente no tiene deuda pendiente." });
-      }
-      if (input.amount > currentDebt + 0.01) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `El abono no puede ser mayor a la deuda actual (${currentDebt.toFixed(0)}).`,
+          await tx.auditLog.create({
+            data: {
+              businessId,
+              userId,
+              action: "CREATE_CUSTOMER_PAYMENT",
+              entityType: "CustomerPayment",
+              entityId: payment.id,
+              detail: { customerName: customer.name, amount: input.amount, debtBefore: currentDebt },
+            },
+          });
+
+          const remainingDebt = currentDebt - input.amount;
+          return { remainingDebt, message: paymentMessage(customer.name, remainingDebt) };
         });
-      }
 
-      const payment = await ctx.db.customerPayment.create({
-        data: {
-          businessId,
-          customerId: input.customerId,
-          userId,
-          amount: input.amount,
-          note: input.note ?? null,
+      // Doble clic / reintento con la misma clave → no registrar el abono dos veces.
+      return runIdempotent({
+        key: input.idempotencyKey,
+        findExisting: async () => {
+          const existing = await ctx.db.customerPayment.findFirst({
+            where: { businessId, idempotencyKey: input.idempotencyKey },
+            select: { customerId: true, customer: { select: { name: true } } },
+          });
+          if (!existing) return null;
+          const remainingDebt = await computeCustomerDebt(ctx.db, businessId, existing.customerId);
+          return { remainingDebt, message: paymentMessage(existing.customer.name, remainingDebt) };
         },
-        select: { id: true },
+        run: registerPayment,
       });
-
-      await ctx.db.auditLog.create({
-        data: {
-          businessId,
-          userId,
-          action: "CREATE_CUSTOMER_PAYMENT",
-          entityType: "CustomerPayment",
-          entityId: payment.id,
-          detail: { customerName: customer.name, amount: input.amount },
-        },
-      });
-
-      const remainingDebt = currentDebt - input.amount;
-
-      return {
-        remainingDebt,
-        message:
-          remainingDebt <= 0.01
-            ? `Deuda de ${customer.name} saldada por completo.`
-            : `Abono registrado. Deuda restante: ${remainingDebt.toFixed(0)}.`,
-      };
     }),
 });

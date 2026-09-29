@@ -1,16 +1,13 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { api, HydrateClient } from "~/trpc/server";
 import { TrazabilidadClient } from "./_components/TrazabilidadClient";
 import { PageLayout } from "~/app/_components/PageLayout";
 
 export default async function TrazabilidadPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
-  if (!session.user.businessId) redirect("/");
-  if (session.user.role !== "OWNER") redirect("/");
+  const user = await requirePageUser({ roles: ["OWNER"] });
+  if (!user.businessId) redirect("/");
 
   void api.auditLog.list.prefetch({ limit: 100 });
 

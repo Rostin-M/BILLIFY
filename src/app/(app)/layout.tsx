@@ -1,15 +1,18 @@
 import { type ReactNode } from "react";
 
 import { auth } from "~/server/auth";
+import { loadActiveUser } from "~/server/auth/currentUser";
 import { AppHeader } from "~/app/_components/AppHeader";
 import { NavShell } from "~/app/_components/NavShell";
 import { BottomNav } from "~/app/_components/BottomNav";
+import { SessionExpiryGuard } from "~/app/_components/SessionExpiryGuard";
+import { hasOpenCashRegister } from "~/app/_components/sessionExpiryActions";
 
 export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
-  const session = await auth();
-  const role = session?.user?.role;
+  // Revalida contra la BD: rol fresco, usuario activo y sesión vigente (24 h).
+  const user = await loadActiveUser(await auth());
 
-  if (role !== "OWNER" && role !== "CASHIER") {
+  if (!user) {
     return (
       <>
         <AppHeader />
@@ -18,13 +21,21 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     );
   }
 
+  const hasOpenRegister = await hasOpenCashRegister();
+
   return (
     <>
       <AppHeader />
-      <NavShell role={role}>
+      <SessionExpiryGuard
+        key={user.sessionExpiresAt}
+        expiresAt={user.sessionExpiresAt}
+        serverNow={Date.now()}
+        initialHasOpenRegister={hasOpenRegister}
+      />
+      <NavShell role={user.role}>
         {children}
       </NavShell>
-      <BottomNav role={role} />
+      <BottomNav role={user.role} />
     </>
   );
 }

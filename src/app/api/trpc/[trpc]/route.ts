@@ -15,20 +15,24 @@ const createContext = async (req: NextRequest) => {
   });
 };
 
+/** Máximo de procedimientos por petición batch (el cliente usa el mismo límite). */
+const MAX_BATCH_SIZE = 10;
+
 const handler = (req: NextRequest) =>
   fetchRequestHandler({
     endpoint: "/api/trpc",
     req,
     router: appRouter,
     createContext: () => createContext(req),
-    onError:
-      env.NODE_ENV === "development"
-        ? ({ path, error }) => {
-            console.error(
-              `❌ tRPC failed on ${path ?? "<no-path>"}: ${error.message}`
-            );
-          }
-        : undefined,
+    maxBatchSize: MAX_BATCH_SIZE,
+    // Nunca registrar input ni ctx: pueden contener contraseñas o datos de clientes.
+    onError: ({ path, error }) => {
+      if (env.NODE_ENV === "development") {
+        console.error(`❌ tRPC failed on ${path ?? "<no-path>"}: ${error.message}`);
+        return;
+      }
+      console.error("[tRPC]", path ?? "<no-path>", error.code, error.message);
+    },
   });
 
 export { handler as GET, handler as POST };

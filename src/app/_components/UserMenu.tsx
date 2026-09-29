@@ -1,9 +1,10 @@
 "use client";
 
-import { signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { KeyRound, LogOut } from "lucide-react";
+import { AlertTriangle, KeyRound, Loader2, LogOut } from "lucide-react";
+import { pendingSalesBeforeSignOut, signOutAndClear } from "~/lib/clientSignOut";
 import { api } from "~/trpc/react";
 
 type Props = { name: string | null; role: string };
@@ -16,6 +17,13 @@ export function UserMenu({ name, role }: Readonly<Props>) {
   const [confirm, setConfirm] = useState("");
   const [success, setSuccess] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { data: session } = useSession();
+  const [checkingPending, setCheckingPending] = useState(false);
+  /** Ventas sin conexión de este usuario que no se pudieron enviar antes de salir. */
+  const [unsyncedCount, setUnsyncedCount] = useState<number | null>(null);
+
+  // Para intentar enviar la cola antes de cerrar sesión (mismo endpoint que Venta rápida).
+  const syncSale = api.sale.create.useMutation();
 
   const changePassword = api.auth.changePassword.useMutation({
     onSuccess: () => {
@@ -23,6 +31,9 @@ export function UserMenu({ name, role }: Readonly<Props>) {
       setCurrent("");
       setNext("");
       setConfirm("");
+      // El cambio invalida todas las sesiones (sessionVersion++): volver a ingresar.
+      // Sin aviso de ventas pendientes: la sesión ya no es válida; la cola se conserva.
+      setTimeout(() => void signOutAndClear("/auth/login?pwchanged=1"), 1500);
     },
   });
 
@@ -35,11 +46,36 @@ export function UserMenu({ name, role }: Readonly<Props>) {
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        setUnsyncedCount(null);
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open]);
+
+  function closeMenu() {
+    setOpen(false);
+    setUnsyncedCount(null);
+  }
+
+  async function handleSignOut() {
+    const userId = session?.user?.id;
+    const businessId = session?.user?.businessId;
+    if (userId && businessId) {
+      setCheckingPending(true);
+      const pending = await pendingSalesBeforeSignOut({ userId, businessId }, async (sale) => {
+        await syncSale.mutateAsync({ ...sale, saleType: "QUICK" });
+      });
+      setCheckingPending(false);
+      if (pending > 0) {
+        setUnsyncedCount(pending);
+        return;
+      }
+    }
+    await signOutAndClear("/auth/login");
+  }
 
   function openModal() {
     setOpen(false);
@@ -68,7 +104,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
       {/* Botón del menú */}
       <div className="relative" ref={menuRef}>
         <button
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => (open ? closeMenu() : setOpen(true))}
           className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-slate-100 dark:hover:bg-white/10"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
@@ -84,8 +120,8 @@ export function UserMenu({ name, role }: Readonly<Props>) {
 
         {open && (
           <>
-            <div className="fixed inset-0 z-30" aria-hidden="true" onClick={() => setOpen(false)} />
-            <div className="absolute right-0 top-full z-40 mt-1.5 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
+            <div className="fixed inset-0 z-30" aria-hidden="true" onClick={closeMenu} />
+            <div className="absolute right-0 top-full z-40 mt-1.5 w-64 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
               <div className="border-b border-slate-100 px-3 py-2 dark:border-white/10">
                 <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{name}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-500">
@@ -100,12 +136,49 @@ export function UserMenu({ name, role }: Readonly<Props>) {
                 <KeyRound size={15} /> Cambiar contraseña
               </button>
 
-              <button
-                onClick={() => void signOut({ callbackUrl: "/auth/login" })}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 transition hover:bg-red-50 dark:hover:bg-red-900/20"
-              >
-                <LogOut size={15} /> Cerrar sesión
-              </button>
+              {unsyncedCount === null ? (
+                <button
+                  onClick={() => void handleSignOut()}
+                  disabled={checkingPending}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 transition hover:bg-red-50 disabled:opacity-60 dark:hover:bg-red-900/20"
+                >
+                  {checkingPending ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" /> Sincronizando ventas...
+                    </>
+                  ) : (
+                    <>
+                      <LogOut size={15} /> Cerrar sesión
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div role="alert" className="space-y-2 border-t border-slate-100 px-3 py-2.5 dark:border-white/10">
+                  <p className="flex gap-2 text-xs text-amber-700 dark:text-amber-300">
+                    <AlertTriangle size={15} className="shrink-0" />
+                    <span>
+                      Tienes {unsyncedCount === 1 ? "1 venta" : `${unsyncedCount} ventas`} sin
+                      sincronizar en este equipo. Se conservarán y se enviarán cuando vuelvas a
+                      iniciar sesión aquí con conexión. Si no vuelves en 72 h y otro usuario
+                      entra en este equipo, podrían descartarse.
+                    </span>
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => void signOutAndClear("/auth/login")}
+                      className="flex-1 rounded-lg bg-red-600 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700"
+                    >
+                      Cerrar sesión igual
+                    </button>
+                    <button
+                      onClick={() => setUnsyncedCount(null)}
+                      className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -158,7 +231,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
                     onChange={(e) => setNext(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
                   />
-                  <span className="text-xs text-slate-500">Mínimo 8 caracteres, una letra y un número</span>
+                  <span className="text-xs text-slate-500">Mínimo 10 caracteres, una letra y un número</span>
                 </label>
 
                 <label className="block space-y-1 text-sm">

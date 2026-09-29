@@ -9,6 +9,8 @@ import { Logo } from "~/app/_components/Logo";
 import { ThemeToggle } from "~/app/_components/ThemeToggle";
 import { api } from "~/trpc/react";
 
+import { friendlyError } from "../_lib/errors";
+
 type RegisterFormState = {
   businessName: string;
   businessDocument: string;
@@ -26,19 +28,6 @@ const initialFormState: RegisterFormState = {
   ownerEmail: "",
   ownerPassword: "",
 };
-
-function parseErrorMessage(rawMessage: string): string {
-  try {
-    const parsed = JSON.parse(rawMessage) as Array<{ message?: string }>;
-    if (Array.isArray(parsed)) {
-      const first = parsed.find((e) => e.message)?.message;
-      if (first) return first;
-    }
-  } catch {
-    // mensaje plano
-  }
-  return rawMessage;
-}
 
 type Step = "form" | "verify";
 
@@ -64,7 +53,7 @@ export default function RegisterPage() {
       setVerified(true);
       setTimeout(() => router.push("/auth/login?registered=true"), 2500);
     },
-    onError: (err) => setVerifyError(parseErrorMessage(err.message)),
+    onError: (err) => setVerifyError(friendlyError(err)),
   });
 
   const resendCode = api.auth.resendVerificationCode.useMutation();
@@ -165,9 +154,29 @@ export default function RegisterPage() {
             </p>
             {resendCode.isSuccess && (
               <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                Código reenviado. Revisa tu bandeja de entrada.
+                {resendCode.data.message} Revisa tu bandeja de entrada.
               </p>
             )}
+            {resendCode.error && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                {friendlyError(resendCode.error)}
+              </p>
+            )}
+            <p className="mt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("form");
+                  setCode("");
+                  setVerifyError(null);
+                  resendCode.reset();
+                  registerOwner.reset();
+                }}
+                className="underline underline-offset-4 hover:text-slate-900 dark:hover:text-white"
+              >
+                Volver al formulario de registro
+              </button>
+            </p>
           </div>
         </section>
       </main>
@@ -266,11 +275,13 @@ export default function RegisterPage() {
               <input
                 required
                 type="password"
-                minLength={8}
+                minLength={10}
+                maxLength={128}
+                autoComplete="new-password"
                 value={form.ownerPassword}
                 onChange={handleChange("ownerPassword")}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
-                placeholder="Mínimo 8 caracteres con letras y números"
+                placeholder="Mínimo 10 caracteres con letras y números"
               />
             </label>
           </div>
@@ -298,7 +309,22 @@ export default function RegisterPage() {
 
           {registerOwner.error && (
             <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
-              {parseErrorMessage(registerOwner.error.message)}
+              {friendlyError(registerOwner.error)}
+              {registerOwner.error.data?.code === "CONFLICT" && form.ownerEmail && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegisteredEmail(form.ownerEmail.trim().toLowerCase());
+                      setStep("verify");
+                    }}
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Ingresar código
+                  </button>
+                </>
+              )}
             </p>
           )}
 

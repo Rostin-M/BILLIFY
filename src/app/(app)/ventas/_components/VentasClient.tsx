@@ -15,10 +15,13 @@ type Props = {
   autoTax: boolean;
   isOwner: boolean;
   userName: string | null;
+  /** Para ligar las ventas sin conexión al usuario y negocio de la sesión. */
+  userId: string;
+  businessId: string;
   business: BusinessInfoForPdf;
 };
 
-export function VentasClient({ taxes, autoTax, isOwner, userName, business }: Readonly<Props>) {
+export function VentasClient({ taxes, autoTax, isOwner, userName, userId, businessId, business }: Readonly<Props>) {
   const [tab, setTab] = useState<Tab>("quick");
 
   const tabs: { id: Tab; label: string }[] = [
@@ -45,7 +48,7 @@ export function VentasClient({ taxes, autoTax, isOwner, userName, business }: Re
         ))}
       </div>
 
-      {tab === "quick" && <POS taxes={taxes} autoTax={autoTax} />}
+      {tab === "quick" && <POS taxes={taxes} autoTax={autoTax} userId={userId} businessId={businessId} />}
       {tab === "invoiced" && (
         <InvoicedSaleForm
           taxes={taxes}

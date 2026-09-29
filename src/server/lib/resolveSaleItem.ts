@@ -1,4 +1,44 @@
 import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+
+// Límites de entrada compartidos por venta rápida y pedidos de mesa.
+export const MAX_MONEY = 1e9;
+export const MAX_QUANTITY = 100000;
+export const MAX_WEIGHT_KG = 1000;
+export const MAX_SALE_ITEMS = 200;
+
+export const saleItemInputSchema = z.object({
+  productId: z.string().min(1).max(64),
+  quantity: z
+    .number()
+    .int()
+    .positive("La cantidad debe ser mayor a cero")
+    .max(MAX_QUANTITY, "Cantidad demasiado grande"),
+  weightKg: z.number().finite().positive().max(MAX_WEIGHT_KG, "Peso demasiado grande").optional(),
+  customAmount: z.number().finite().positive().max(MAX_MONEY, "Monto demasiado grande").optional(),
+});
+
+// Ruta que genera /api/upload/receipt: "<businessId>/<timestamp>-<uuid>.<ext>".
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function isValidReceiptPath(businessId: string, path: string): boolean {
+  const pattern = new RegExp(`^${escapeRegExp(businessId)}/\\d+-[0-9a-f-]{36}\\.(png|jpg|webp)$`);
+  return pattern.test(path);
+}
+
+/**
+ * Valida que el comprobante enviado por el cliente sea un archivo de ESTE negocio subido
+ * por nuestro endpoint — evita que se adjunte (y luego se firme) un archivo de otro negocio.
+ */
+export function assertReceiptPath(businessId: string, path: string | undefined): string | null {
+  if (!path) return null;
+  if (!isValidReceiptPath(businessId, path)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "El comprobante adjunto no es válido." });
+  }
+  return path;
+}
 
 // Producto tal como se necesita para resolver una línea de venta (subset de Product).
 export type SellableProduct = {

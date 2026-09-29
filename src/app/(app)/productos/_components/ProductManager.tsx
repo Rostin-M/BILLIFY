@@ -798,12 +798,14 @@ function ProductBadges({ product }: Readonly<{ product: ProductListItem }>) {
 function ProductRowActions({
   product,
   userRole,
+  canEditPrices,
   activeRow,
   openRow,
   setActive,
 }: Readonly<{
   product: ProductListItem;
   userRole: "OWNER" | "CASHIER";
+  canEditPrices: boolean;
   activeRow: { id: string; mode: RowMode } | null;
   openRow: (id: string, mode: RowMode, product?: ProductListItem) => void;
   setActive: { mutate: (input: { productId: string; isActive: boolean }) => void; isPending: boolean };
@@ -826,8 +828,8 @@ function ProductRowActions({
         </button>
       )}
 
-      {/* CASHIER: solo actualizar precio */}
-      {userRole === "CASHIER" && (
+      {/* CASHIER: solo actualizar precio, si el propietario lo habilitó */}
+      {userRole === "CASHIER" && canEditPrices && (
         <button
           type="button"
           onClick={() => openRow(product.id, "price", product)}
@@ -1017,6 +1019,9 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
+  // El cajero solo ve "Precio" si el propietario habilitó el cambio de precios (el servidor lo valida igual)
+  const { data: permissions } = api.product.permissions.useQuery(undefined, { staleTime: 60_000 });
+  const canEditPrices = userRole === "OWNER" || (permissions?.canEditPrices ?? false);
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredProducts = normalizedSearch
@@ -1422,6 +1427,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                     <ProductRowActions
                       product={product}
                       userRole={userRole}
+                      canEditPrices={canEditPrices}
                       activeRow={activeRow}
                       openRow={openRow}
                       setActive={setActive}

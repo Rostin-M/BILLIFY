@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "~/trpc/react";
 import { useSession } from "next-auth/react";
 import { ReceiptPhotoButton } from "~/app/_components/ReceiptPhotoButton";
@@ -48,6 +48,12 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [keepGuests, setKeepGuests] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Clave de idempotencia del cobro: nace al abrir el cobro y se reutiliza en reintentos
+  // (doble clic, red lenta); cambiar la forma de pago o los grupos lo convierte en otro cobro.
+  const checkoutKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    checkoutKeyRef.current = crypto.randomUUID();
+  }, [groups, excluded, keepGuests]);
 
   const utils = api.useUtils();
   const checkout = api.tableSession.checkout.useMutation({
@@ -146,14 +152,17 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
   const wouldCloseTable = !keepGuests && allIncluded;
 
   function confirm() {
+    if (checkout.isPending) return;
     setError(null);
     if (activeGroups.length === 0) {
       setError("Selecciona al menos un cliente para cobrar.");
       return;
     }
+    checkoutKeyRef.current ??= crypto.randomUUID();
     checkout.mutate({
       sessionId,
       keepGuests,
+      idempotencyKey: checkoutKeyRef.current,
       groups: activeGroups.map((g) => ({ guestIds: g.guestIds, paymentMethod: g.paymentMethod, invoice: g.invoice, receiptPath: g.receiptPath ?? undefined })),
     });
   }

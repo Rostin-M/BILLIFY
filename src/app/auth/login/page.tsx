@@ -19,6 +19,8 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const justRegistered = searchParams.get("registered") === "true";
+  const sessionExpired = searchParams.get("expired") === "1";
+  const passwordChanged = searchParams.get("pwchanged") === "1";
 
   const [form, setForm] = useState<LoginFormState>(initialFormState);
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +46,9 @@ function LoginForm() {
     setLoading(false);
 
     if (result?.error) {
+      // Mensaje genérico: no distingue credenciales inválidas de cuenta bloqueada
       setError(
-        "Correo electrónico o contraseña incorrectos. Si acabas de registrarte, verifica tu correo primero.",
+        "Correo o contraseña incorrectos, o cuenta bloqueada temporalmente por intentos fallidos. Si acabas de registrarte, verifica tu correo primero.",
       );
       return;
     }
@@ -103,6 +106,18 @@ function LoginForm() {
         {justRegistered && (
           <p className="mb-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
             ¡Negocio registrado! Inicia sesión para comenzar.
+          </p>
+        )}
+
+        {passwordChanged && (
+          <p className="mb-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+            Contraseña actualizada. Inicia sesión con tu nueva contraseña.
+          </p>
+        )}
+
+        {sessionExpired && (
+          <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+            Tu sesión expiró por seguridad (24 h). Inicia sesión nuevamente.
           </p>
         )}
 

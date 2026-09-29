@@ -8,6 +8,8 @@ import { Logo } from "~/app/_components/Logo";
 import { ThemeToggle } from "~/app/_components/ThemeToggle";
 import { api } from "~/trpc/react";
 
+import { friendlyError } from "../_lib/errors";
+
 type Step = "form" | "code" | "done";
 
 export default function RecuperarContrasenaPage() {
@@ -25,7 +27,7 @@ export default function RecuperarContrasenaPage() {
 
   const resetPassword = api.auth.resetPassword.useMutation({
     onSuccess: () => setStep("done"),
-    onError: (err) => setClientError(err.message),
+    onError: (err) => setClientError(friendlyError(err)),
   });
 
   if (step === "done") {
@@ -102,7 +104,7 @@ export default function RecuperarContrasenaPage() {
 
               {forgotPassword.error && (
                 <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                  {forgotPassword.error.message}
+                  {friendlyError(forgotPassword.error)}
                 </p>
               )}
 
@@ -122,8 +124,9 @@ export default function RecuperarContrasenaPage() {
             <header className="mb-5 space-y-1">
               <h2 className="text-lg font-semibold text-white">Nueva contraseña</h2>
               <p className="text-sm text-slate-400">
-                Ingresa el código que enviamos a{" "}
-                <span className="font-semibold text-slate-200">{email}</span> y tu nueva contraseña.
+                Si los datos son correctos, enviamos un código a{" "}
+                <span className="font-semibold text-slate-200">{email}</span>. Ingrésalo junto con tu
+                nueva contraseña.
               </p>
             </header>
 
@@ -157,11 +160,13 @@ export default function RecuperarContrasenaPage() {
                 <input
                   required
                   type="password"
-                  minLength={8}
+                  minLength={10}
+                  maxLength={128}
+                  autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-blue-500 transition placeholder:text-slate-600 focus:ring-2"
-                  placeholder="Mínimo 8 caracteres con letras y números"
+                  placeholder="Mínimo 10 caracteres con letras y números"
                 />
               </label>
 
@@ -170,7 +175,9 @@ export default function RecuperarContrasenaPage() {
                 <input
                   required
                   type="password"
-                  minLength={8}
+                  minLength={10}
+                  maxLength={128}
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-blue-500 transition placeholder:text-slate-600 focus:ring-2"
@@ -178,9 +185,9 @@ export default function RecuperarContrasenaPage() {
                 />
               </label>
 
-              {(clientError ?? resetPassword.error) && (
+              {clientError && (
                 <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                  {clientError ?? resetPassword.error?.message}
+                  {clientError}
                 </p>
               )}
 

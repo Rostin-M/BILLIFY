@@ -11,8 +11,11 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
+import { env } from "~/env";
 import { auth } from "~/server/auth";
+import { loadActiveUser } from "~/server/auth/currentUser";
 import { db } from "~/server/db";
+import { getClientIp, getUserAgent } from "~/server/lib/requestMeta";
 
 /**
  * 1. CONTEXT
@@ -32,6 +35,9 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
   return {
     db,
     session,
+    /** IP del cliente (para rate limiting en routers: `ctx.ip`). */
+    ip: getClientIp(opts.headers),
+    userAgent: getUserAgent(opts.headers),
     ...opts,
   };
 };
@@ -46,12 +52,19 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
+    const isProd = env.NODE_ENV === "production";
+    // En producción no se filtran mensajes internos (Prisma, stack, etc.).
+    const hideMessage = isProd && error.code === "INTERNAL_SERVER_ERROR";
     return {
       ...shape,
+      message: hideMessage ? "Error interno. Inténtalo de nuevo." : shape.message,
       data: {
         ...shape.data,
+        stack: isProd ? undefined : shape.data.stack,
         zodError:
-          error.cause instanceof ZodError ? error.cause.flatten() : null,
+          error.code === "BAD_REQUEST" && error.cause instanceof ZodError
+            ? error.cause.flatten()
+            : null,
       },
     };
   },
@@ -85,13 +98,13 @@ export const createTRPCRouter = t.router;
  * network latency that would occur in production but not in local development.
  */
 const timingMiddleware = t.middleware(async ({ next, path }) => {
-  const start = Date.now();
+  // Solo en desarrollo: en producción no se registra nada por petición.
+  if (env.NODE_ENV !== "development") return next();
 
-  if (t._config.isDev) {
-    // artificial delay in dev
-    const waitMs = Math.floor(Math.random() * 400) + 100;
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-  }
+  const start = Date.now();
+  // artificial delay in dev
+  const waitMs = Math.floor(Math.random() * 400) + 100;
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
 
   const result = await next();
 
@@ -113,21 +126,46 @@ export const publicProcedure = t.procedure.use(timingMiddleware);
 /**
  * Protected (authenticated) procedure
  *
- * If you want a query or mutation to ONLY be accessible to logged in users, use this. It verifies
- * the session is valid and guarantees `ctx.session.user` is not null.
+ * Revalida la sesión contra la BD en cada llamada (`loadActiveUser`): usuario
+ * activo, sessionVersion vigente y plazo absoluto de 24 h. Rol, negocio y
+ * permisos de caja se toman siempre frescos de la BD, nunca del JWT.
+ * Expone `ctx.user` (ActiveUser) y `ctx.session.user` con los valores frescos.
+ *
+ * Si el usuario debe cambiar su contraseña, solo se permiten procedimientos
+ * del router `auth.`.
  *
  * @see https://trpc.io/docs/procedures
  */
 export const protectedProcedure = t.procedure
   .use(timingMiddleware)
-  .use(({ ctx, next }) => {
-    if (!ctx.session?.user) {
+  .use(async ({ ctx, next, path }) => {
+    const user = await loadActiveUser(ctx.session);
+    if (!user || !ctx.session?.user) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
+
+    if (user.mustChangePassword && !path.startsWith("auth.")) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Debes cambiar tu contraseña",
+      });
+    }
+
     return next({
       ctx: {
-        // infers the `session` as non-nullable
-        session: { ...ctx.session, user: ctx.session.user },
+        user,
+        session: {
+          ...ctx.session,
+          user: {
+            ...ctx.session.user,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            businessId: user.businessId,
+            canManageCash: user.canManageCash,
+            mustChangePassword: user.mustChangePassword,
+          },
+        },
       },
     });
   });
@@ -139,17 +177,18 @@ export const protectedProcedure = t.procedure
  * Centraliza el aislamiento lógico por negocio para ambos roles.
  */
 export const businessProcedure = protectedProcedure.use(({ ctx, next }) => {
-  const { businessId } = ctx.session.user;
+  const { businessId } = ctx.user;
 
   if (!businessId) {
     throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
+      code: "FORBIDDEN",
       message: "Cuenta sin negocio asociado.",
     });
   }
 
   return next({
     ctx: {
+      user: { ...ctx.user, businessId },
       session: {
         ...ctx.session,
         user: { ...ctx.session.user, businessId },
@@ -165,7 +204,7 @@ export const businessProcedure = protectedProcedure.use(({ ctx, next }) => {
  * y un businessId asociado. Garantiza aislamiento de datos por negocio.
  */
 export const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  const { role, businessId } = ctx.session.user;
+  const { role, businessId } = ctx.user;
 
   if (role !== "OWNER") {
     throw new TRPCError({
@@ -176,13 +215,14 @@ export const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
 
   if (!businessId) {
     throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
+      code: "FORBIDDEN",
       message: "Cuenta sin negocio asociado.",
     });
   }
 
   return next({
     ctx: {
+      user: { ...ctx.user, businessId },
       session: {
         ...ctx.session,
         user: { ...ctx.session.user, businessId },

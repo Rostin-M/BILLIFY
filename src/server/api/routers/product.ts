@@ -1,23 +1,33 @@
 import { TRPCError } from "@trpc/server";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { adjustStock } from "~/server/lib/inventory";
 
+const MAX_MONEY = 1e9;
+const MAX_STOCK = 10_000_000;
+const MAX_ADJUST_QUANTITY = 100000;
+
+const priceSchema = z
+  .number()
+  .finite()
+  .positive("El precio debe ser mayor a cero")
+  .max(MAX_MONEY, "El precio es demasiado alto");
+
 const baseProductSchema = z.object({
-  name: z.string().trim().min(2, "El nombre del producto es obligatorio"),
-  price: z.number().positive("El precio debe ser mayor a cero"),
-  cost: z.number().nonnegative("El costo no puede ser negativo").optional(),
-  unit: z.string().trim().default("und"),
+  name: z.string().trim().min(2, "El nombre del producto es obligatorio").max(120, "El nombre es demasiado largo"),
+  price: priceSchema,
+  cost: z.number().finite().nonnegative("El costo no puede ser negativo").max(MAX_MONEY).optional(),
+  unit: z.string().trim().max(20).default("und"),
   taxSlots: z.array(z.number().int().min(0).max(2)).max(3).default([]),
-  stock: z.number().int().min(0, "El stock no puede ser negativo"),
+  stock: z.number().int().min(0, "El stock no puede ser negativo").max(MAX_STOCK, "Stock demasiado grande"),
   trackStock: z.boolean().default(true),
-  category: z.string().trim().optional(),
-  lotNumber: z.string().trim().optional(),
-  barcode: z.string().trim().optional(),
-  brand: z.string().trim().optional(),
-  presentation: z.string().trim().optional(),
+  category: z.string().trim().max(120).optional(),
+  lotNumber: z.string().trim().max(64).optional(),
+  barcode: z.string().trim().max(64, "El código de barras es demasiado largo").optional(),
+  brand: z.string().trim().max(120).optional(),
+  presentation: z.string().trim().max(120).optional(),
   openPrice: z.boolean().default(false),
   soldByWeight: z.boolean().default(false),
   expiresAt: z.coerce
@@ -74,6 +84,21 @@ function productAuditDetail(input: ProductInput) {
   };
 }
 
+// Permiso de cambio de precio: el owner siempre; el cajero solo si el owner lo habilitó.
+// Se lee fresco de la BD para que retirar el permiso tenga efecto inmediato.
+async function canEditPrices(
+  db: Prisma.TransactionClient,
+  businessId: string,
+  role: string,
+): Promise<boolean> {
+  if (role === "OWNER") return true;
+  const business = await db.business.findUnique({
+    where: { id: businessId },
+    select: { cashiersCanEditPrices: true },
+  });
+  return business?.cashiersCanEditPrices ?? false;
+}
+
 async function assertBarcodeAvailable(
   db: PrismaClient,
   businessId: string,
@@ -93,6 +118,12 @@ async function assertBarcodeAvailable(
 }
 
 export const productRouter = createTRPCRouter({
+  // Permisos del usuario actual sobre el catálogo (la UI oculta controles según esto)
+  permissions: businessProcedure.query(async ({ ctx }) => {
+    const { businessId, role } = ctx.session.user;
+    return { canEditPrices: await canEditPrices(ctx.db, businessId, role) };
+  }),
+
   // Disponible para OWNER y CASHIER — solo productos activos, usado en inventario y venta.
   // Se ordena por cantidad vendida histórica (más vendidos primero) para que cerveza, café,
   // fritos, etc. aparezcan de primeros en la grilla de venta/mesas sin depender de categorías fijas.
@@ -196,7 +227,7 @@ export const productRouter = createTRPCRouter({
   update: ownerProcedure
     .input(
       baseProductSchema
-        .extend({ id: z.string().min(1) })
+        .extend({ id: z.string().min(1).max(64) })
         .refine(noOpenPriceAndWeight, mutualExclusionRefinement),
     )
     .mutation(async ({ ctx, input }) => {
@@ -237,16 +268,24 @@ export const productRouter = createTRPCRouter({
       return { message: "Producto actualizado correctamente." };
     }),
 
-  // OWNER y CASHIER — actualizar solo el precio; genera AuditLog con usuario y cambio
+  // OWNER siempre; CASHIER solo si el negocio lo habilitó — actualizar solo el precio;
+  // genera AuditLog con usuario y cambio
   updatePrice: businessProcedure
     .input(
       z.object({
-        productId: z.string().min(1),
-        price: z.number().positive("El precio debe ser mayor a cero"),
+        productId: z.string().min(1).max(64),
+        price: priceSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { businessId, id: userId } = ctx.session.user;
+      const { businessId, id: userId, role } = ctx.session.user;
+
+      if (!(await canEditPrices(ctx.db, businessId, role))) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "El propietario no ha habilitado el cambio de precios para cajeros.",
+        });
+      }
 
       const product = await ctx.db.product.findFirst({
         where: { id: input.productId, businessId },
@@ -260,45 +299,50 @@ export const productRouter = createTRPCRouter({
         });
       }
 
-      await ctx.db.product.update({
-        where: { id: input.productId },
-        data: { price: input.price },
-      });
-
-      await ctx.db.auditLog.create({
-        data: {
-          businessId,
-          userId,
-          action: "UPDATE_PRICE",
-          entityType: "Product",
-          entityId: input.productId,
-          detail: {
-            name: product.name,
-            precioAnterior: product.price,
-            precioNuevo: input.price,
+      await ctx.db.$transaction([
+        ctx.db.product.updateMany({
+          where: { id: product.id, businessId },
+          data: { price: input.price },
+        }),
+        ctx.db.auditLog.create({
+          data: {
+            businessId,
+            userId,
+            action: "UPDATE_PRICE",
+            entityType: "Product",
+            entityId: product.id,
+            detail: {
+              name: product.name,
+              role,
+              precioAnterior: product.price,
+              precioNuevo: input.price,
+            },
           },
-        },
-      });
+        }),
+      ]);
 
       return { message: `Precio de "${product.name}" actualizado correctamente.` };
     }),
 
+  // OWNER y CASHIER — ajuste manual de stock; queda registrado en AuditLog (antes/después/motivo)
   adjustStock: businessProcedure
     .input(
       z.object({
-        productId: z.string().min(1),
+        productId: z.string().min(1).max(64),
         quantity: z
           .number()
           .int()
+          .min(-MAX_ADJUST_QUANTITY, "Cantidad demasiado grande")
+          .max(MAX_ADJUST_QUANTITY, "Cantidad demasiado grande")
           .refine((v) => v !== 0, "La cantidad no puede ser cero"),
-        note: z.string().trim().optional(),
+        note: z.string().trim().max(500, "El motivo es demasiado largo (máx. 500 caracteres)").optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { businessId, id: userId } = ctx.session.user;
+      const { businessId, id: userId, role } = ctx.session.user;
 
-      const { newStock } = await ctx.db.$transaction((tx) =>
-        adjustStock({
+      const { newStock } = await ctx.db.$transaction(async (tx) => {
+        const result = await adjustStock({
           tx,
           productId: input.productId,
           businessId,
@@ -306,8 +350,33 @@ export const productRouter = createTRPCRouter({
           quantity: input.quantity,
           reason: "MANUAL_ADJUSTMENT",
           note: input.note,
-        }),
-      );
+        });
+
+        const product = await tx.product.findFirst({
+          where: { id: input.productId, businessId },
+          select: { name: true },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            businessId,
+            userId,
+            action: "ADJUST_STOCK",
+            entityType: "Product",
+            entityId: input.productId,
+            detail: {
+              name: product?.name ?? null,
+              role,
+              stockAnterior: result.previousStock,
+              stockNuevo: result.newStock,
+              cantidad: input.quantity,
+              motivo: input.note ?? null,
+            },
+          },
+        });
+
+        return result;
+      });
 
       return {
         newStock,
@@ -319,7 +388,7 @@ export const productRouter = createTRPCRouter({
     }),
 
   listMovements: businessProcedure
-    .input(z.object({ productId: z.string().min(1) }))
+    .input(z.object({ productId: z.string().min(1).max(64) }))
     .query(async ({ ctx, input }) => {
       const product = await ctx.db.product.findFirst({
         where: { id: input.productId, businessId: ctx.session.user.businessId },
@@ -334,7 +403,7 @@ export const productRouter = createTRPCRouter({
       }
 
       return ctx.db.inventoryMovement.findMany({
-        where: { productId: input.productId },
+        where: { productId: input.productId, businessId: ctx.session.user.businessId },
         select: {
           id: true,
           quantity: true,
@@ -350,7 +419,7 @@ export const productRouter = createTRPCRouter({
     }),
 
   listProductSales: businessProcedure
-    .input(z.object({ productId: z.string().min(1) }))
+    .input(z.object({ productId: z.string().min(1).max(64) }))
     .query(async ({ ctx, input }) => {
       const product = await ctx.db.product.findFirst({
         where: { id: input.productId, businessId: ctx.session.user.businessId },
@@ -382,7 +451,7 @@ export const productRouter = createTRPCRouter({
     }),
 
   setActive: ownerProcedure
-    .input(z.object({ productId: z.string().min(1), isActive: z.boolean() }))
+    .input(z.object({ productId: z.string().min(1).max(64), isActive: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: ownerId } = ctx.session.user;
 
