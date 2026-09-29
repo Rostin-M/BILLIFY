@@ -49,6 +49,7 @@ unset TARGET_URL
 IS_PROD=0
 case "$PGHOST" in
   *supabase.com*|*supabase.co*) IS_PROD=1 ;;
+  *) ;;
 esac
 if [[ $IS_PROD -eq 1 && $ALLOW_PROD -eq 0 ]]; then
   echo "ERROR: el destino $PGHOST es Supabase (producción). Si de verdad quieres restaurar ahí," >&2

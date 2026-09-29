@@ -22,7 +22,7 @@ function assertLocalDatabase() {
   }
   if (!LOCAL_HOSTS.has(host)) {
     console.error(
-      `ERROR: DATABASE_URL apunta a "${host}". Este script solo borra bases locales (localhost/127.0.0.1).`,
+      "ERROR: DATABASE_URL no apunta a una base local. Este script solo borra bases locales (localhost/127.0.0.1).",
     );
     process.exit(1);
   }
