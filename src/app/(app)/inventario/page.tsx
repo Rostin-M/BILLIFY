@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
-
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { api, HydrateClient } from "~/trpc/server";
 import { InventarioView } from "./_components/InventarioView";
 import { PageLayout } from "~/app/_components/PageLayout";
@@ -8,9 +6,7 @@ import { PageLayout } from "~/app/_components/PageLayout";
 export const metadata = { title: "Inventario — BILLIFY" };
 
 export default async function InventarioPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
+  await requirePageUser();
 
   void api.product.search.prefetch();
 

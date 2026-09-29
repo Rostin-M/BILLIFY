@@ -17,20 +17,43 @@ type CreateForm = {
 
 const emptyForm: CreateForm = { name: "", document: "", email: "", password: "" };
 
+type TempCredential = { name: string; email: string; password: string };
+
 export function EmployeeManager() {
   const utils = api.useUtils();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<CreateForm>(emptyForm);
+  // Contraseña temporal generada por el servidor: se muestra una sola vez
+  const [tempCredential, setTempCredential] = useState<TempCredential | null>(null);
 
   const { data: employees, isPending: loadingList } = api.user.list.useQuery();
 
   const createEmployee = api.user.createEmployee.useMutation({
-    onSuccess: async (data) => {
+    onSuccess: async (data, variables) => {
       toast.success(data.message);
+      setTempCredential(
+        data.temporaryPassword
+          ? { name: variables.name, email: variables.email, password: data.temporaryPassword }
+          : null,
+      );
       setForm(emptyForm);
       setShowForm(false);
       await utils.user.list.invalidate();
     },
+  });
+
+  const resetPassword = api.user.resetEmployeePassword.useMutation({
+    onSuccess: async (data, variables) => {
+      toast.success(data.message);
+      const emp = employees?.find((e) => e.id === variables.employeeId);
+      setTempCredential({
+        name: emp?.name ?? "Empleado",
+        email: emp?.email ?? "",
+        password: data.temporaryPassword,
+      });
+      await utils.user.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
   });
 
   const setActive = api.user.setActive.useMutation({
@@ -53,6 +76,7 @@ export function EmployeeManager() {
 
   const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setTempCredential(null);
     createEmployee.mutate(form);
   };
 
@@ -71,6 +95,43 @@ export function EmployeeManager() {
             {showForm ? "Cancelar" : "+ Nuevo empleado"}
           </button>
         </div>
+
+        {tempCredential && (
+          <div className="mb-5 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+            <p className="font-semibold">Contraseña temporal de {tempCredential.name}</p>
+            {tempCredential.email && (
+              <p className="text-xs text-amber-800 dark:text-amber-200">{tempCredential.email}</p>
+            )}
+            <p className="select-all rounded-lg bg-white px-3 py-2 text-center font-mono text-lg font-bold tracking-wider text-slate-900 dark:bg-slate-900 dark:text-white">
+              {tempCredential.password}
+            </p>
+            <p className="text-xs">
+              Entrégala al empleado en persona. Solo se muestra esta vez y no se envía por correo;
+              deberá cambiarla al ingresar.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(tempCredential.password)
+                    .then(() => toast.success("Contraseña copiada"))
+                    .catch(() => null);
+                }}
+                className="rounded-lg border border-amber-400 px-3 py-1 text-xs font-medium hover:bg-amber-100 dark:border-amber-500/50 dark:hover:bg-amber-500/20"
+              >
+                Copiar
+              </button>
+              <button
+                type="button"
+                onClick={() => setTempCredential(null)}
+                className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500"
+              >
+                Listo, ya la entregué
+              </button>
+            </div>
+          </div>
+        )}
 
         {showForm && (
           <form
@@ -116,16 +177,23 @@ export function EmployeeManager() {
             </label>
 
             <label className="block space-y-1 text-sm">
-              <span className="text-slate-700 dark:text-slate-300">Contraseña temporal</span>
+              <span className="text-slate-700 dark:text-slate-300">
+                Contraseña temporal <span className="text-slate-400">(opcional)</span>
+              </span>
               <input
-                required
                 type="password"
-                minLength={8}
+                autoComplete="new-password"
+                minLength={10}
+                maxLength={128}
                 value={form.password}
                 onChange={handleChange("password")}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
-                placeholder="Mínimo 8 caracteres con letras y números"
+                placeholder="Déjala vacía para generar una segura"
               />
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                Mínimo 10 caracteres con letras y números. No se envía por correo: el empleado
+                deberá cambiarla al ingresar.
+              </span>
             </label>
 
             {createEmployee.error && (
@@ -165,6 +233,22 @@ export function EmployeeManager() {
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">{emp.email}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `¿Restablecer la contraseña de ${emp.name ?? "este empleado"}? Se cerrarán sus sesiones y deberá cambiarla al ingresar.`,
+                        )
+                      ) {
+                        resetPassword.mutate({ employeeId: emp.id });
+                      }
+                    }}
+                    disabled={resetPassword.isPending}
+                    title="Generar una contraseña temporal nueva"
+                    className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-amber-100 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300"
+                  >
+                    {emp.mustChangePassword ? "Clave temporal" : "Restablecer clave"}
+                  </button>
                   <button
                     onClick={() =>
                       setCashManagement.mutate({

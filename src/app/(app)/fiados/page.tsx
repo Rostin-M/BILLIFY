@@ -1,15 +1,10 @@
-import { redirect } from "next/navigation";
-
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { api, HydrateClient } from "~/trpc/server";
 import { FiadosClient } from "./_components/FiadosClient";
 import { PageLayout } from "~/app/_components/PageLayout";
 
 export default async function FiadosPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
-  if (session.user.role !== "OWNER" && session.user.role !== "CASHIER") redirect("/");
+  await requirePageUser({ roles: ["OWNER", "CASHIER"] });
 
   void api.customer.listDebtors.prefetch();
 

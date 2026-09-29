@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ShoppingCart,
   UtensilsCrossed,
@@ -16,6 +17,7 @@ import {
 
 import { db } from "~/server/db";
 import { auth } from "~/server/auth";
+import { loadActiveUser } from "~/server/auth/currentUser";
 
 type NavItem = {
   href: string;
@@ -174,11 +176,13 @@ function NavSection({
 }
 
 export default async function Home() {
-  const session = await auth();
+  // Página pública: sin sesión válida se muestra la bienvenida.
+  const user = await loadActiveUser(await auth());
+  if (user?.mustChangePassword) redirect("/auth/cambiar-contrasena");
 
-  const business = session?.user?.businessId
+  const business = user?.businessId
     ? await db.business.findUnique({
-        where: { id: session.user.businessId },
+        where: { id: user.businessId },
         select: { name: true },
       })
     : null;
@@ -186,7 +190,7 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 to-white px-4 py-8 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-white">
       <div className="mx-auto max-w-2xl space-y-6">
-        {session?.user ? (
+        {user ? (
           <>
             {/* Info de sesión */}
             <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
@@ -196,10 +200,10 @@ export default async function Home() {
                 </p>
               )}
               <p className="text-sm font-semibold text-slate-800 dark:text-white">
-                {session.user.name ?? session.user.email}
+                {user.name ?? user.email}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {session.user.role === "OWNER" ? "Propietario" : "Cajero"}
+                {user.role === "OWNER" ? "Propietario" : "Cajero"}
               </p>
             </div>
 
@@ -207,12 +211,12 @@ export default async function Home() {
             <NavSection title="Operaciones" items={COMMON_ITEMS} gridClass="grid-cols-1 sm:grid-cols-3" iconSize={22} />
 
             {/* Gestión — solo CASHIER */}
-            {session.user.role === "CASHIER" && (
+            {user.role === "CASHIER" && (
               <NavSection title="Gestión" items={CASHIER_ITEMS} gridClass="grid-cols-1 sm:grid-cols-2" />
             )}
 
             {/* Administración — solo OWNER */}
-            {session.user.role === "OWNER" && (
+            {user.role === "OWNER" && (
               <NavSection
                 title="Administración"
                 items={OWNER_ITEMS}

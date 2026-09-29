@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Camera, CheckCircle2, ScanLine } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import type { BusinessInfoForPdf, SaleForPdf } from "~/lib/pdf/FacturaPDF";
@@ -437,6 +437,13 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     localStorage.setItem(PAYMENT_KEY, JSON.stringify(paymentMethod));
   }, [paymentMethod, hydrated]);
 
+  // Clave de idempotencia de la factura en curso: se reutiliza en reintentos y se descarta
+  // cuando cambia el contenido (carrito, cliente, nota o medio de pago).
+  const saleKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    saleKeyRef.current = null;
+  }, [cart, selectedCustomer, note, paymentMethod]);
+
   const { data: products = [], isLoading } = api.product.search.useQuery();
   const utils = api.useUtils();
 
@@ -572,13 +579,15 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   const creditRequiresCustomer = paymentMethod === "CREDIT" && !selectedCustomer?.id;
 
   function confirmSale() {
-    if (cart.length === 0 || creditRequiresCustomer) return;
+    if (cart.length === 0 || creditRequiresCustomer || createSale.isPending) return;
+    saleKeyRef.current ??= crypto.randomUUID();
     createSale.mutate({
       items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
       saleType: "INVOICED",
       paymentMethod,
       customerId: selectedCustomer?.id,
       note: note.trim() || undefined,
+      idempotencyKey: saleKeyRef.current,
     });
   }
 

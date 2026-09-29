@@ -130,7 +130,11 @@ export function CashRegisterView({ isOwner, business }: Readonly<Props>) {
   return (
     <>
       {!activeRegister ? <CashOpenForm /> : (
-        <CashDashboard register={activeRegister} canClose={canClose} business={business} />
+        <>
+          {/* El cajero que está viendo la caja de otro puede abrir la suya para operar */}
+          {!canClose && <CashOpenForm />}
+          <CashDashboard register={activeRegister} canClose={canClose} business={business} />
+        </>
       )}
       {isOwner && <OtherRegisters excludeRegisterId={activeRegister?.id} />}
     </>

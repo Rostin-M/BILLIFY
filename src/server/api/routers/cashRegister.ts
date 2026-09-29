@@ -4,6 +4,97 @@ import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { assertCashRegisterNotStale } from "~/server/lib/cashRegisterGuard";
+import { idempotencyKeySchema, isUniqueViolation, runIdempotent } from "~/server/lib/idempotency";
+
+const MAX_MONEY = 1e9;
+
+// Los cajeros necesitan el permiso "gestionar caja" (leído fresco de la BD, no de la sesión).
+async function assertCanManageCash(
+  db: Prisma.TransactionClient,
+  userId: string,
+  role: string,
+  message = "No tienes permisos para gestionar la caja.",
+) {
+  if (role === "OWNER") return;
+  const userData = await db.user.findFirst({
+    where: { id: userId },
+    select: { canManageCash: true },
+  });
+  if (!userData?.canManageCash) {
+    throw new TRPCError({ code: "FORBIDDEN", message });
+  }
+}
+
+/**
+ * Bloquea la fila de una caja abierta (SELECT ... FOR UPDATE) hasta el fin de la transacción.
+ * Serializa movimientos y cierre sobre la misma caja: el saldo se calcula y se valida con
+ * la caja bloqueada, así dos salidas simultáneas no pueden dejarla en negativo.
+ */
+async function lockOpenRegister(tx: Prisma.TransactionClient, registerId: string, businessId: string) {
+  const rows = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "cash_registers"
+     WHERE "id" = ${registerId} AND "business_id" = ${businessId} AND "status" = 'OPEN'
+     FOR UPDATE
+  `;
+  return rows.length > 0;
+}
+
+/**
+ * Ventas de UNA caja (Sale.cashRegisterId), no de todo el negocio: con varias cajas abiertas,
+ * cada cajero solo ve y responde por el dinero que entró a la suya.
+ */
+async function getRegisterSales(db: Prisma.TransactionClient, businessId: string, registerId: string) {
+  const [cashSalesAgg, nonCashGroups] = await Promise.all([
+    db.sale.aggregate({
+      where: { businessId, cashRegisterId: registerId, paymentMethod: "CASH", status: "COMPLETED" },
+      _sum: { total: true },
+      _count: true,
+    }),
+    db.sale.groupBy({
+      by: ["paymentMethod"],
+      where: { businessId, cashRegisterId: registerId, paymentMethod: { not: "CASH" }, status: "COMPLETED" },
+      _sum: { total: true },
+      _count: { _all: true },
+    }),
+  ]);
+  return {
+    cashSalesTotal: cashSalesAgg._sum.total ?? 0,
+    cashSalesCount: cashSalesAgg._count,
+    nonCashSales: nonCashGroups.map((g) => ({
+      paymentMethod: g.paymentMethod,
+      total: g._sum.total ?? 0,
+      count: g._count._all,
+    })),
+  };
+}
+
+// Saldo en efectivo de una caja: fondo + ventas en efectivo de esa caja + movimientos manuales.
+async function computeRegisterBalance(
+  db: Prisma.TransactionClient,
+  businessId: string,
+  registerId: string,
+) {
+  const register = await db.cashRegister.findFirst({
+    where: { id: registerId, businessId },
+    select: { openingBalance: true, movements: { select: { type: true, amount: true } } },
+  });
+  if (!register) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "No se encontró la caja." });
+  }
+  const { cashSalesTotal, cashSalesCount } = await getRegisterSales(db, businessId, registerId);
+  const manualBalance = register.movements.reduce((sum, m) => sum + signedMovementAmount(m), 0);
+  return {
+    openingBalance: register.openingBalance,
+    cashSalesTotal,
+    cashSalesCount,
+    manualBalance,
+    balance: register.openingBalance + cashSalesTotal + manualBalance,
+  };
+}
+
+function movementMessage(type: string): string {
+  return type === "INCOME" ? "Entrada registrada correctamente." : "Salida registrada correctamente.";
+}
 
 // Entradas suman al saldo, salidas restan; cualquier otro tipo de movimiento no afecta el saldo.
 function signedMovementAmount(m: { type: string; amount: number }): number {
@@ -13,14 +104,22 @@ function signedMovementAmount(m: { type: string; amount: number }): number {
 }
 
 /**
- * Ventas anuladas, ventas a crédito y abonos registrados dentro de la jornada
- * de una caja — para el reporte de cierre y la vista en curso, así el dueño
- * tiene control de quién hizo qué durante el día, no solo los totales.
+ * Ventas anuladas y ventas a crédito de una caja, y abonos registrados dentro de su
+ * jornada — para el reporte de cierre y la vista en curso, así el dueño tiene control
+ * de quién hizo qué durante el día, no solo los totales.
+ * Los abonos (CustomerPayment) no están ligados a una caja: se listan los de todo el
+ * negocio dentro de la ventana de la jornada (no suman al saldo de la caja).
  */
-async function getRegisterActivity(db: Prisma.TransactionClient, businessId: string, from: Date, to: Date) {
+async function getRegisterActivity(
+  db: Prisma.TransactionClient,
+  businessId: string,
+  registerId: string,
+  from: Date,
+  to: Date,
+) {
   const [voidedSalesRaw, creditSales, payments] = await Promise.all([
     db.sale.findMany({
-      where: { businessId, status: "VOIDED", voidedAt: { gte: from, lte: to } },
+      where: { businessId, cashRegisterId: registerId, status: "VOIDED" },
       select: {
         id: true, invoiceNumber: true, total: true, voidReason: true, voidedAt: true,
         user: { select: { name: true } },
@@ -28,7 +127,7 @@ async function getRegisterActivity(db: Prisma.TransactionClient, businessId: str
       orderBy: { voidedAt: "asc" },
     }),
     db.sale.findMany({
-      where: { businessId, paymentMethod: "CREDIT", status: "COMPLETED", createdAt: { gte: from, lte: to } },
+      where: { businessId, cashRegisterId: registerId, paymentMethod: "CREDIT", status: "COMPLETED" },
       select: {
         id: true, invoiceNumber: true, total: true, createdAt: true,
         customer: { select: { name: true } },
@@ -117,27 +216,7 @@ export const cashRegisterRouter = createTRPCRouter({
 
     if (!register) return null;
 
-    const [cashSalesAgg, nonCashGroups] = await Promise.all([
-      ctx.db.sale.aggregate({
-        where: { businessId, paymentMethod: "CASH", status: "COMPLETED", createdAt: { gte: register.openedAt } },
-        _sum: { total: true },
-        _count: true,
-      }),
-      ctx.db.sale.groupBy({
-        by: ["paymentMethod"],
-        where: { businessId, paymentMethod: { not: "CASH" }, status: "COMPLETED", createdAt: { gte: register.openedAt } },
-        _sum: { total: true },
-        _count: { _all: true },
-      }),
-    ]);
-
-    const cashSalesTotal = cashSalesAgg._sum.total ?? 0;
-    const cashSalesCount = cashSalesAgg._count;
-    const nonCashSales = nonCashGroups.map((g) => ({
-      paymentMethod: g.paymentMethod,
-      total: g._sum.total ?? 0,
-      count: g._count._all,
-    }));
+    const { cashSalesTotal, cashSalesCount, nonCashSales } = await getRegisterSales(ctx.db, businessId, register.id);
 
     const manualIncome = register.movements
       .filter((m) => m.type === "INCOME")
@@ -171,186 +250,184 @@ export const cashRegisterRouter = createTRPCRouter({
       z.object({
         openingBalance: z
           .number()
-          .min(0, "El fondo inicial no puede ser negativo"),
+          .finite()
+          .min(0, "El fondo inicial no puede ser negativo")
+          .max(MAX_MONEY, "Monto demasiado grande"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId, role } = ctx.session.user;
 
-      if (role !== "OWNER") {
-        const userData = await ctx.db.user.findFirst({
-          where: { id: userId },
-          select: { canManageCash: true },
+      await assertCanManageCash(ctx.db, userId, role);
+
+      try {
+        const register = await ctx.db.$transaction(async (tx) => {
+          // Bloquear el negocio serializa aperturas simultáneas: el conteo contra
+          // maxCashRegisters no puede quedar desactualizado entre dos peticiones.
+          // NO KEY UPDATE: no bloquea las ventas (sus FK solo toman KEY SHARE sobre el negocio).
+          await tx.$queryRaw`SELECT "id" FROM "Business" WHERE "id" = ${businessId} FOR NO KEY UPDATE`;
+
+          const [ownRegister, openCount, business] = await Promise.all([
+            tx.cashRegister.findFirst({ where: { businessId, userId, status: "OPEN" }, select: { id: true } }),
+            tx.cashRegister.count({ where: { businessId, status: "OPEN" } }),
+            tx.business.findUnique({ where: { id: businessId }, select: { maxCashRegisters: true } }),
+          ]);
+
+          if (ownRegister) {
+            throw new TRPCError({ code: "CONFLICT", message: "Ya tienes una caja abierta." });
+          }
+
+          const max = business?.maxCashRegisters ?? 1;
+          if (openCount >= max) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: `Se alcanzó el límite de ${max} caja${max > 1 ? "s" : ""} abiertas simultáneamente.`,
+            });
+          }
+
+          const newRegister = await tx.cashRegister.create({
+            data: { businessId, userId, openingBalance: input.openingBalance },
+            select: { id: true, openedAt: true },
+          });
+
+          // Movimiento inicial como registro del fondo
+          await tx.cashMovement.create({
+            data: {
+              cashRegisterId: newRegister.id,
+              businessId,
+              userId,
+              type: "OPENING",
+              amount: input.openingBalance,
+              description: "Fondo inicial de caja",
+            },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              businessId,
+              userId,
+              action: "OPEN_CASH_REGISTER",
+              entityType: "CashRegister",
+              entityId: newRegister.id,
+              detail: { openingBalance: input.openingBalance },
+            },
+          });
+
+          return newRegister;
         });
-        if (!userData?.canManageCash) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "No tienes permisos para gestionar la caja." });
+
+        return { id: register.id, message: "Caja abierta correctamente." };
+      } catch (error) {
+        // Índice único parcial "una caja OPEN por usuario": doble clic en "Abrir caja"
+        if (isUniqueViolation(error)) {
+          throw new TRPCError({ code: "CONFLICT", message: "Ya tienes una caja abierta." });
         }
+        throw error;
       }
-
-      const ownRegister = await ctx.db.cashRegister.findFirst({
-        where: { businessId, userId, status: "OPEN" },
-        select: { id: true },
-      });
-
-      if (ownRegister) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "Ya tienes una caja abierta.",
-        });
-      }
-
-      const [openCount, business] = await Promise.all([
-        ctx.db.cashRegister.count({ where: { businessId, status: "OPEN" } }),
-        ctx.db.business.findUnique({ where: { id: businessId }, select: { maxCashRegisters: true } }),
-      ]);
-
-      const max = business?.maxCashRegisters ?? 1;
-      if (openCount >= max) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: `Se alcanzó el límite de ${max} caja${max > 1 ? "s" : ""} abiertas simultáneamente.`,
-        });
-      }
-
-      const register = await ctx.db.$transaction(async (tx) => {
-        const newRegister = await tx.cashRegister.create({
-          data: { businessId, userId, openingBalance: input.openingBalance },
-          select: { id: true, openedAt: true },
-        });
-
-        // Movimiento inicial como registro del fondo
-        await tx.cashMovement.create({
-          data: {
-            cashRegisterId: newRegister.id,
-            businessId,
-            userId,
-            type: "OPENING",
-            amount: input.openingBalance,
-            description: "Fondo inicial de caja",
-          },
-        });
-
-        await tx.auditLog.create({
-          data: {
-            businessId,
-            userId,
-            action: "OPEN_CASH_REGISTER",
-            entityType: "CashRegister",
-            entityId: newRegister.id,
-            detail: { openingBalance: input.openingBalance },
-          },
-        });
-
-        return newRegister;
-      });
-
-      return { id: register.id, message: "Caja abierta correctamente." };
     }),
 
-  // Registrar movimiento manual (entrada o salida) durante la jornada
+  // Registrar movimiento manual (entrada o salida) durante la jornada.
+  // El cajero solo puede usar SU caja abierta; el owner, si no tiene la suya, la activa del negocio.
   addMovement: businessProcedure
     .input(
       z.object({
         type: z.enum(["INCOME", "EXPENSE"]),
-        amount: z.number().positive("El monto debe ser mayor a cero"),
+        amount: z
+          .number()
+          .finite()
+          .positive("El monto debe ser mayor a cero")
+          .max(MAX_MONEY, "Monto demasiado grande"),
         description: z
           .string()
           .trim()
-          .min(3, "La descripción es obligatoria (mín. 3 caracteres)"),
+          .min(3, "La descripción es obligatoria (mín. 3 caracteres)")
+          .max(500, "La descripción es demasiado larga (máx. 500 caracteres)"),
+        idempotencyKey: idempotencyKeySchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId, role } = ctx.session.user;
 
-      if (role !== "OWNER") {
-        const userData = await ctx.db.user.findFirst({
-          where: { id: userId },
-          select: { canManageCash: true },
+      const registerMovement = async () => {
+        await assertCanManageCash(ctx.db, userId, role, "No tienes permisos para registrar movimientos en caja.");
+        await assertCashRegisterNotStale(ctx.db, businessId, userId);
+
+        let register = await ctx.db.cashRegister.findFirst({
+          where: { businessId, userId, status: "OPEN" },
+          select: { id: true },
         });
-        if (!userData?.canManageCash) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "No tienes permisos para registrar movimientos en caja." });
-        }
-      }
 
-      await assertCashRegisterNotStale(ctx.db, businessId, userId);
-
-      const registerSelect = {
-        id: true,
-        openingBalance: true,
-        openedAt: true,
-        movements: { select: { type: true, amount: true } },
-      };
-
-      let register = await ctx.db.cashRegister.findFirst({
-        where: { businessId, userId, status: "OPEN" },
-        select: registerSelect,
-      });
-
-      // Puede usar cualquier caja abierta del negocio si no tiene la propia
-      register ??= await ctx.db.cashRegister.findFirst({
-        where: { businessId, status: "OPEN" },
-        select: registerSelect,
-      });
-
-      if (!register) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "No hay caja abierta. Abre la caja primero.",
-        });
-      }
-
-      if (input.type === "EXPENSE") {
-        const cashSalesAgg = await ctx.db.sale.aggregate({
-          where: {
-            businessId,
-            paymentMethod: "CASH",
-            status: "COMPLETED",
-            createdAt: { gte: register.openedAt },
-          },
-          _sum: { total: true },
-        });
-        const cashSalesTotal = cashSalesAgg._sum.total ?? 0;
-        const manualBalance = register.movements.reduce(
-          (sum, m) => sum + signedMovementAmount(m),
-          0,
-        );
-        const currentBalance = register.openingBalance + cashSalesTotal + manualBalance;
-
-        if (input.amount > currentBalance) {
-          const fmt = (v: number) =>
-            v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Saldo insuficiente (${fmt(currentBalance)} disponible). Registra una entrada primero y luego la salida.`,
+        if (!register && role === "OWNER") {
+          register = await ctx.db.cashRegister.findFirst({
+            where: { businessId, status: "OPEN" },
+            select: { id: true },
           });
         }
-      }
 
-      await ctx.db.cashMovement.create({
-        data: {
-          cashRegisterId: register.id,
-          businessId,
-          userId,
-          type: input.type,
-          amount: input.amount,
-          description: input.description,
-        },
-      });
+        if (!register) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              role === "OWNER"
+                ? "No hay caja abierta. Abre la caja primero."
+                : "No tienes una caja abierta. Abre tu caja para registrar movimientos.",
+          });
+        }
+        const registerId = register.id;
 
-      return {
-        message:
-          input.type === "INCOME"
-            ? "Entrada registrada correctamente."
-            : "Salida registrada correctamente.",
+        await ctx.db.$transaction(async (tx) => {
+          if (!(await lockOpenRegister(tx, registerId, businessId))) {
+            throw new TRPCError({ code: "CONFLICT", message: "La caja ya fue cerrada." });
+          }
+
+          if (input.type === "EXPENSE") {
+            const { balance } = await computeRegisterBalance(tx, businessId, registerId);
+            if (input.amount > balance) {
+              const fmt = (v: number) =>
+                v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: `Saldo insuficiente (${fmt(balance)} disponible). Registra una entrada primero y luego la salida.`,
+              });
+            }
+          }
+
+          await tx.cashMovement.create({
+            data: {
+              cashRegisterId: registerId,
+              businessId,
+              userId,
+              type: input.type,
+              amount: input.amount,
+              description: input.description,
+              idempotencyKey: input.idempotencyKey ?? null,
+            },
+          });
+        });
+
+        return { message: movementMessage(input.type) };
       };
+
+      // Doble clic / reintento con la misma clave → no registrar el movimiento dos veces.
+      return runIdempotent({
+        key: input.idempotencyKey,
+        findExisting: async () => {
+          const existing = await ctx.db.cashMovement.findFirst({
+            where: { businessId, idempotencyKey: input.idempotencyKey },
+            select: { type: true },
+          });
+          return existing ? { message: movementMessage(existing.type) } : null;
+        },
+        run: registerMovement,
+      });
     }),
 
   // Cerrar caja — el owner puede cerrar cualquier caja; el cajero solo la propia
   close: businessProcedure
     .input(
       z.object({
-        registerId: z.string().optional(),
-        closingNote: z.string().trim().optional(),
+        registerId: z.string().min(1).max(64).optional(),
+        closingNote: z.string().trim().max(500, "La nota es demasiado larga (máx. 500 caracteres)").optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -363,6 +440,9 @@ export const cashRegisterRouter = createTRPCRouter({
           message: "Solo el propietario puede cerrar la caja de otro empleado.",
         });
       }
+
+      // El permiso de caja pudo haber sido retirado después de abrirla
+      await assertCanManageCash(ctx.db, userId, role);
 
       // Bloquear cierre si hay mesas con cuentas pendientes
       const openTablesCount = await ctx.db.tableSession.count({
@@ -380,37 +460,22 @@ export const cashRegisterRouter = createTRPCRouter({
         });
       }
 
-      let register;
+      let register: { id: string } | null;
       if (input.registerId) {
         register = await ctx.db.cashRegister.findFirst({
           where: { id: input.registerId, businessId, status: "OPEN" },
-          select: {
-            id: true,
-            openedAt: true,
-            openingBalance: true,
-            movements: { select: { type: true, amount: true } },
-          },
+          select: { id: true },
         });
       } else {
         // Buscar propia caja primero; si el owner no tiene la suya, cerrar la activa del negocio
         register = await ctx.db.cashRegister.findFirst({
           where: { businessId, userId, status: "OPEN" },
-          select: {
-            id: true,
-            openedAt: true,
-            openingBalance: true,
-            movements: { select: { type: true, amount: true } },
-          },
+          select: { id: true },
         });
         if (!register && role === "OWNER") {
           register = await ctx.db.cashRegister.findFirst({
             where: { businessId, status: "OPEN" },
-            select: {
-              id: true,
-              openedAt: true,
-              openingBalance: true,
-              movements: { select: { type: true, amount: true } },
-            },
+            select: { id: true },
           });
         }
       }
@@ -421,38 +486,29 @@ export const cashRegisterRouter = createTRPCRouter({
           message: "No se encontró la caja a cerrar.",
         });
       }
+      const registerId = register.id;
 
-      const cashSalesAgg = await ctx.db.sale.aggregate({
-        where: {
-          businessId,
-          paymentMethod: "CASH",
-          status: "COMPLETED",
-          createdAt: { gte: register.openedAt },
-        },
-        _sum: { total: true },
-        _count: true,
-      });
+      const closingBalance = await ctx.db.$transaction(async (tx) => {
+        // Bloquear la caja y calcular el saldo con ella bloqueada (ningún movimiento se cuela)
+        if (!(await lockOpenRegister(tx, registerId, businessId))) {
+          throw new TRPCError({ code: "CONFLICT", message: "Esta caja ya fue cerrada." });
+        }
 
-      const cashSalesTotal = cashSalesAgg._sum.total ?? 0;
-      const cashSalesCount = cashSalesAgg._count;
+        const totals = await computeRegisterBalance(tx, businessId, registerId);
 
-      const manualBalance = register.movements.reduce(
-        (sum, m) => sum + signedMovementAmount(m),
-        0,
-      );
-
-      const closingBalance = register.openingBalance + cashSalesTotal + manualBalance;
-
-      await ctx.db.$transaction(async (tx) => {
-        await tx.cashRegister.update({
-          where: { id: register.id },
+        // Transición condicional OPEN → CLOSED: un doble cierre no genera dos cierres
+        const { count } = await tx.cashRegister.updateMany({
+          where: { id: registerId, businessId, status: "OPEN" },
           data: {
             status: "CLOSED",
             closedAt: new Date(),
-            closingBalance,
+            closingBalance: totals.balance,
             closingNote: input.closingNote ?? null,
           },
         });
+        if (count !== 1) {
+          throw new TRPCError({ code: "CONFLICT", message: "Esta caja ya fue cerrada." });
+        }
 
         await tx.auditLog.create({
           data: {
@@ -460,17 +516,19 @@ export const cashRegisterRouter = createTRPCRouter({
             userId,
             action: "CLOSE_CASH_REGISTER",
             entityType: "CashRegister",
-            entityId: register.id,
+            entityId: registerId,
             detail: {
-              openingBalance: register.openingBalance,
-              closingBalance,
-              cashSalesTotal,
-              cashSalesCount,
-              manualBalance,
+              openingBalance: totals.openingBalance,
+              closingBalance: totals.balance,
+              cashSalesTotal: totals.cashSalesTotal,
+              cashSalesCount: totals.cashSalesCount,
+              manualBalance: totals.manualBalance,
               closingNote: input.closingNote ?? null,
             },
           },
         });
+
+        return totals.balance;
       });
 
       return {
@@ -512,12 +570,13 @@ export const cashRegisterRouter = createTRPCRouter({
 
   // Reporte completo de una caja (para PDF)
   getReport: businessProcedure
-    .input(z.object({ id: z.string().min(1) }))
+    .input(z.object({ id: z.string().min(1).max(64) }))
     .query(async ({ ctx, input }) => {
-      const { businessId } = ctx.session.user;
+      const { businessId, id: userId, role } = ctx.session.user;
 
+      // El cajero solo puede ver el reporte de sus propias cajas
       const register = await ctx.db.cashRegister.findFirst({
-        where: { id: input.id, businessId },
+        where: { id: input.id, businessId, ...(role === "OWNER" ? {} : { userId }) },
         select: {
           id: true,
           openingBalance: true,
@@ -542,28 +601,10 @@ export const cashRegisterRouter = createTRPCRouter({
       }
 
       const periodEnd = register.closedAt ?? new Date();
-      const [cashSalesAgg, nonCashGroups, activity] = await Promise.all([
-        ctx.db.sale.aggregate({
-          where: { businessId, paymentMethod: "CASH", status: "COMPLETED", createdAt: { gte: register.openedAt, lte: periodEnd } },
-          _sum: { total: true },
-          _count: true,
-        }),
-        ctx.db.sale.groupBy({
-          by: ["paymentMethod"],
-          where: { businessId, paymentMethod: { not: "CASH" }, status: "COMPLETED", createdAt: { gte: register.openedAt, lte: periodEnd } },
-          _sum: { total: true },
-          _count: { _all: true },
-        }),
-        getRegisterActivity(ctx.db, businessId, register.openedAt, periodEnd),
+      const [{ cashSalesTotal, cashSalesCount, nonCashSales }, activity] = await Promise.all([
+        getRegisterSales(ctx.db, businessId, register.id),
+        getRegisterActivity(ctx.db, businessId, register.id, register.openedAt, periodEnd),
       ]);
-
-      const cashSalesTotal = cashSalesAgg._sum.total ?? 0;
-      const cashSalesCount = cashSalesAgg._count;
-      const nonCashSales = nonCashGroups.map((g) => ({
-        paymentMethod: g.paymentMethod,
-        total: g._sum.total ?? 0,
-        count: g._count._all,
-      }));
 
       const manualIncome = register.movements
         .filter((m) => m.type === "INCOME")

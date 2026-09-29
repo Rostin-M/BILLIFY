@@ -148,6 +148,52 @@ DIRECT_URL=         # URL de conexión directa de Supabase (para migraciones)
 
 ---
 
+## Seguridad
+
+- **`.env` nunca se sube al repositorio** (está en `.gitignore`). Las credenciales de producción viven solo en Vercel y en el `.env` local de quien administra; no se comparten por chat ni se copian a scripts.
+- El esquema se gestiona **solo con migraciones** (`npm run db:generate` en desarrollo, `npm run db:migrate` en despliegue). No usar `prisma db push`: borraría los índices parciales creados con SQL (factura única por negocio, una caja abierta por usuario).
+- La app envía cabeceras de seguridad (CSP, HSTS, `X-Frame-Options: DENY`, `nosniff`, `Permissions-Policy`, COOP) definidas en `next.config.js`. Si se agrega un servicio externo (fuentes, analítica, imágenes), hay que añadir su origen a la CSP.
+- Las subidas (`/api/upload/logo`, `/api/upload/receipt`) solo aceptan PNG, JPEG o WebP verificados por su firma binaria (SVG no), con límite de 2 MB para logos y 4 MB para comprobantes.
+- `scripts/clear-db.mjs` borra todos los datos y solo corre contra una base en `localhost`/`127.0.0.1` y con `--yes`.
+- Para desarrollo local, `./start-database.sh` levanta Postgres 17 escuchando solo en `127.0.0.1` y con una contraseña propia (nunca la de producción).
+
+## Backups y restauración
+
+Los respaldos cubren el esquema `public` de Postgres (todos los datos de la app). Los archivos de Supabase Storage (logos y comprobantes) no se incluyen.
+
+**Respaldo** — `npm run db:backup` (usa `DIRECT_URL` del entorno o de `.env`):
+
+- Genera `backups/billify_AAAAMMDD_HHMMSS.dump` (formato custom de `pg_dump`, permisos solo para el usuario) y lo verifica con `pg_restore --list`.
+- Conserva los últimos 7 respaldos (`BACKUP_KEEP` para cambiarlo, `BACKUP_DIR` para otra carpeta). `backups/` está en `.gitignore`.
+- Necesita `pg_dump` 17 o superior; si no está instalado, usa Docker (`postgres:17`) automáticamente. La contraseña se pasa por variables de entorno, nunca en la línea de comandos.
+
+**Restauración** — `bash scripts/restore.sh <archivo.dump> --target <url>`:
+
+- El destino se indica siempre de forma explícita y debe ser una base **vacía**. Se restaura en una sola transacción: si algo falla, no queda nada a medias.
+- Se niega a restaurar en Supabase salvo que se agregue `--i-know-this-is-production` (y pide escribir el host para confirmar).
+- Al terminar imprime el conteo de filas de `sales`, `products`, `customers`, `cash_registers` y `audit_logs`.
+
+**Prueba de restauración (hacerla periódicamente):**
+
+```bash
+# 1. Postgres 17 local y desechable, solo en 127.0.0.1
+docker run -d --name billify-restore-test -e POSTGRES_PASSWORD=restoretest \
+  -p 127.0.0.1:55432:5432 postgres:17
+
+# 2. Restaurar el último respaldo
+bash scripts/restore.sh backups/billify_AAAAMMDD_HHMMSS.dump \
+  --target postgresql://postgres:restoretest@127.0.0.1:55432/postgres --yes
+
+# 3. Comparar los conteos impresos con los de Administración (admin.dbStats) en producción
+
+# 4. Eliminar el contenedor
+docker rm -f billify-restore-test
+```
+
+En Git Bash (Windows), si un comando `docker` recibe rutas mal convertidas, antepón `MSYS_NO_PATHCONV=1`.
+
+---
+
 ## Licencia y derechos
 
 Este software es propiedad exclusiva de **BILLIFY**. Queda expresamente prohibida su reproducción, distribución, modificación, uso comercial o puesta a disposición de terceros sin autorización escrita previa del titular.

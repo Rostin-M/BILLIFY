@@ -1,24 +1,51 @@
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
+import { randomInt } from "node:crypto";
 import { z } from "zod";
 
+import { passwordPolicySchema } from "~/server/api/routers/auth";
 import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
+import { logAuthEvent } from "~/server/lib/authEvents";
 import { sendEmployeeWelcomeEmail } from "~/server/lib/email";
+import { getClientIp, getUserAgent } from "~/server/lib/requestMeta";
 
 const createEmployeeSchema = z.object({
-  name: z.string().trim().min(2, "El nombre es obligatorio"),
-  document: z.string().trim().min(4, "La cédula es obligatoria"),
+  name: z
+    .string()
+    .trim()
+    .min(2, "El nombre es obligatorio")
+    .max(80, "El nombre es demasiado largo"),
+  document: z
+    .string()
+    .trim()
+    .min(4, "La cédula es obligatoria")
+    .max(20, "La cédula es demasiado larga"),
   email: z
     .string()
     .trim()
     .toLowerCase()
+    .max(254, "Correo electrónico inválido")
     .email("Correo electrónico inválido"),
-  password: z
-    .string()
-    .min(8, "La contraseña debe tener mínimo 8 caracteres")
-    .regex(/[A-Za-z]/, "La contraseña debe incluir al menos una letra")
-    .regex(/\d/, "La contraseña debe incluir al menos un número"),
+  // Opcional: si se deja vacía, el servidor genera una contraseña temporal segura
+  password: z.union([passwordPolicySchema, z.literal("")]).optional(),
 });
+
+const employeeIdSchema = z.string().min(1).max(64);
+
+// Sin caracteres ambiguos (0/O, 1/l/I) para que el propietario pueda dictarla
+const TEMP_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+const TEMP_PASSWORD_LENGTH = 12;
+
+/** Contraseña temporal de 12 caracteres con CSPRNG; siempre incluye letra y número. */
+function generateTemporaryPassword(): string {
+  for (;;) {
+    let password = "";
+    for (let i = 0; i < TEMP_PASSWORD_LENGTH; i++) {
+      password += TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)];
+    }
+    if (/[A-Za-z]/.test(password) && /\d/.test(password)) return password;
+  }
+}
 
 export const usersRouter = createTRPCRouter({
   list: ownerProcedure.query(async ({ ctx }) => {
@@ -33,6 +60,7 @@ export const usersRouter = createTRPCRouter({
         email: true,
         isActive: true,
         canManageCash: true,
+        mustChangePassword: true,
       },
       orderBy: { name: "asc" },
     });
@@ -55,7 +83,11 @@ export const usersRouter = createTRPCRouter({
         });
       }
 
-      const passwordHash = await bcrypt.hash(input.password, 12);
+      // La contraseña nunca se envía por correo: se muestra una sola vez al
+      // propietario, que la entrega al empleado; este debe cambiarla al ingresar.
+      const generated = input.password ? null : generateTemporaryPassword();
+      const initialPassword = generated ?? input.password ?? "";
+      const passwordHash = await bcrypt.hash(initialPassword, 12);
 
       const employee = await ctx.db.user.create({
         data: {
@@ -65,6 +97,7 @@ export const usersRouter = createTRPCRouter({
           passwordHash,
           role: "CASHIER",
           isActive: true,
+          mustChangePassword: true,
           businessId,
         },
       });
@@ -80,7 +113,7 @@ export const usersRouter = createTRPCRouter({
         },
       });
 
-      // Correo de bienvenida al empleado — no bloquea si falla
+      // Correo de bienvenida al empleado (sin contraseña) — no bloquea si falla
       const business = await ctx.db.business.findUnique({
         where: { id: businessId },
         select: { name: true },
@@ -92,17 +125,79 @@ export const usersRouter = createTRPCRouter({
           ownerName ?? "El propietario",
           business.name,
           input.email,
-          input.password,
         ).catch(() => null);
       }
 
-      return { id: employee.id, message: "Empleado creado correctamente." };
+      return {
+        id: employee.id,
+        message: "Empleado creado correctamente.",
+        /** Solo presente si la generó el servidor; se muestra una única vez. */
+        temporaryPassword: generated,
+      };
+    }),
+
+  // El propietario restablece la contraseña de un cajero: se genera una temporal,
+  // se cierran sus sesiones y deberá cambiarla al ingresar.
+  resetEmployeePassword: ownerProcedure
+    .input(z.object({ employeeId: employeeIdSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const { businessId, id: ownerId } = ctx.session.user;
+
+      const employee = await ctx.db.user.findFirst({
+        where: { id: input.employeeId, businessId, role: "CASHIER" },
+        select: { id: true, name: true, email: true },
+      });
+
+      if (!employee) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Empleado no encontrado en este negocio." });
+      }
+
+      const temporaryPassword = generateTemporaryPassword();
+      const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+
+      await ctx.db.$transaction([
+        ctx.db.user.update({
+          where: { id: employee.id },
+          data: {
+            passwordHash,
+            mustChangePassword: true,
+            sessionVersion: { increment: 1 },
+            failedLogins: 0,
+            lockedUntil: null,
+          },
+        }),
+        ctx.db.passwordResetToken.deleteMany({ where: { userId: employee.id } }),
+        ctx.db.auditLog.create({
+          data: {
+            businessId,
+            userId: ownerId,
+            action: "RESET_EMPLOYEE_PASSWORD",
+            entityType: "User",
+            entityId: employee.id,
+            detail: { name: employee.name },
+          },
+        }),
+      ]);
+
+      await logAuthEvent({
+        type: "SESSION_REVOKED",
+        email: employee.email,
+        userId: employee.id,
+        businessId,
+        ip: getClientIp(ctx.headers),
+        userAgent: getUserAgent(ctx.headers),
+      });
+
+      return {
+        message: "Contraseña restablecida. Entrégale la contraseña temporal al empleado.",
+        temporaryPassword,
+      };
     }),
 
   setActive: ownerProcedure
     .input(
       z.object({
-        employeeId: z.string().min(1),
+        employeeId: employeeIdSchema,
         isActive: z.boolean(),
       }),
     )
@@ -115,7 +210,7 @@ export const usersRouter = createTRPCRouter({
           businessId,
           role: "CASHIER",
         },
-        select: { id: true, name: true },
+        select: { id: true, name: true, email: true },
       });
 
       if (!employee) {
@@ -125,9 +220,10 @@ export const usersRouter = createTRPCRouter({
         });
       }
 
+      // sessionVersion++ corta de inmediato las sesiones abiertas del empleado
       await ctx.db.user.update({
         where: { id: input.employeeId },
-        data: { isActive: input.isActive },
+        data: { isActive: input.isActive, sessionVersion: { increment: 1 } },
       });
 
       await ctx.db.auditLog.create({
@@ -141,6 +237,17 @@ export const usersRouter = createTRPCRouter({
         },
       });
 
+      if (!input.isActive) {
+        await logAuthEvent({
+          type: "SESSION_REVOKED",
+          email: employee.email,
+          userId: employee.id,
+          businessId,
+          ip: getClientIp(ctx.headers),
+          userAgent: getUserAgent(ctx.headers),
+        });
+      }
+
       return {
         message: input.isActive
           ? "Empleado activado correctamente."
@@ -151,7 +258,7 @@ export const usersRouter = createTRPCRouter({
   setCashManagement: ownerProcedure
     .input(
       z.object({
-        employeeId: z.string().min(1),
+        employeeId: employeeIdSchema,
         canManageCash: z.boolean(),
       }),
     )
@@ -167,6 +274,8 @@ export const usersRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Empleado no encontrado en este negocio." });
       }
 
+      // canManageCash se lee fresco de la BD en cada petición (loadActiveUser):
+      // no hace falta cerrar la sesión del cajero en plena jornada.
       await ctx.db.user.update({
         where: { id: input.employeeId },
         data: { canManageCash: input.canManageCash },

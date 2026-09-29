@@ -62,132 +62,97 @@ enum CashMovementType {
   EXPENSE
 }
 
-model Post {
-  id        Int      @id @default(autoincrement())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  createdBy   User   @relation(fields: [createdById], references: [id])
-  createdById String
-
-  @@index([name])
-}
-
-// Necessary for Next auth
-model Account {
-  id                       String  @id @default(cuid())
-  userId                   String
-  type                     String
-  provider                 String
-  providerAccountId        String
-  refresh_token            String? // @db.Text
-  access_token             String? // @db.Text
-  expires_at               Int?
-  token_type               String?
-  scope                    String?
-  id_token                 String? // @db.Text
-  session_state            String?
-  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refresh_token_expires_in Int?
-
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  passwordHash  String?   @map("password_hash")
-  document      String?
-  phone         String?
-  role          UserRole  @default(OWNER)
-  isActive      Boolean   @default(false) @map("is_active")
-  canManageCash Boolean   @default(true) @map("can_manage_cash")
-  businessId    String?   @map("business_id")
-  emailVerified DateTime?
-  image         String?
-  business      Business? @relation(fields: [businessId], references: [id])
-  accounts                Account[]
-  sessions                Session[]
-  posts                   Post[]
-  auditLogs               AuditLog[]
-  inventoryMovements      InventoryMovement[]
-  sales                   Sale[]
-  cashRegisters           CashRegister[]
-  cashMovements           CashMovement[]
-  customerPayments        CustomerPayment[]
-  tableSessions           TableSession[]
-  tableOrders             TableOrder[]
-  emailVerificationCodes  EmailVerificationCode[]
-  passwordResetTokens     PasswordResetToken[]
+  id                  String               @id @default(cuid())
+  name                String?
+  email               String?              @unique
+  passwordHash        String?              @map("password_hash")
+  document            String?
+  phone               String?
+  role                UserRole             @default(OWNER)
+  isActive            Boolean              @default(false) @map("is_active")
+  canManageCash       Boolean              @default(true) @map("can_manage_cash")
+  businessId          String?              @map("business_id")
+  // Se incrementa al cambiar contraseña, rol o estado: invalida las sesiones JWT emitidas antes.
+  sessionVersion      Int                  @default(0) @map("session_version")
+  failedLogins        Int                  @default(0) @map("failed_logins")
+  lockedUntil         DateTime?            @map("locked_until")
+  mustChangePassword  Boolean              @default(false) @map("must_change_password")
+  emailVerified       DateTime?
+  image               String?
+  business            Business?            @relation(fields: [businessId], references: [id])
+  auditLogs           AuditLog[]
+  inventoryMovements  InventoryMovement[]
+  sales               Sale[]
+  cashRegisters       CashRegister[]
+  cashMovements       CashMovement[]
+  customerPayments    CustomerPayment[]
+  tableSessions       TableSession[]
+  tableOrders         TableOrder[]
+  passwordResetTokens PasswordResetToken[]
+  authEvents          AuthEvent[]
 
   @@index([businessId])
 }
 
 model Business {
-  id               String  @id @default(cuid())
-  name             String
-  document         String  @unique
-  address          String?
-  phone            String?
-  email            String?
-  invoicePhoneSource InvoiceContactSource @default(NONE) @map("invoice_phone_source")
-  invoiceEmailSource InvoiceContactSource @default(NONE) @map("invoice_email_source")
-  invoiceTaxDetail InvoiceTaxDetail @default(SUMMARY) @map("invoice_tax_detail")
-  taxes            Json    @default("[]") @map("taxes")
-  categories       String[] @default([]) @map("categories")
-  plan             String  @default("MVP") @map("plan")
-  autoTax          Boolean @default(false) @map("auto_tax")
-  maxCashRegisters Int     @default(1) @map("max_cash_registers")
+  id                    String               @id @default(cuid())
+  name                  String
+  document              String               @unique
+  address               String?
+  phone                 String?
+  email                 String?
+  invoicePhoneSource    InvoiceContactSource @default(NONE) @map("invoice_phone_source")
+  invoiceEmailSource    InvoiceContactSource @default(NONE) @map("invoice_email_source")
+  invoiceTaxDetail      InvoiceTaxDetail     @default(SUMMARY) @map("invoice_tax_detail")
+  taxes                 Json                 @default("[]") @map("taxes")
+  categories            String[]             @default([]) @map("categories")
+  plan                  String               @default("MVP") @map("plan")
+  autoTax               Boolean              @default(false) @map("auto_tax")
+  maxCashRegisters      Int                  @default(1) @map("max_cash_registers")
   // Habilita el modo "se vende por peso" en el formulario de productos (frutas/verduras)
-  produceModuleEnabled Boolean @default(false) @map("produce_module_enabled")
-  logoUrl          String? @map("logo_url")
-  users              User[]
-  auditLogs          AuditLog[]
-  products           Product[]
-  inventoryMovements InventoryMovement[]
-  sales              Sale[]
-  customers          Customer[]
-  customerPayments   CustomerPayment[]
-  cashRegisters      CashRegister[]
-  cashMovements      CashMovement[]
-  tableSessions      TableSession[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  produceModuleEnabled  Boolean              @default(false) @map("produce_module_enabled")
+  // Permite a los cajeros cambiar el precio de venta de los productos.
+  cashiersCanEditPrices Boolean              @default(false) @map("cashiers_can_edit_prices")
+  logoUrl               String?              @map("logo_url")
+  users                 User[]
+  auditLogs             AuditLog[]
+  products              Product[]
+  inventoryMovements    InventoryMovement[]
+  sales                 Sale[]
+  customers             Customer[]
+  customerPayments      CustomerPayment[]
+  cashRegisters         CashRegister[]
+  cashMovements         CashMovement[]
+  tableSessions         TableSession[]
+  invoiceSequences      InvoiceSequence[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 }
 
 model Product {
-  id         String    @id @default(cuid())
-  businessId String    @map("business_id")
-  name       String
-  price      Float
-  cost       Float?    @map("cost")
-  unit       String    @default("und") @map("unit")
-  taxSlots   Int[]     @default([]) @map("tax_slots")
-  stock      Int       @default(0)
-  trackStock Boolean   @default(true) @map("track_stock")
-  isActive   Boolean   @default(true) @map("is_active")
-  category   String?   @map("category")
-  lotNumber  String?   @map("lot_number")
-  expiresAt  DateTime? @map("expires_at")
-  barcode    String?   @map("barcode")
-  brand        String?  @map("brand")
-  presentation String?  @map("presentation")
+  id           String    @id @default(cuid())
+  businessId   String    @map("business_id")
+  name         String
+  price        Float
+  cost         Float?    @map("cost")
+  unit         String    @default("und") @map("unit")
+  taxSlots     Int[]     @default([]) @map("tax_slots")
+  stock        Int       @default(0)
+  trackStock   Boolean   @default(true) @map("track_stock")
+  isActive     Boolean   @default(true) @map("is_active")
+  category     String?   @map("category")
+  lotNumber    String?   @map("lot_number")
+  expiresAt    DateTime? @map("expires_at")
+  barcode      String?   @map("barcode")
+  brand        String?   @map("brand")
+  presentation String?   @map("presentation")
   // Monto libre: el precio se define en cada venta (ej. confites sueltos) en vez de usar `price`.
-  openPrice    Boolean  @default(false) @map("open_price")
+  openPrice    Boolean   @default(false) @map("open_price")
   // Se vende por peso: `price` representa el precio por kg; en la venta se pide el peso.
-  soldByWeight Boolean  @default(false) @map("sold_by_weight")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  soldByWeight Boolean   @default(false) @map("sold_by_weight")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   business           Business            @relation(fields: [businessId], references: [id])
   inventoryMovements InventoryMovement[]
@@ -237,32 +202,12 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-
-model EmailVerificationCode {
-  id        String    @id @default(cuid())
-  userId    String    @map("user_id")
-  code      String
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("email_verification_codes")
-}
-
 model PasswordResetToken {
   id        String    @id @default(cuid())
   userId    String    @map("user_id")
-  token     String    @unique
+  // SHA-256 del código enviado por correo; nunca se guarda en claro.
+  tokenHash String    @map("token_hash")
+  attempts  Int       @default(0)
   expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
   createdAt DateTime  @default(now()) @map("created_at")
@@ -276,7 +221,9 @@ model PasswordResetToken {
 model PendingRegistration {
   id               String   @id @default(cuid())
   email            String   @unique
-  code             String
+  // SHA-256 del código de verificación enviado por correo.
+  codeHash         String   @map("code_hash")
+  attempts         Int      @default(0)
   expiresAt        DateTime @map("expires_at")
   businessName     String   @map("business_name")
   businessDocument String   @map("business_document")
@@ -289,16 +236,16 @@ model PendingRegistration {
 }
 
 model Customer {
-  id         String    @id @default(cuid())
-  businessId String    @map("business_id")
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
   name       String
   alias      String?
   document   String?
   email      String?
   phone      String?
-  isActive   Boolean   @default(true) @map("is_active")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   business    Business          @relation(fields: [businessId], references: [id])
   sales       Sale[]
@@ -310,66 +257,78 @@ model Customer {
 }
 
 model CustomerPayment {
-  id         String   @id @default(cuid())
-  businessId String   @map("business_id")
-  customerId String   @map("customer_id")
-  userId     String   @map("user_id")
-  amount     Float
-  note       String?
-  createdAt  DateTime @default(now()) @map("created_at")
+  id             String   @id @default(cuid())
+  businessId     String   @map("business_id")
+  customerId     String   @map("customer_id")
+  userId         String   @map("user_id")
+  amount         Float
+  note           String?
+  idempotencyKey String?  @map("idempotency_key")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   business Business @relation(fields: [businessId], references: [id])
   customer Customer @relation(fields: [customerId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
 
+  @@unique([businessId, idempotencyKey])
   @@index([businessId])
   @@index([customerId])
   @@map("customer_payments")
 }
 
 model Sale {
-  id            String        @id @default(cuid())
-  businessId    String        @map("business_id")
-  userId        String        @map("user_id")
-  customerId    String?       @map("customer_id")
-  saleType      SaleType      @default(QUICK) @map("sale_type")
-  invoiceNumber String?       @map("invoice_number")
-  status        SaleStatus    @default(COMPLETED)
-  paymentMethod PaymentMethod @default(CASH) @map("payment_method")
-  subtotal      Float
-  taxAmount     Float         @default(0) @map("tax_amount")
-  taxLines      Json?         @map("tax_lines")
-  total         Float
-  note          String?
-  voidedAt      DateTime?     @map("voided_at")
-  voidReason    String?       @map("void_reason")
-  receiptPath   String?       @map("receipt_path")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
+  id             String        @id @default(cuid())
+  businessId     String        @map("business_id")
+  userId         String        @map("user_id")
+  customerId     String?       @map("customer_id")
+  saleType       SaleType      @default(QUICK) @map("sale_type")
+  invoiceNumber  String?       @map("invoice_number")
+  status         SaleStatus    @default(COMPLETED)
+  paymentMethod  PaymentMethod @default(CASH) @map("payment_method")
+  subtotal       Float
+  taxAmount      Float         @default(0) @map("tax_amount")
+  taxLines       Json?         @map("tax_lines")
+  total          Float
+  note           String?
+  voidedAt       DateTime?     @map("voided_at")
+  voidReason     String?       @map("void_reason")
+  receiptPath    String?       @map("receipt_path")
+  idempotencyKey String?       @map("idempotency_key")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  tableSessionId String?       @map("table_session_id")
+  tableSessionId String? @map("table_session_id")
+  // Caja en la que entró el dinero de esta venta: el saldo de cada caja se
+  // calcula solo con sus propias ventas (no con todas las del negocio).
+  cashRegisterId String? @map("cash_register_id")
 
   business     Business      @relation(fields: [businessId], references: [id])
   user         User          @relation(fields: [userId], references: [id])
   customer     Customer?     @relation(fields: [customerId], references: [id])
   tableSession TableSession? @relation(fields: [tableSessionId], references: [id])
+  cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
   items        SaleItem[]
 
+  @@unique([businessId, idempotencyKey])
   @@index([businessId])
   @@index([userId])
+  @@index([cashRegisterId])
   @@map("sales")
 }
 
 model SaleItem {
-  id        String  @id @default(cuid())
-  saleId    String  @map("sale_id")
-  productId String  @map("product_id")
-  name      String
-  unit      String  @default("und")
-  price     Float
-  quantity  Int
-  subtotal  Float
-  taxLines  Json?   @map("tax_lines")
+  id            String @id @default(cuid())
+  saleId        String @map("sale_id")
+  productId     String @map("product_id")
+  name          String
+  unit          String @default("und")
+  price         Float
+  quantity      Int
+  subtotal      Float
+  taxLines      Json?  @map("tax_lines")
+  // Unidades realmente descontadas del inventario. Al anular se devuelve
+  // exactamente esto (null = venta anterior a este campo).
+  stockDeducted Int?   @map("stock_deducted")
 
   sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -394,6 +353,7 @@ model CashRegister {
   business  Business       @relation(fields: [businessId], references: [id])
   user      User           @relation(fields: [userId], references: [id])
   movements CashMovement[]
+  sales     Sale[]
 
   @@index([businessId])
   @@map("cash_registers")
@@ -407,12 +367,14 @@ model CashMovement {
   type           CashMovementType
   amount         Float
   description    String
+  idempotencyKey String?          @map("idempotency_key")
   createdAt      DateTime         @default(now()) @map("created_at")
 
   cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id])
   business     Business     @relation(fields: [businessId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
 
+  @@unique([businessId, idempotencyKey])
   @@index([cashRegisterId])
   @@index([businessId])
   @@map("cash_movements")
@@ -429,8 +391,8 @@ model TableSession {
   createdAt  DateTime           @default(now()) @map("created_at")
   updatedAt  DateTime           @updatedAt @map("updated_at")
 
-  business Business      @relation(fields: [businessId], references: [id])
-  user     User          @relation(fields: [userId], references: [id])
+  business Business     @relation(fields: [businessId], references: [id])
+  user     User         @relation(fields: [userId], references: [id])
   guests   TableGuest[]
   orders   TableOrder[]
   sales    Sale[]
@@ -440,14 +402,14 @@ model TableSession {
 }
 
 model TableGuest {
-  id             String    @id @default(cuid())
-  tableSessionId String    @map("table_session_id")
-  customerId     String?   @map("customer_id")
+  id             String   @id @default(cuid())
+  tableSessionId String   @map("table_session_id")
+  customerId     String?  @map("customer_id")
   name           String
   description    String?
   document       String?
   phone          String?
-  addedAt        DateTime  @default(now()) @map("added_at")
+  addedAt        DateTime @default(now()) @map("added_at")
 
   tableSession TableSession @relation(fields: [tableSessionId], references: [id], onDelete: Cascade)
   customer     Customer?    @relation(fields: [customerId], references: [id])
@@ -467,13 +429,15 @@ model TableOrder {
   taxLines       Json?    @map("tax_lines")
   total          Float
   note           String?
+  idempotencyKey String?  @map("idempotency_key")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  tableGuest   TableGuest      @relation(fields: [tableGuestId], references: [id], onDelete: Cascade)
-  tableSession TableSession    @relation(fields: [tableSessionId], references: [id], onDelete: Cascade)
-  user         User?           @relation(fields: [userId], references: [id])
+  tableGuest   TableGuest       @relation(fields: [tableGuestId], references: [id], onDelete: Cascade)
+  tableSession TableSession     @relation(fields: [tableSessionId], references: [id], onDelete: Cascade)
+  user         User?            @relation(fields: [userId], references: [id])
   items        TableOrderItem[]
 
+  @@unique([tableSessionId, idempotencyKey])
   @@index([tableGuestId])
   @@index([tableSessionId])
   @@index([userId])
@@ -481,18 +445,64 @@ model TableOrder {
 }
 
 model TableOrderItem {
-  id           String @id @default(cuid())
-  tableOrderId String @map("table_order_id")
-  productId    String @map("product_id")
-  name         String
-  unit         String @default("und")
-  price        Float
-  quantity     Int
-  subtotal     Float
+  id            String @id @default(cuid())
+  tableOrderId  String @map("table_order_id")
+  productId     String @map("product_id")
+  name          String
+  unit          String @default("und")
+  price         Float
+  quantity      Int
+  subtotal      Float
+  // Unidades descontadas del inventario al pedir la ronda (ver SaleItem.stockDeducted).
+  stockDeducted Int?   @map("stock_deducted")
 
   tableOrder TableOrder @relation(fields: [tableOrderId], references: [id], onDelete: Cascade)
   product    Product    @relation(fields: [productId], references: [id])
 
   @@index([tableOrderId])
   @@map("table_order_items")
+}
+
+// Consecutivo de facturas por negocio y año. Se incrementa de forma atómica
+// (UPDATE ... RETURNING) dentro de la transacción de la venta.
+model InvoiceSequence {
+  businessId String   @map("business_id")
+  year       Int
+  lastNumber Int      @default(0) @map("last_number")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@id([businessId, year])
+  @@map("invoice_sequences")
+}
+
+// Contadores de límite de intentos (ventana fija). key = "<acción>:<ip|email>".
+model RateLimit {
+  key         String   @id
+  count       Int      @default(0)
+  windowStart DateTime @map("window_start")
+  expiresAt   DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("rate_limits")
+}
+
+// Eventos de autenticación (logins fallidos, bloqueos, resets) para detectar accesos sospechosos.
+// userId/businessId son opcionales porque un intento puede usar un correo inexistente.
+model AuthEvent {
+  id         String   @id @default(cuid())
+  type       String
+  email      String?
+  userId     String?  @map("user_id")
+  businessId String?  @map("business_id")
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email, createdAt])
+  @@index([businessId, createdAt])
+  @@map("auth_events")
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { Camera, ScanLine } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useOfflineQueue } from "~/hooks/useOfflineQueue";
+import type { SyncInput } from "~/lib/offlineQueue";
 import { api } from "~/trpc/react";
 import { OfflineBanner } from "./OfflineBanner";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
@@ -415,7 +416,15 @@ function TotalsAndPayment({
   );
 }
 
-export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: boolean }>) {
+type POSProps = {
+  taxes: TaxConfig[];
+  autoTax: boolean;
+  /** Usuario y negocio de la sesión: las ventas sin conexión quedan ligadas a ellos. */
+  userId: string;
+  businessId: string;
+};
+
+export function POS({ taxes, autoTax, userId, businessId }: Readonly<POSProps>) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "CREDIT" | "TRANSFER">("CASH");
@@ -427,6 +436,13 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   const [continuousScan, setContinuousScan] = useState(false);
   const [receiptPath, setReceiptPath] = useState<string | null>(null);
   const [specialPrompt, setSpecialPrompt] = useState<{ product: Product; mode: "weight" | "amount" } | null>(null);
+  // Clave de idempotencia de la venta en curso: se genera al confirmar y se reutiliza si el
+  // usuario reintenta (error de red, doble clic). Cambiar el carrito implica una venta nueva.
+  const saleKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    saleKeyRef.current = null;
+  }, [cart, paymentMethod, selectedCustomer, receiptPath]);
 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(QUICK_CART_KEY, []));
@@ -464,17 +480,31 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
     onError: (err) => showMessage("error", err.message),
   });
 
+  // Mutación aparte para reenviar la cola: la de arriba limpia el carrito al terminar y
+  // no debe borrar la venta que el cajero está armando mientras se sincroniza.
+  const syncSale = api.sale.create.useMutation();
+
   const syncFn = useCallback(
-    async (sale: { items: { productId: string; quantity: number; weightKg?: number; customAmount?: number }[]; paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER"; customerId?: string; note?: string; receiptPath?: string }) => {
-      await createSale.mutateAsync({ ...sale, saleType: "QUICK" });
-      await utils.sale.list.invalidate();
+    async (sale: SyncInput) => {
+      await syncSale.mutateAsync({ ...sale, saleType: "QUICK" });
+      void utils.sale.list.invalidate();
+      void utils.product.search.invalidate();
+      void utils.product.list.invalidate();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
-  const { isOnline, pendingCount, isSyncing, syncErrors, addToQueue, processQueue } =
-    useOfflineQueue(syncFn);
+  const {
+    isOnline,
+    pendingCount,
+    legacySales,
+    isSyncing,
+    syncErrors,
+    addToQueue,
+    processQueue,
+    discardLegacy,
+  } = useOfflineQueue(syncFn, { userId, businessId });
 
   function showMessage(type: "success" | "error", text: string) {
     setStatusMessage({ type, text });
@@ -595,13 +625,16 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
   const creditRequiresCustomer = paymentMethod === "CREDIT" && !selectedCustomer?.id;
 
   async function confirmSale() {
-    if (cart.length === 0 || creditRequiresCustomer) return;
+    if (cart.length === 0 || creditRequiresCustomer || createSale.isPending) return;
+
+    saleKeyRef.current ??= crypto.randomUUID();
 
     const saleData = {
       items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity, weightKg: i.weightKg, customAmount: i.customAmount })),
       paymentMethod,
       customerId: selectedCustomer?.id,
       receiptPath: receiptPath ?? undefined,
+      idempotencyKey: saleKeyRef.current,
     };
 
     if (!isOnline) {
@@ -649,6 +682,8 @@ export function POS({ taxes, autoTax }: Readonly<{ taxes: TaxConfig[]; autoTax: 
         isSyncing={isSyncing}
         syncErrors={syncErrors}
         onManualSync={processQueue}
+        legacySales={legacySales}
+        onDiscardLegacy={discardLegacy}
       />
 
       {/* Cliente — siempre visible arriba de todo, identificado o Consumidor Final */}

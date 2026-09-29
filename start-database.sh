@@ -1,88 +1,101 @@
 #!/usr/bin/env bash
-# Use this script to start a docker container for a local development database
+# Levanta un contenedor Docker/Podman con Postgres 17 para desarrollo local.
+# Uso: ./start-database.sh   (Linux, macOS, WSL o Git Bash en Windows)
+#
+# - Solo escucha en 127.0.0.1 (no queda expuesto en la red).
+# - Lee únicamente DATABASE_URL de .env (no ejecuta el archivo).
+# - Si DATABASE_URL no apunta a localhost (p. ej. es la de producción), NO reutiliza
+#   esa contraseña: genera una aleatoria y muestra la URL local a usar.
 
-# TO RUN ON WINDOWS:
-# 1. Install WSL (Windows Subsystem for Linux) - https://learn.microsoft.com/en-us/windows/wsl/install
-# 2. Install Docker Desktop or Podman Deskop
-# - Docker Desktop for Windows - https://docs.docker.com/docker-for-windows/install/
-# - Podman Desktop - https://podman.io/getting-started/installation
-# 3. Open WSL - `wsl`
-# 4. Run this script - `./start-database.sh`
+set -euo pipefail
 
-# On Linux and macOS you can run this script directly - `./start-database.sh`
+POSTGRES_IMAGE="docker.io/library/postgres:17"
 
-# import env variables from .env
-set -a
-source .env
+env_value() {
+  [[ -f .env ]] || return 0
+  grep -E "^$1=" .env | tail -n 1 | cut -d '=' -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
+}
 
-DB_PASSWORD=$(echo "$DATABASE_URL" | awk -F':' '{print $3}' | awk -F'@' '{print $1}')
-DB_PORT=$(echo "$DATABASE_URL" | awk -F':' '{print $4}' | awk -F'\/' '{print $1}')
-DB_NAME=$(echo "$DATABASE_URL" | awk -F'/' '{print $4}')
+DATABASE_URL="${DATABASE_URL:-$(env_value DATABASE_URL)}"
+
+# postgresql://usuario:clave@host:puerto/base?parametros
+URL_REST="${DATABASE_URL#*://}"
+URL_REST="${URL_REST%%\?*}"          # quita ?pgbouncer=true, ?schema=..., etc.
+USERINFO="${URL_REST%@*}"
+HOSTPART="${URL_REST##*@}"
+HOSTPORT="${HOSTPART%%/*}"
+DB_HOST="${HOSTPORT%%:*}"
+DB_PORT="${HOSTPORT##*:}"
+DB_NAME="${HOSTPART#*/}"
+DB_PASSWORD="${USERINFO#*:}"
+
+[[ "$DB_PORT" =~ ^[0-9]+$ ]] || DB_PORT=5432
+[[ -n "$DB_NAME" && "$DB_NAME" != "$HOSTPART" ]] || DB_NAME="billify"
+
+case "$DB_HOST" in
+  localhost|127.0.0.1) IS_LOCAL_URL=1 ;;
+  *) IS_LOCAL_URL=0 ;;
+esac
+
+if [[ $IS_LOCAL_URL -eq 0 ]]; then
+  # Nunca reutilizar la contraseña de una base remota para el contenedor local.
+  echo "DATABASE_URL no apunta a localhost: se usará una base local independiente."
+  DB_PORT=5432
+  DB_NAME="billify"
+  DB_PASSWORD=""
+fi
+
+if [[ -z "$DB_PASSWORD" || "$DB_PASSWORD" == "password" || "$DB_PASSWORD" == "$USERINFO" ]]; then
+  DB_PASSWORD="$(openssl rand -hex 16 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  GENERATED_PASSWORD=1
+else
+  GENERATED_PASSWORD=0
+fi
+
 DB_CONTAINER_NAME="$DB_NAME-postgres"
 
-if ! [ -x "$(command -v docker)" ] && ! [ -x "$(command -v podman)" ]; then
-  echo -e "Docker or Podman is not installed. Please install docker or podman and try again.\nDocker install guide: https://docs.docker.com/engine/install/\nPodman install guide: https://podman.io/getting-started/installation"
-  exit 1
-fi
-
-# determine which docker command to use
-if [ -x "$(command -v docker)" ]; then
+if [[ -x "$(command -v docker)" ]]; then
   DOCKER_CMD="docker"
-elif [ -x "$(command -v podman)" ]; then
+elif [[ -x "$(command -v podman)" ]]; then
   DOCKER_CMD="podman"
-fi
-
-if ! $DOCKER_CMD info > /dev/null 2>&1; then
-  echo "$DOCKER_CMD daemon is not running. Please start $DOCKER_CMD and try again."
+else
+  echo -e "Docker o Podman no están instalados.\nDocker: https://docs.docker.com/engine/install/\nPodman: https://podman.io/getting-started/installation"
   exit 1
 fi
 
-if command -v nc >/dev/null 2>&1; then
-  if nc -z localhost "$DB_PORT" 2>/dev/null; then
-    echo "Port $DB_PORT is already in use."
-    exit 1
-  fi
-else
-  echo "Warning: Unable to check if port $DB_PORT is already in use (netcat not installed)"
-  read -p "Do you want to continue anyway? [y/N]: " -r REPLY
-  if ! [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborting."
-    exit 1
-  fi
+if ! $DOCKER_CMD info >/dev/null 2>&1; then
+  echo "$DOCKER_CMD no está en ejecución. Inícialo e inténtalo de nuevo."
+  exit 1
 fi
 
-if [ "$($DOCKER_CMD ps -q -f name=$DB_CONTAINER_NAME)" ]; then
-  echo "Database container '$DB_CONTAINER_NAME' already running"
+if [[ -n "$($DOCKER_CMD ps -q -f "name=^${DB_CONTAINER_NAME}$")" ]]; then
+  echo "El contenedor '$DB_CONTAINER_NAME' ya está en ejecución."
   exit 0
 fi
 
-if [ "$($DOCKER_CMD ps -q -a -f name=$DB_CONTAINER_NAME)" ]; then
-  $DOCKER_CMD start "$DB_CONTAINER_NAME"
-  echo "Existing database container '$DB_CONTAINER_NAME' started"
+if [[ -n "$($DOCKER_CMD ps -q -a -f "name=^${DB_CONTAINER_NAME}$")" ]]; then
+  $DOCKER_CMD start "$DB_CONTAINER_NAME" >/dev/null
+  echo "Contenedor existente '$DB_CONTAINER_NAME' iniciado."
   exit 0
 fi
 
-if [ "$DB_PASSWORD" = "password" ]; then
-  echo "You are using the default database password"
-  read -p "Should we generate a random password for you? [y/N]: " -r REPLY
-  if ! [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Please change the default password in the .env file and try again"
-    exit 1
-  fi
-  # Generate a random URL-safe password
-  DB_PASSWORD=$(openssl rand -base64 12 | tr '+/' '-_')
-  if [[ "$(uname)" == "Darwin" ]]; then
-    # macOS requires an empty string to be passed with the `i` flag
-    sed -i '' "s#:password@#:$DB_PASSWORD@#" .env
-  else
-    sed -i "s#:password@#:$DB_PASSWORD@#" .env
-  fi
+if command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 "$DB_PORT" 2>/dev/null; then
+  echo "El puerto $DB_PORT ya está en uso."
+  exit 1
 fi
 
-$DOCKER_CMD run -d \
-  --name $DB_CONTAINER_NAME \
+# La contraseña va por variable de entorno (-e NOMBRE), no en la línea de comandos.
+export POSTGRES_PASSWORD="$DB_PASSWORD"
+MSYS_NO_PATHCONV=1 $DOCKER_CMD run -d \
+  --name "$DB_CONTAINER_NAME" \
   -e POSTGRES_USER="postgres" \
-  -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+  -e POSTGRES_PASSWORD \
   -e POSTGRES_DB="$DB_NAME" \
-  -p "$DB_PORT":5432 \
-  docker.io/postgres && echo "Database container '$DB_CONTAINER_NAME' was successfully created"
+  -p "127.0.0.1:$DB_PORT:5432" \
+  "$POSTGRES_IMAGE" >/dev/null
+
+echo "Contenedor '$DB_CONTAINER_NAME' creado (Postgres 17 en 127.0.0.1:$DB_PORT)."
+if [[ $GENERATED_PASSWORD -eq 1 || $IS_LOCAL_URL -eq 0 ]]; then
+  echo "Usa esta URL local en tu .env (DATABASE_URL y DIRECT_URL):"
+  echo "  postgresql://postgres:$DB_PASSWORD@127.0.0.1:$DB_PORT/$DB_NAME"
+fi

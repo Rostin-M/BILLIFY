@@ -2,6 +2,7 @@ import "~/styles/globals.css";
 
 import { type Metadata, type Viewport } from "next";
 import { Geist } from "next/font/google";
+import { headers } from "next/headers";
 import { Toaster } from "sonner";
 
 import { Providers } from "./_components/Providers";
@@ -33,14 +34,19 @@ const geist = Geist({
   variable: "--font-geist-sans",
 });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Nonce de la CSP generado en el middleware. Leer headers() hace que todas las
+  // páginas se rendericen por petición (requisito de la CSP con nonce, según la
+  // documentación de Next.js): una página prerenderizada no tendría el nonce.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html lang="es" className={`${geist.variable}`} suppressHydrationWarning>
       <body>
         <TRPCReactProvider>
-          <Providers>{children}</Providers>
+          <Providers nonce={nonce}>{children}</Providers>
           <Toaster richColors position="top-right" />
           <ServiceWorkerRegistrar />
         </TRPCReactProvider>

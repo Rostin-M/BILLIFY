@@ -1,16 +1,13 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { api, HydrateClient } from "~/trpc/server";
 import { DashboardClient } from "./_components/DashboardClient";
 import { PageLayout } from "~/app/_components/PageLayout";
 
 export default async function DashboardPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
-  if (!session.user.businessId) redirect("/");
-  if (session.user.role !== "OWNER") redirect("/");
+  const user = await requirePageUser({ roles: ["OWNER"] });
+  if (!user.businessId) redirect("/");
 
   void api.dashboard.summary.prefetch({ period: "today" });
 

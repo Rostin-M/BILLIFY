@@ -9,10 +9,8 @@ export const env = createEnv({
   server: {
     AUTH_SECRET:
       process.env.NODE_ENV === "production"
-        ? z.string()
+        ? z.string().min(32, "AUTH_SECRET debe tener al menos 32 caracteres")
         : z.string().optional(),
-    AUTH_DISCORD_ID: z.string().optional(),
-    AUTH_DISCORD_SECRET: z.string().optional(),
     DATABASE_URL: z.string().url(),
     DIRECT_URL: z.string().url(),
     SUPABASE_URL: z.string().url().optional(),
@@ -39,8 +37,6 @@ export const env = createEnv({
    */
   runtimeEnv: {
     AUTH_SECRET: process.env.AUTH_SECRET,
-    AUTH_DISCORD_ID: process.env.AUTH_DISCORD_ID,
-    AUTH_DISCORD_SECRET: process.env.AUTH_DISCORD_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
     DIRECT_URL: process.env.DIRECT_URL,
     SUPABASE_URL: process.env.SUPABASE_URL,

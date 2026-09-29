@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { HandCoins } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
@@ -126,8 +126,13 @@ export function FiadosClient() {
 
   const { data: debtors = [], isPending } = api.customer.listDebtors.useQuery();
 
+  // Clave de idempotencia del abono en curso, atada a (cliente, monto): un reintento del mismo
+  // abono reutiliza la clave y el servidor no lo registra dos veces.
+  const paymentKeyRef = useRef<{ signature: string; key: string } | null>(null);
+
   const addPayment = api.customer.addPayment.useMutation({
     onSuccess: async (data) => {
+      paymentKeyRef.current = null;
       toast.success(data.message);
       setPayingId(null);
       setPaymentAmount("");
@@ -138,6 +143,15 @@ export function FiadosClient() {
     },
     onError: (err) => toast.error(err.message),
   });
+
+  function submitPayment(customerId: string, amount: number) {
+    if (addPayment.isPending) return;
+    const signature = `${customerId}|${amount}`;
+    if (paymentKeyRef.current?.signature !== signature) {
+      paymentKeyRef.current = { signature, key: crypto.randomUUID() };
+    }
+    addPayment.mutate({ customerId, amount, idempotencyKey: paymentKeyRef.current.key });
+  }
 
   const totalDebt = debtors.reduce((sum, d) => sum + d.debt, 0);
 
@@ -230,14 +244,14 @@ export function FiadosClient() {
                       />
                       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                         <button
-                          onClick={() => addPayment.mutate({ customerId: c.id, amount: Number(paymentAmount) })}
+                          onClick={() => submitPayment(c.id, Number(paymentAmount))}
                           disabled={!paymentAmount || Number(paymentAmount) <= 0 || addPayment.isPending}
                           className="min-h-11 flex-1 rounded-lg bg-amber-600 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
                         >
                           {addPayment.isPending ? "Guardando..." : "Abonar"}
                         </button>
                         <button
-                          onClick={() => addPayment.mutate({ customerId: c.id, amount: c.debt })}
+                          onClick={() => submitPayment(c.id, c.debt)}
                           disabled={addPayment.isPending}
                           className="min-h-11 flex-1 rounded-lg bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
                         >

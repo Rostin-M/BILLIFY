@@ -1,15 +1,10 @@
-import { redirect } from "next/navigation";
-
-import { auth } from "~/server/auth";
+import { requirePageUser } from "~/server/auth/requirePageUser";
 import { api, HydrateClient } from "~/trpc/server";
 import { CustomerManager } from "./_components/CustomerManager";
 import { PageLayout } from "~/app/_components/PageLayout";
 
 export default async function ClientesPage() {
-  const session = await auth();
-
-  if (!session?.user) redirect("/auth/login");
-  if (session.user.role !== "OWNER") redirect("/");
+  await requirePageUser({ roles: ["OWNER"] });
 
   void api.customer.list.prefetch();
 
