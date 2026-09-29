@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { POS } from "./POS";
+import { PointOfSale } from "./POS";
 import { InvoicedSaleForm } from "./InvoicedSaleForm";
 import { SalesHistory } from "./SalesHistory";
 import type { BusinessInfoForPdf } from "~/lib/pdf/FacturaPDF";
@@ -48,7 +48,7 @@ export function VentasClient({ taxes, autoTax, isOwner, userName, userId, busine
         ))}
       </div>
 
-      {tab === "quick" && <POS taxes={taxes} autoTax={autoTax} userId={userId} businessId={businessId} />}
+      {tab === "quick" && <PointOfSale taxes={taxes} autoTax={autoTax} userId={userId} businessId={businessId} />}
       {tab === "invoiced" && (
         <InvoicedSaleForm
           taxes={taxes}

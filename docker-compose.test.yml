@@ -1,0 +1,26 @@
+# Postgres desechable para los tests de integración (routers tRPC contra una base real).
+#
+#   npm run test:db:up     → levanta la base en 127.0.0.1:5433 (datos en memoria)
+#   npm run test:db:down   → la elimina
+#
+# No comparte nada con la base de desarrollo ni con producción.
+
+name: billify-test
+
+services:
+  postgres-test:
+    image: postgres:17
+    container_name: billify-postgres-test
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_USER: billify_test
+      POSTGRES_PASSWORD: billify_test
+      POSTGRES_DB: billify_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billify_test -d billify_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

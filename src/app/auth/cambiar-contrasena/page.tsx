@@ -33,6 +33,10 @@ export default function CambiarContrasenaPage() {
 
   const busy = changePassword.isPending || signingOut;
 
+  let submitLabel = "Actualizar contraseña";
+  if (signingOut) submitLabel = "Cerrando sesión...";
+  else if (changePassword.isPending) submitLabel = "Actualizando...";
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-4 py-10">
       <div className="absolute right-4 top-4">
@@ -127,7 +131,7 @@ export default function CambiarContrasenaPage() {
             disabled={busy}
             className="w-full rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {signingOut ? "Cerrando sesión..." : changePassword.isPending ? "Actualizando..." : "Actualizar contraseña"}
+            {submitLabel}
           </button>
         </form>
 

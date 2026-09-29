@@ -187,16 +187,3 @@ export function pickSection(
   }
   return next;
 }
-
-export function parseErrorMessage(rawMessage: string): string {
-  try {
-    const parsed = JSON.parse(rawMessage) as Array<{ message?: string }>;
-    if (Array.isArray(parsed)) {
-      const first = parsed.find((e) => e.message)?.message;
-      if (first) return first;
-    }
-  } catch {
-    // mensaje plano
-  }
-  return rawMessage;
-}

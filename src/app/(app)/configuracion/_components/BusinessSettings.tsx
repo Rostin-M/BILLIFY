@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
+import { firstErrorMessage } from "~/lib/parseZodError";
 import { api } from "~/trpc/react";
 import { CajaSection } from "./settings/CajaSection";
 import { FacturacionSection } from "./settings/FacturacionSection";
@@ -18,7 +19,6 @@ import {
   formFromData,
   isSectionDirty,
   isSectionId,
-  parseErrorMessage,
   pickSection,
   SECTIONS,
   type SectionId,
@@ -165,7 +165,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
         void utils.business.getSettings.invalidate();
       },
       onError: (err) => {
-        setError({ section: meta.id, message: parseErrorMessage(err.message) });
+        setError({ section: meta.id, message: firstErrorMessage(err.message) });
       },
       onSettled: () => setSavingSection(null),
     });

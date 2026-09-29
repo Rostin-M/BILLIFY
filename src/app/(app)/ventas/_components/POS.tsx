@@ -13,6 +13,8 @@ import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
 import { CustomerSelector, CONSUMIDOR_FINAL } from "./CustomerSelector";
 import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
+type PaymentMethod = "CASH" | "CARD" | "CREDIT" | "TRANSFER";
+
 type SelectedCustomer = { id?: string; name: string; document?: string; email?: string | null; isGuestWithDoc?: boolean };
 
 type CartItem = {
@@ -54,7 +56,7 @@ function loadLS<T>(key: string, fallback: T): T {
   }
 }
 
-const PAYMENT_METHOD_LABELS: Record<"CASH" | "CARD" | "TRANSFER" | "CREDIT", string> = {
+const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",
   TRANSFER: "Transf.",
@@ -275,8 +277,8 @@ function TotalsAndPayment({
   onClearCart,
 }: Readonly<{
   cart: CartItem[];
-  paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER";
-  onPaymentMethodChange: (m: "CASH" | "CARD" | "CREDIT" | "TRANSFER") => void;
+  paymentMethod: PaymentMethod;
+  onPaymentMethodChange: (m: PaymentMethod) => void;
   creditRequiresCustomer: boolean;
   receiptPath: string | null;
   onReceiptPathChange: (v: string | null) => void;
@@ -424,10 +426,10 @@ type POSProps = {
   businessId: string;
 };
 
-export function POS({ taxes, autoTax, userId, businessId }: Readonly<POSProps>) {
+export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POSProps>) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "CREDIT" | "TRANSFER">("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(CONSUMIDOR_FINAL);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -446,7 +448,7 @@ export function POS({ taxes, autoTax, userId, businessId }: Readonly<POSProps>) 
 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(QUICK_CART_KEY, []));
-    setPaymentMethod(loadLS<"CASH" | "CARD" | "CREDIT" | "TRANSFER">(QUICK_PAYMENT_KEY, "CASH"));
+    setPaymentMethod(loadLS<PaymentMethod>(QUICK_PAYMENT_KEY, "CASH"));
     setSelectedCustomer(loadLS<SelectedCustomer | null>(QUICK_CUSTOMER_KEY, CONSUMIDOR_FINAL));
     setHydrated(true);
   }, []);

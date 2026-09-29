@@ -50,3 +50,5 @@ yarn-error.log*
 
 # backups — archivos de respaldo de base de datos (nunca al repo)
 /backups/
+# sonarqube
+/.scannerwork/

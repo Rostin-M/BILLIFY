@@ -212,6 +212,62 @@ async function findCheckoutSales(db: Prisma.TransactionClient, businessId: strin
   });
 }
 
+/**
+ * Clientes de la mesa con sus rondas, leídos DENTRO del bloqueo del cobro. Cada ítem hereda lo
+ * que su ronda descontó del stock (regla anterior solo para rondas históricas sin stockDeducted),
+ * así una anulación posterior de la venta devuelve exactamente eso.
+ */
+async function loadCheckoutGuests(tx: Prisma.TransactionClient, sessionId: string): Promise<CheckoutGuest[]> {
+  const guestRows = await tx.tableGuest.findMany({
+    where: { tableSessionId: sessionId },
+    select: {
+      id: true, name: true, customerId: true,
+      orders: {
+        select: {
+          subtotal: true, taxAmount: true, taxLines: true, total: true,
+          items: {
+            select: {
+              productId: true, name: true, unit: true, price: true, quantity: true, subtotal: true,
+              stockDeducted: true,
+              product: { select: { trackStock: true, openPrice: true, soldByWeight: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const toCheckoutItem = ({ product, stockDeducted, ...item }: (typeof guestRows)[number]["orders"][number]["items"][number]) => ({
+    ...item,
+    stockDeducted: stockToRestore({ quantity: item.quantity, stockDeducted, product }),
+  });
+
+  return guestRows.map((g) => ({
+    ...g,
+    orders: g.orders.map((o) => ({ ...o, items: o.items.map(toCheckoutItem) })),
+  }));
+}
+
+/** Todos los clientes a cobrar siguen en la mesa y tienen al menos una ronda pendiente. */
+function assertGuestsStillPending(guestMap: Map<string, CheckoutGuest>, guestIds: string[]): void {
+  // Un cliente que ya no está en la mesa normalmente significa que su cuenta ya se cobró.
+  if (guestIds.some((id) => !guestMap.has(id))) {
+    throw new TRPCError({ code: "CONFLICT", message: ALREADY_CHARGED_MESSAGE });
+  }
+  const ordersToCharge = guestIds.reduce((n, id) => n + guestMap.get(id)!.orders.length, 0);
+  if (ordersToCharge === 0) {
+    throw new TRPCError({ code: "CONFLICT", message: ALREADY_CHARGED_MESSAGE });
+  }
+}
+
+/** Cierra la mesa si ya no le quedan clientes. Devuelve true si la cerró. */
+async function closeTableIfEmpty(tx: Prisma.TransactionClient, sessionId: string): Promise<boolean> {
+  const remainingGuests = await tx.tableGuest.count({ where: { tableSessionId: sessionId } });
+  if (remainingGuests > 0) return false;
+  await tx.tableSession.update({ where: { id: sessionId }, data: { status: "CLOSED", closedAt: new Date() } });
+  return true;
+}
+
 function checkoutMessage(sessionName: string, tableClosed: boolean, keepGuests: boolean, salesCount: number): string {
   let verb: string;
   if (tableClosed) {
@@ -665,47 +721,9 @@ export const tableSessionRouter = createTRPCRouter({
           }
 
           // 3. Releer clientes y rondas DENTRO del bloqueo — nunca cobrar con datos leídos antes.
-          const guestRows = await tx.tableGuest.findMany({
-            where: { tableSessionId: locked.id },
-            select: {
-              id: true, name: true, customerId: true,
-              orders: {
-                select: {
-                  subtotal: true, taxAmount: true, taxLines: true, total: true,
-                  items: {
-                    select: {
-                      productId: true, name: true, unit: true, price: true, quantity: true, subtotal: true,
-                      stockDeducted: true,
-                      product: { select: { trackStock: true, openPrice: true, soldByWeight: true } },
-                    },
-                  },
-                },
-              },
-            },
-          });
-
-          // La venta hereda lo que cada ronda descontó del stock (regla anterior solo para rondas
-          // históricas sin stockDeducted), así una anulación posterior devuelve exactamente eso.
-          const guests: CheckoutGuest[] = guestRows.map((g) => ({
-            ...g,
-            orders: g.orders.map((o) => ({
-              ...o,
-              items: o.items.map(({ product, stockDeducted, ...item }) => ({
-                ...item,
-                stockDeducted: stockToRestore({ quantity: item.quantity, stockDeducted, product }),
-              })),
-            })),
-          }));
-
+          const guests = await loadCheckoutGuests(tx, locked.id);
           const guestMap = new Map<string, CheckoutGuest>(guests.map((g) => [g.id, g]));
-          // Un cliente que ya no está en la mesa normalmente significa que su cuenta ya se cobró.
-          for (const id of allGroupGuestIds) {
-            if (!guestMap.has(id)) throw new TRPCError({ code: "CONFLICT", message: ALREADY_CHARGED_MESSAGE });
-          }
-          const ordersToCharge = allGroupGuestIds.reduce((n, id) => n + guestMap.get(id)!.orders.length, 0);
-          if (ordersToCharge === 0) {
-            throw new TRPCError({ code: "CONFLICT", message: ALREADY_CHARGED_MESSAGE });
-          }
+          assertGuestsStillPending(guestMap, allGroupGuestIds);
 
           await assertValidCreditGroups(tx, businessId, input.groups, guestMap);
 
@@ -720,14 +738,7 @@ export const tableSessionRouter = createTRPCRouter({
             if (sale) sales.push(sale);
           }
 
-          let tableClosed = false;
-          if (!input.keepGuests) {
-            const remainingGuests = await tx.tableGuest.count({ where: { tableSessionId: locked.id } });
-            if (remainingGuests === 0) {
-              await tx.tableSession.update({ where: { id: locked.id }, data: { status: "CLOSED", closedAt: new Date() } });
-              tableClosed = true;
-            }
-          }
+          const tableClosed = !input.keepGuests && (await closeTableIfEmpty(tx, locked.id));
 
           return { sales, tableClosed, sessionName: locked.name };
         }, { timeout: 60000, maxWait: 20000 });

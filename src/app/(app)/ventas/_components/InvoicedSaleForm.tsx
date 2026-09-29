@@ -11,6 +11,8 @@ import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
 import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
 import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 
+type PaymentMethod = "CASH" | "CARD" | "CREDIT" | "TRANSFER";
+
 const FacturaPdfActions = dynamic(
   () => import("~/lib/pdf/FacturaPdfActions").then((m) => m.FacturaPdfActions),
   { ssr: false, loading: () => <span className="text-xs text-slate-500">Generando PDF…</span> },
@@ -250,8 +252,8 @@ function FactureBottom({
   onClearCart,
 }: Readonly<{
   cart: CartItem[];
-  paymentMethod: "CASH" | "CARD" | "CREDIT" | "TRANSFER";
-  onPaymentMethodChange: (m: "CASH" | "CARD" | "CREDIT" | "TRANSFER") => void;
+  paymentMethod: PaymentMethod;
+  onPaymentMethodChange: (m: PaymentMethod) => void;
   note: string;
   onNoteChange: (v: string) => void;
   subtotal: number;
@@ -400,7 +402,7 @@ type Props = {
 export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonly<Props>) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "CREDIT" | "TRANSFER">("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(CONSUMIDOR_FINAL);
   const [note, setNote] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -413,7 +415,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     setCart(loadLS<CartItem[]>(CART_KEY, []));
     setSelectedCustomer(loadLS<SelectedCustomer | null>(CUSTOMER_KEY, CONSUMIDOR_FINAL));
     setNote(loadLS<string>(NOTE_KEY, ""));
-    setPaymentMethod(loadLS<"CASH" | "CARD" | "CREDIT" | "TRANSFER">(PAYMENT_KEY, "CASH"));
+    setPaymentMethod(loadLS<PaymentMethod>(PAYMENT_KEY, "CASH"));
     setHydrated(true);
   }, []);
 

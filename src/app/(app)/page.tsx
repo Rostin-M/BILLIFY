@@ -143,12 +143,12 @@ function NavSection({
   items,
   gridClass,
   iconSize = 20,
-}: {
+}: Readonly<{
   title: string;
   items: NavItem[];
   gridClass: string;
   iconSize?: number;
-}) {
+}>) {
   return (
     <div>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-500">

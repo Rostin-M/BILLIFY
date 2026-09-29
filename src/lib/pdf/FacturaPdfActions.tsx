@@ -39,7 +39,7 @@ export function FacturaPdfActions({ saleId, business, sale, fileName, onClose, l
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
   };
 
   const handlePrint = () => {

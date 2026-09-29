@@ -1,7 +1,7 @@
 // Genera los íconos de PWA a partir de public/logo.png.
 // Ejecutar una sola vez (o cuando cambie el logo): node scripts/generate-pwa-icons.mjs
 import sharp from "sharp";
-import { mkdirSync } from "fs";
+import { mkdirSync } from "node:fs";
 
 const BRAND_BG = "#020617"; // slate-950, mismo fondo que login/loading
 const SRC = "public/logo.png";

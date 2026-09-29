@@ -13,12 +13,10 @@ export default async function CajaPage() {
 
   const isOwner = user.role === "OWNER";
 
-  const [business] = await Promise.all([
-    db.business.findUnique({
-      where: { id: user.businessId },
-      select: { name: true, document: true, logoUrl: true },
-    }),
-  ]);
+  const business = await db.business.findUnique({
+    where: { id: user.businessId },
+    select: { name: true, document: true, logoUrl: true },
+  });
 
   void api.cashRegister.getActive.prefetch();
   if (isOwner) void api.cashRegister.listHistory.prefetch();

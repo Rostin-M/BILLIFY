@@ -23,7 +23,7 @@ export function CajaPdfActions({ business, register, fileName, onClose }: Readon
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
   };
 
   const handlePrint = () => {

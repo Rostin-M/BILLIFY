@@ -56,7 +56,7 @@ type BillifyJWT = {
   [key: string]: unknown;
 };
 
-const ROLES: readonly UserRole[] = ["OWNER", "CASHIER"];
+const ROLES: ReadonlySet<UserRole> = new Set(["OWNER", "CASHIER"]);
 
 /** Un token es válido solo si trae todos los campos que emitimos en el login. */
 function isCompleteToken(jwt: BillifyJWT): boolean {
@@ -64,7 +64,7 @@ function isCompleteToken(jwt: BillifyJWT): boolean {
     typeof jwt.sub === "string" &&
     jwt.sub.length > 0 &&
     typeof jwt.role === "string" &&
-    ROLES.includes(jwt.role) &&
+    ROLES.has(jwt.role) &&
     typeof jwt.sv === "number" &&
     jwt.isActive === true &&
     typeof jwt.mustChangePassword === "boolean" &&

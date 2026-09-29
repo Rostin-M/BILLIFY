@@ -11,6 +11,13 @@ const CashHistoryPdfButton = dynamic(
 
 type Props = { business: { name: string; document: string; logoUrl?: string | null } };
 
+function duration(openedAt: Date, closedAt: Date | null) {
+  if (!closedAt) return "—";
+  const mins = Math.round((new Date(closedAt).getTime() - new Date(openedAt).getTime()) / 60000);
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
 export function CashHistory({ business }: Readonly<Props>) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const { data: history = [], isPending } = api.cashRegister.listHistory.useQuery();
@@ -28,13 +35,6 @@ export function CashHistory({ business }: Readonly<Props>) {
 
   const formatTime = (d: Date) =>
     new Date(d).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
-
-  function duration(openedAt: Date, closedAt: Date | null) {
-    if (!closedAt) return "—";
-    const mins = Math.round((new Date(closedAt).getTime() - new Date(openedAt).getTime()) / 60000);
-    if (mins < 60) return `${mins} min`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
-  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5">
