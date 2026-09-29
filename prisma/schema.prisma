@@ -62,6 +62,46 @@ enum CashMovementType {
   EXPENSE
 }
 
+// ─── Suscripciones ───────────────────────────────────────────────────────────
+// Precios, límites y funciones de cada plan viven en src/lib/subscription/catalog.ts.
+
+enum SubscriptionPlan {
+  BASIC
+  BUSINESS
+  PRO
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+// Reflejo del estado que mantiene el cron. El acceso real se calcula en cada
+// petición a partir de las fechas (src/lib/subscription/access.ts).
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  READ_ONLY
+  CANCELED
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  VOIDED
+  ERROR
+  // Pendiente sin respuesta de la pasarela por más de 24 h. Si luego llega la
+  // aprobación, igual se aplica (el dinero sí se cobró).
+  EXPIRED
+}
+
+enum SubscriptionPaymentKind {
+  PERIOD
+  UPGRADE
+}
+
 model User {
   id                  String               @id @default(cuid())
   name                String?
@@ -107,6 +147,7 @@ model Business {
   invoiceTaxDetail      InvoiceTaxDetail     @default(SUMMARY) @map("invoice_tax_detail")
   taxes                 Json                 @default("[]") @map("taxes")
   categories            String[]             @default([]) @map("categories")
+  // Obsoleto: el plan vigente está en Subscription. Se conserva por compatibilidad.
   plan                  String               @default("MVP") @map("plan")
   autoTax               Boolean              @default(false) @map("auto_tax")
   maxCashRegisters      Int                  @default(1) @map("max_cash_registers")
@@ -126,6 +167,9 @@ model Business {
   cashMovements         CashMovement[]
   tableSessions         TableSession[]
   invoiceSequences      InvoiceSequence[]
+  subscription          Subscription?
+  subscriptionPayments  SubscriptionPayment[]
+  usageCounters         UsageCounter[]
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 }
@@ -505,4 +549,108 @@ model AuthEvent {
   @@index([email, createdAt])
   @@index([businessId, createdAt])
   @@map("auth_events")
+}
+
+// Una suscripción por negocio. Sin `currentPeriodEnd` = nunca ha pagado (prueba).
+model Subscription {
+  id                 String             @id @default(cuid())
+  businessId         String             @unique @map("business_id")
+  plan               SubscriptionPlan   @default(BUSINESS)
+  billingCycle       BillingCycle       @default(MONTHLY) @map("billing_cycle")
+  status             SubscriptionStatus @default(TRIAL)
+  trialEndsAt        DateTime?          @map("trial_ends_at")
+  currentPeriodStart DateTime?          @map("current_period_start")
+  currentPeriodEnd   DateTime?          @map("current_period_end")
+  // Downgrade o cambio de ciclo ya pagado que empieza al terminar el período actual.
+  scheduledPlan      SubscriptionPlan?  @map("scheduled_plan")
+  scheduledCycle     BillingCycle?      @map("scheduled_cycle")
+  scheduledFrom      DateTime?          @map("scheduled_from")
+  // Cancelada por el dueño: conserva el acceso hasta currentPeriodEnd, sin gracia.
+  canceledAt         DateTime?          @map("canceled_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  business Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  payments SubscriptionPayment[]
+  notices  SubscriptionNotice[]
+
+  @@index([status, currentPeriodEnd])
+  @@index([status, trialEndsAt])
+  @@map("subscriptions")
+}
+
+// Cada intento de pago. `reference` es la referencia única enviada a la pasarela.
+model SubscriptionPayment {
+  id                    String                    @id @default(cuid())
+  subscriptionId        String                    @map("subscription_id")
+  businessId            String                    @map("business_id")
+  reference             String                    @unique
+  provider              String
+  providerTransactionId String?                   @unique @map("provider_transaction_id")
+  kind                  SubscriptionPaymentKind
+  plan                  SubscriptionPlan
+  billingCycle          BillingCycle              @map("billing_cycle")
+  // Total cobrado en centavos de COP (con IVA si aplica) e IVA incluido.
+  amountInCents         Int                       @map("amount_in_cents")
+  vatInCents            Int                       @default(0) @map("vat_in_cents")
+  currency              String                    @default("COP")
+  status                SubscriptionPaymentStatus @default(PENDING)
+  statusMessage         String?                   @map("status_message")
+  // Período que cubrió el pago; se llenan al aprobarse.
+  periodStart           DateTime?                 @map("period_start")
+  periodEnd             DateTime?                 @map("period_end")
+  paidAt                DateTime?                 @map("paid_at")
+  createdById           String?                   @map("created_by_id")
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  business     Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([status, createdAt])
+  @@map("subscription_payments")
+}
+
+// Eventos recibidos de la pasarela. La clave única hace idempotente el webhook:
+// un mismo evento reenviado no se procesa dos veces.
+model PaymentWebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventKey    String    @map("event_key")
+  payload     Json
+  outcome     String?
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+
+  @@unique([provider, eventKey])
+  @@map("payment_webhook_events")
+}
+
+// Correos de aviso ya enviados (uno por tipo y fecha de vencimiento).
+model SubscriptionNotice {
+  id             String       @id @default(cuid())
+  subscriptionId String       @map("subscription_id")
+  kind           String
+  dueAt          DateTime     @map("due_at")
+  sentAt         DateTime     @default(now()) @map("sent_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, kind, dueAt])
+  @@map("subscription_notices")
+}
+
+// Consumo de cuotas por negocio. period = "2026-09" (mensual) o "total".
+model UsageCounter {
+  businessId String   @map("business_id")
+  metric     String
+  period     String
+  value      BigInt   @default(0)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@id([businessId, metric, period])
+  @@map("usage_counters")
 }

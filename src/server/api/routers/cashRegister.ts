@@ -5,6 +5,7 @@ import { z } from "zod";
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { assertCashRegisterNotStale } from "~/server/lib/cashRegisterGuard";
 import { idempotencyKeySchema, isUniqueViolation, runIdempotent } from "~/server/lib/idempotency";
+import { effectiveMaxCashRegisters } from "~/server/subscription/quotas";
 
 const MAX_MONEY = 1e9;
 
@@ -277,7 +278,8 @@ export const cashRegisterRouter = createTRPCRouter({
             throw new TRPCError({ code: "CONFLICT", message: "Ya tienes una caja abierta." });
           }
 
-          const max = business?.maxCashRegisters ?? 1;
+          // Lo configurado por el dueño, sin pasar el tope del plan.
+          const max = effectiveMaxCashRegisters(business?.maxCashRegisters ?? 1, ctx.subscription.billing.plan);
           if (openCount >= max) {
             throw new TRPCError({
               code: "FORBIDDEN",

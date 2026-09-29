@@ -12,12 +12,14 @@ import {
   UserCog,
   Settings,
   HandCoins,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react";
 
 import { db } from "~/server/db";
 import { auth } from "~/server/auth";
 import { loadActiveUser } from "~/server/auth/currentUser";
+import { Landing } from "~/app/_components/landing/Landing";
 
 type NavItem = {
   href: string;
@@ -136,6 +138,13 @@ const OWNER_ITEMS: NavItem[] = [
     icon: Settings,
     color: "rose",
   },
+  {
+    href: "/suscripcion",
+    label: "Suscripción",
+    description: "Tu plan, pagos y consumo",
+    icon: CreditCard,
+    color: "violet",
+  },
 ];
 
 function NavSection({
@@ -176,11 +185,12 @@ function NavSection({
 }
 
 export default async function Home() {
-  // Página pública: sin sesión válida se muestra la bienvenida.
+  // Página pública: sin sesión válida se muestra la landing de marca.
   const user = await loadActiveUser(await auth());
-  if (user?.mustChangePassword) redirect("/auth/cambiar-contrasena");
+  if (!user) return <Landing />;
+  if (user.mustChangePassword) redirect("/auth/cambiar-contrasena");
 
-  const business = user?.businessId
+  const business = user.businessId
     ? await db.business.findUnique({
         where: { id: user.businessId },
         select: { name: true },
@@ -190,66 +200,39 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 to-white px-4 py-8 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-white">
       <div className="mx-auto max-w-2xl space-y-6">
-        {user ? (
-          <>
-            {/* Info de sesión */}
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
-              {business?.name && (
-                <p className="mb-0.5 text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                  {business.name}
-                </p>
-              )}
-              <p className="text-sm font-semibold text-slate-800 dark:text-white">
-                {user.name ?? user.email}
+        <>
+          {/* Info de sesión */}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+            {business?.name && (
+              <p className="mb-0.5 text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                {business.name}
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {user.role === "OWNER" ? "Propietario" : "Cajero"}
-              </p>
-            </div>
-
-            {/* Operaciones comunes */}
-            <NavSection title="Operaciones" items={COMMON_ITEMS} gridClass="grid-cols-1 sm:grid-cols-3" iconSize={22} />
-
-            {/* Gestión — solo CASHIER */}
-            {user.role === "CASHIER" && (
-              <NavSection title="Gestión" items={CASHIER_ITEMS} gridClass="grid-cols-1 sm:grid-cols-2" />
             )}
-
-            {/* Administración — solo OWNER */}
-            {user.role === "OWNER" && (
-              <NavSection
-                title="Administración"
-                items={OWNER_ITEMS}
-                gridClass="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-              />
-            )}
-          </>
-        ) : (
-          <div className="flex flex-col items-center gap-6 pt-16 text-center">
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
-                Bienvenido a BILLIFY
-              </h1>
-              <p className="mt-2 text-slate-500 dark:text-slate-400">
-                Punto de venta y facturación para tu negocio
-              </p>
-            </div>
-            <div className="flex w-full max-w-xs flex-col gap-3">
-              <Link
-                href="/auth/login"
-                className="rounded-lg bg-violet-600 px-4 py-3 text-center font-semibold text-white transition hover:bg-violet-500"
-              >
-                Iniciar sesión
-              </Link>
-              <Link
-                href="/auth/register"
-                className="rounded-lg border border-slate-300 px-4 py-3 text-center font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/20 dark:text-slate-300 dark:hover:bg-white/10"
-              >
-                Registrar negocio
-              </Link>
-            </div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-white">
+              {user.name ?? user.email}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {user.role === "OWNER" ? "Propietario" : "Cajero"}
+            </p>
           </div>
-        )}
+
+          {/* Operaciones comunes */}
+          <NavSection title="Operaciones" items={COMMON_ITEMS} gridClass="grid-cols-1 sm:grid-cols-3" iconSize={22} />
+
+          {/* Gestión — solo CASHIER */}
+          {user.role === "CASHIER" && (
+            <NavSection title="Gestión" items={CASHIER_ITEMS} gridClass="grid-cols-1 sm:grid-cols-2" />
+          )}
+
+          {/* Administración — solo OWNER */}
+          {user.role === "OWNER" && (
+            <NavSection
+              title="Administración"
+              items={OWNER_ITEMS}
+              gridClass="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            />
+          )}
+        </>
       </div>
     </main>
   );

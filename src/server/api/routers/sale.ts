@@ -13,6 +13,8 @@ import { generateFacturaPdfBuffer } from "~/server/lib/generateFacturaPdf";
 import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig, type TaxLine } from "~/lib/pricing";
 import { resolveInvoiceContact } from "~/lib/invoiceContact";
 import { createSupabaseServiceClient, RECEIPTS_BUCKET } from "~/lib/supabase-server";
+import { consumeInvoiceEmail } from "~/server/subscription/quotas";
+import { assertFeature, assertSaleAllowed } from "~/server/subscription/service";
 import {
   assertReceiptPath,
   isValidReceiptPath,
@@ -43,10 +45,19 @@ export const saleRouter = createTRPCRouter({
         note: z.string().trim().max(500).optional(),
         receiptPath: z.string().trim().max(300).optional(),
         idempotencyKey: idempotencyKeySchema,
+        /** Momento en que se hizo la venta sin conexión (solo la cola offline lo envía). */
+        offlineCreatedAt: z
+          .string()
+          .datetime({ offset: true })
+          .transform((value) => new Date(value))
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
+
+      // En solo lectura solo entran ventas offline hechas antes del bloqueo (ver catalog.ts).
+      assertSaleAllowed(ctx.subscription, input.offlineCreatedAt);
 
       const createSale = async () => {
         await assertCashRegisterNotStale(ctx.db, businessId, userId);
@@ -397,7 +408,14 @@ export const saleRouter = createTRPCRouter({
         },
       );
 
-      await sendInvoiceEmail(input.customerEmail, sale.invoiceNumber, business.name, pdfBuffer);
+      // Cupo mensual del plan: se reserva antes de enviar y se devuelve si Brevo falla.
+      const quota = await consumeInvoiceEmail(ctx.db, businessId, ctx.subscription.billing.plan);
+      try {
+        await sendInvoiceEmail(input.customerEmail, sale.invoiceNumber, business.name, pdfBuffer);
+      } catch (error) {
+        await quota.release();
+        throw error;
+      }
 
       return { message: `Factura ${sale.invoiceNumber} enviada a ${input.customerEmail}.` };
     }),
@@ -407,6 +425,7 @@ export const saleRouter = createTRPCRouter({
     .input(z.object({ period: z.enum(["today", "week", "month"]) }))
     .query(({ ctx, input }) => {
       const { businessId } = ctx.session.user;
+      assertFeature(ctx.subscription, "exports", "Exportar a Excel");
       const { from, to } = getPeriodRangeBogota(input.period);
 
       return ctx.db.sale.findMany({

@@ -8,6 +8,7 @@ import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { logAuthEvent } from "~/server/lib/authEvents";
 import { sendEmployeeWelcomeEmail } from "~/server/lib/email";
 import { getClientIp, getUserAgent } from "~/server/lib/requestMeta";
+import { assertCanAddUser } from "~/server/subscription/quotas";
 
 const createEmployeeSchema = z.object({
   name: z
@@ -70,6 +71,8 @@ export const usersRouter = createTRPCRouter({
     .input(createEmployeeSchema)
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: ownerId, name: ownerName } = ctx.session.user;
+
+      await assertCanAddUser(ctx.db, businessId, ctx.subscription.billing.plan);
 
       const existing = await ctx.db.user.findUnique({
         where: { email: input.email },
@@ -210,7 +213,7 @@ export const usersRouter = createTRPCRouter({
           businessId,
           role: "CASHIER",
         },
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, isActive: true },
       });
 
       if (!employee) {
@@ -218,6 +221,10 @@ export const usersRouter = createTRPCRouter({
           code: "NOT_FOUND",
           message: "Empleado no encontrado en este negocio.",
         });
+      }
+
+      if (input.isActive && !employee.isActive) {
+        await assertCanAddUser(ctx.db, businessId, ctx.subscription.billing.plan);
       }
 
       // sessionVersion++ corta de inmediato las sesiones abiertas del empleado

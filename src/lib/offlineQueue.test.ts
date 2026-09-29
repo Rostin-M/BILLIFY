@@ -126,8 +126,8 @@ describe("replayPendingSales", () => {
     await expect(replayPendingSales(me, syncFn)).resolves.toEqual([]);
 
     expect(syncFn.mock.calls.map(([input]) => input)).toEqual([
-      { items: first.items, paymentMethod: "CASH", idempotencyKey: first.idempotencyKey, customerId: undefined, note: undefined, receiptPath: undefined },
-      { items: second.items, paymentMethod: "CASH", idempotencyKey: second.idempotencyKey, customerId: "c1", note: "fiado", receiptPath: undefined },
+      { items: first.items, paymentMethod: "CASH", idempotencyKey: first.idempotencyKey, customerId: undefined, note: undefined, receiptPath: undefined, offlineCreatedAt: "2026-01-01T08:00:00.000Z" },
+      { items: second.items, paymentMethod: "CASH", idempotencyKey: second.idempotencyKey, customerId: "c1", note: "fiado", receiptPath: undefined, offlineCreatedAt: "2026-01-01T09:00:00.000Z" },
     ]);
     await expect(countOwnPendingSales(me)).resolves.toBe(0);
     await expect(countOwnPendingSales(other)).resolves.toBe(1);

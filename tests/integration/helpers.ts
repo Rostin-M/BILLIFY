@@ -53,6 +53,33 @@ export async function createCustomer(businessId: string, data: Partial<Prisma.Cu
   });
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Fija la suscripción de un negocio. Por defecto: plan Pro pagado y vigente 30 días.
+ * Sin suscripción, el guard crea la prueba gratis (plan Negocio) en la primera petición.
+ */
+export async function setSubscription(
+  businessId: string,
+  data: Partial<Prisma.SubscriptionUncheckedCreateInput> = {},
+) {
+  const now = Date.now();
+  const values = {
+    plan: "PRO" as const,
+    billingCycle: "MONTHLY" as const,
+    status: "ACTIVE" as const,
+    trialEndsAt: new Date(now - 30 * DAY_MS),
+    currentPeriodStart: new Date(now - DAY_MS),
+    currentPeriodEnd: new Date(now + 30 * DAY_MS),
+    ...data,
+  };
+  return db.subscription.upsert({
+    where: { businessId },
+    create: { businessId, ...values },
+    update: values,
+  });
+}
+
 /** Negocio con su dueño y un cajero, listo para la mayoría de los tests. */
 export async function createShop(businessData: Partial<Prisma.BusinessUncheckedCreateInput> = {}) {
   const business = await createBusiness(businessData);

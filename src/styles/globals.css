@@ -172,3 +172,76 @@
 .animate-fade-in {
   animation: fade-in 0.25s ease-out both;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Landing pública — paleta "Ala": une el violeta de la app con los azules y el
+   cian del águila del logo. Se usa como utilidades (bg-ala-*, text-ala-*...).
+   ══════════════════════════════════════════════════════════════════════════ */
+@theme {
+  --color-ala-navy: #0a1f7a;   /* plumaje oscuro del águila */
+  --color-ala-violet: #6d28d9; /* primario de la app (violet-700) */
+  --color-ala-blue: #2563eb;   /* ala media */
+  --color-ala-cyan: #22d3ee;   /* puntas del ala */
+  --color-ala-mist: #f3f6fc;   /* fondo claro, frío (no crema) */
+  --color-ala-night: #060b24;  /* fondo oscuro, azul noche */
+}
+
+.landing {
+  --landing-focus: #1d4ed8;
+  scroll-behavior: smooth;
+}
+.dark .landing {
+  --landing-focus: #22d3ee;
+}
+.landing :is(a, button, summary):focus-visible {
+  outline: 2px solid var(--landing-focus);
+  outline-offset: 3px;
+  border-radius: 0.5rem;
+}
+.landing [id] {
+  scroll-margin-top: 5rem;
+}
+
+/* Franja de ala: degradado de marca en una sola línea */
+.ala-stripe {
+  background: linear-gradient(90deg, #6d28d9 0%, #2563eb 50%, #22d3ee 100%);
+}
+
+/* Único momento de movimiento automático: la vista de la app entra al cargar */
+@keyframes preview-rise {
+  0%   { opacity: 0; transform: translateY(28px) rotate(-1.5deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+@keyframes chip-in {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-preview-rise {
+  animation: preview-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+.animate-chip-in {
+  animation: chip-in 0.5s ease-out 0.9s both;
+}
+
+/* Acordeón del FAQ con <details>: sin marcador nativo, icono que rota */
+.faq-item > summary {
+  list-style: none;
+}
+.faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item[open] .faq-icon {
+  transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing {
+    scroll-behavior: auto;
+  }
+  .animate-preview-rise,
+  .animate-chip-in,
+  .landing .animate-eagle-pulse,
+  .landing .logo-eagle:hover {
+    animation: none;
+  }
+}

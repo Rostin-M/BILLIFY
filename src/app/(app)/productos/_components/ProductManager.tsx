@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { parseZodError } from "~/lib/parseZodError";
 import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
+import { PlanFeatureLocked, usePlanFeature } from "~/app/_components/subscription/PlanFeatureLocked";
 
 type ProductForm = {
   name: string;
@@ -289,6 +290,8 @@ function ProductFormFields({
 }>) {
   const [showCalc, setShowCalc] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  // Lote y vencimiento dependen del plan; sin la función, el servidor los ignora.
+  const hasLots = usePlanFeature("lots");
 
   return (
     <div className="space-y-3">
@@ -517,30 +520,38 @@ function ProductFormFields({
             </>
           )}
         </div>
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">
-            Lote <span className="text-slate-500">(opc.)</span>
-          </span>
-          <input
-            value={form.lotNumber}
-            onChange={onChange("lotNumber")}
-            className={INPUT}
-            placeholder="Ej: L-2024-001"
-          />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">
-            Vencimiento <span className="text-slate-500">(opc.)</span>
-          </span>
-          <input
-            type="date"
-            min={todayISOString()}
-            value={form.expiresAt}
-            onChange={onChange("expiresAt")}
-            className={fieldErrors.expiresAt ? INPUT_ERROR : INPUT}
-          />
-          <FieldError msg={fieldErrors.expiresAt} />
-        </label>
+        {hasLots === false ? (
+          <div className="self-end sm:col-span-2">
+            <PlanFeatureLocked compact feature="lots" title="Lote y fecha de vencimiento" />
+          </div>
+        ) : (
+          <>
+            <label className="space-y-1 text-sm">
+              <span className="text-slate-700 dark:text-slate-300">
+                Lote <span className="text-slate-500">(opc.)</span>
+              </span>
+              <input
+                value={form.lotNumber}
+                onChange={onChange("lotNumber")}
+                className={INPUT}
+                placeholder="Ej: L-2024-001"
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-slate-700 dark:text-slate-300">
+                Vencimiento <span className="text-slate-500">(opc.)</span>
+              </span>
+              <input
+                type="date"
+                min={todayISOString()}
+                value={form.expiresAt}
+                onChange={onChange("expiresAt")}
+                className={fieldErrors.expiresAt ? INPUT_ERROR : INPUT}
+              />
+              <FieldError msg={fieldErrors.expiresAt} />
+            </label>
+          </>
+        )}
       </div>
 
       {/* Código de barras */}

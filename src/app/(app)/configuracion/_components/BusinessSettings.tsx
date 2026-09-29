@@ -207,10 +207,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
         )}
 
         {active === "plan" ? (
-          <PlanSection
-            plan={initial.plan}
-            maxCashRegisters={Number.parseInt(saved.maxCashRegisters, 10) || initial.maxCashRegisters}
-          />
+          <PlanSection />
         ) : (
           <SectionCard
             key={active}

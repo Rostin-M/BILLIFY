@@ -9,27 +9,44 @@ Plataforma SaaS de punto de venta y facturación diseñada para cafeterías y pe
 ### Punto de Venta (POS)
 
 - Venta rápida sin factura para despacho inmediato en caja
-- Venta facturada con datos del cliente e número de factura
+- Venta facturada con datos del cliente y número de factura consecutivo
 - Venta por mesa integrada al módulo de mesas
-- Historial completo de ventas con filtros por fecha y estado
-- Soporte de múltiples métodos de pago: efectivo, tarjeta, transferencia y crédito
-- Modo offline con banner de alerta cuando no hay conexión a internet
+- Productos más vendidos primero en la grilla de venta
+- Lectura de códigos de barras con la cámara del celular o computador, con modo de escaneo continuo
+- Venta por peso (frutas y verduras) y productos de precio abierto
+- Soporte de múltiples métodos de pago: efectivo, tarjeta, transferencia y crédito (fiado)
+- Foto del comprobante de pago adjunta a la venta
+- Factura en PDF descargable y envío por correo al cliente
+- Anulación de ventas con motivo y devolución automática del stock
+- Historial de ventas por día con detalle de ítems
+- Modo offline: las ventas se guardan en el dispositivo y se sincronizan al volver la conexión, sin duplicarse
 
 ### Gestión de Mesas
 
-- Apertura y cierre de sesiones de mesa
-- Registro de comensales con nombre, documento y teléfono
-- Pedidos individuales por comensal dentro de la misma mesa
-- Cobro de mesa con resumen por comensal y totales consolidados
-- Asociación de pedidos a clientes registrados
+- Apertura y cierre de sesiones de mesa, con nombre sugerido automáticamente
+- Registro de comensales con nombre, descripción y cliente registrado opcional
+- Pedidos (rondas) individuales por comensal dentro de la misma mesa
+- Renombrar o quitar comensales y mover pedidos entre comensales
+- Cancelación de pedidos o de la mesa completa con devolución del stock
+- Cobro dividido: varios grupos de comensales, cada uno con su forma de pago y su factura
+- Opción de conservar a los comensales en la mesa después de cobrar
+- Cuenta de la mesa en PDF
 
 ### Caja
 
 - Apertura y cierre de turno de caja con saldo inicial
 - Registro de entradas y salidas de efectivo con descripción
 - Dashboard de caja con resumen del turno en curso
-- Historial de movimientos de caja por turno
+- Cierre con nota, diferencia neta y ventas por otros medios de pago
+- Reporte de cierre de caja en PDF
+- Historial de cierres (solo propietario)
 - Control de múltiples cajas según el plan contratado
+
+### Fiados (ventas a crédito)
+
+- Listado de clientes con saldo pendiente
+- Registro de abonos, protegido contra registros duplicados
+- Historial de ventas a crédito y pagos por cliente
 
 ### Inventario
 
@@ -42,14 +59,17 @@ Plataforma SaaS de punto de venta y facturación diseñada para cafeterías y pe
 
 - Creación, edición y desactivación de productos
 - Precio de venta y costo unitario
+- Código de barras (se puede escanear al crear el producto), marca y presentación
 - Unidad de medida configurable
-- Tasa de impuesto por producto
-- Categorización libre
+- Impuestos por producto
+- Categorías configurables por el negocio
 - Control de stock activable o desactivable por producto
+- Historial de ventas por producto
+- Permiso configurable para que los cajeros cambien precios
 
 ### Clientes
 
-- Registro de clientes con nombre, documento, correo y teléfono
+- Registro de clientes con nombre, alias, documento, correo y teléfono
 - Búsqueda rápida desde el punto de venta
 - Historial de compras por cliente
 - Activación y desactivación de clientes
@@ -58,6 +78,7 @@ Plataforma SaaS de punto de venta y facturación diseñada para cafeterías y pe
 
 - Registro de empleados con roles: Propietario y Cajero
 - Activación y desactivación de acceso
+- Restablecimiento de la contraseña de un empleado
 - Control de permisos para manejo de caja por empleado
 
 ### Dashboard
@@ -68,22 +89,36 @@ Plataforma SaaS de punto de venta y facturación diseñada para cafeterías y pe
 
 ### Configuración del Negocio
 
-- Nombre, NIT/documento, dirección y teléfono del negocio
-- Configuración de impuestos (IVA, impoconsumo u otros) con nombre y porcentaje
-- Opción de aplicar impuesto automáticamente en todas las ventas
+- Nombre, NIT/documento, dirección, teléfono y logo del negocio
+- Datos de contacto que aparecen en las facturas
+- Hasta 3 impuestos (IVA, impoconsumo u otros) con nombre y porcentaje
+- Opción de aplicar impuesto automáticamente y de mostrarlo resumido o por ítem en la factura
+- Categorías de productos, permisos de precios y módulo de frutas y verduras
+- Plan contratado (número de cajas)
 
 ### Trazabilidad y Auditoría
 
 - Registro automático de acciones críticas: ventas, anulaciones, movimientos de caja
 - Consulta de logs por entidad, usuario y fecha
+- Exportación a CSV de ventas y movimientos de caja (hoy, semana o mes), protegida contra inyección de fórmulas en Excel
 - Trazabilidad completa para control interno
 
 ### Autenticación y Multi-tenant
 
 - Registro de negocio con creación automática del usuario propietario
-- Inicio de sesión seguro con contraseña hasheada
+- Verificación del correo con código
+- Recuperación y cambio de contraseña
+- Inicio de sesión seguro con contraseña hasheada y límite de intentos
+- Cierre de sesión automático a las 24 h, con aviso previo si hay una caja abierta
 - Aislamiento total de datos entre negocios
 - Soporte para múltiples usuarios por negocio
+
+### Otros
+
+- Aplicación instalable (PWA)
+- Modo claro y oscuro
+- Correos transaccionales (verificación, recuperación, bienvenida, facturas) vía Brevo
+- Páginas legales: términos, privacidad y cookies
 
 ---
 
@@ -98,6 +133,8 @@ Plataforma SaaS de punto de venta y facturación diseñada para cafeterías y pe
 | Base de datos | PostgreSQL (Supabase) |
 | Autenticación | Auth.js v5 |
 | Estilos | Tailwind CSS v4 |
+| Tests | Vitest (unitarios + integración contra Postgres real) |
+| Calidad de código | SonarQube Cloud (y SonarQube local opcional) |
 | Despliegue | Vercel |
 
 ---
@@ -106,8 +143,8 @@ Plataforma SaaS de punto de venta y facturación diseñada para cafeterías y pe
 
 ```bash
 # 1. Clonar el repositorio
-git clone <https://github.com/Rostin-M/BILLIFY.git>
-cd billify
+git clone https://github.com/Rostin-M/BILLIFY.git
+cd BILLIFY
 
 # 2. Instalar dependencias
 npm install
@@ -125,12 +162,21 @@ npm run dev
 
 Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
 
-## Variables de entorno requeridas
+## Variables de entorno
+
+Se validan al arrancar en `src/env.js`; la plantilla está en `.env.example`.
 
 ```env
-AUTH_SECRET=        # Secreto para Auth.js (genera con: openssl rand -base64 32)
-DATABASE_URL=       # URL de conexión pooled de Supabase (para queries)
-DIRECT_URL=         # URL de conexión directa de Supabase (para migraciones)
+# Requeridas
+AUTH_SECRET=                # Secreto para Auth.js (genera con: npx auth secret)
+DATABASE_URL=               # URL de conexión pooled de Supabase (para queries)
+DIRECT_URL=                 # URL de conexión directa de Supabase (para migraciones)
+BREVO_API_KEY=              # Brevo: envío de correos (verificación, recuperación, facturas)
+SMTP_FROM=                  # Correo remitente de esos envíos
+
+# Opcionales (sin ellas no funcionan las subidas de logo y comprobantes)
+SUPABASE_URL=               # Supabase Storage
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 ---
@@ -142,9 +188,52 @@ DIRECT_URL=         # URL de conexión directa de Supabase (para migraciones)
 | `npm run dev` | Servidor de desarrollo |
 | `npm run build` | Build de producción |
 | `npm run start` | Servidor de producción |
+| `npm run db:generate` | Crear y aplicar una migración nueva (desarrollo) |
 | `npm run db:migrate` | Ejecutar migraciones pendientes |
 | `npm run db:studio` | Abrir Prisma Studio |
+| `npm run db:backup` | Respaldo de la base (ver [Backups](#backups-y-restauración)) |
 | `npm run check` | Lint + typecheck |
+| `npm run format:write` | Formatear con Prettier |
+| `npm run test` | Ejecutar todos los tests |
+| `npm run test:watch` | Tests en modo watch |
+| `npm run test:coverage` | Tests con reporte de cobertura (`coverage/lcov.info`) |
+| `npm run test:db:up` / `test:db:down` | Levantar / eliminar la base de prueba |
+| `npm run sonar:up` / `sonar:down` | Levantar / detener SonarQube local |
+| `npm run sonar:scan` | Tests con cobertura + análisis en SonarQube local |
+
+---
+
+## Tests
+
+Los tests usan **Vitest**. Los unitarios corren sin dependencias; los de integración (routers tRPC, autenticación, rate limit, rutas `/api`) usan una base **Postgres 17 desechable** definida en `docker-compose.test.yml`, que escucha solo en `127.0.0.1:5433`, guarda los datos en memoria y no comparte nada con desarrollo ni producción.
+
+```bash
+npm run test:db:up   # requiere Docker
+npm run test         # o npm run test:coverage
+npm run test:db:down
+```
+
+Si la base de prueba no está arriba, los tests fallan con el mensaje `No se pudo preparar la base de prueba`.
+
+---
+
+## Calidad de código
+
+**SonarQube Cloud** analiza `main` automáticamente en cada push con el quality gate *Sonar way*.
+
+- Usa el Análisis Automático, que se configura en **`.sonarcloud.properties`** (fuentes, tests y exclusiones, p. ej. `prisma/migrations/**`). Este análisis no lee `sonar-project.properties`.
+- Los issues que se dejan a propósito se marcan como *Accepted* (o *False positive*) en SonarCloud con un comentario que explica el motivo.
+
+**SonarQube local (opcional)**: sirve para revisar también la cobertura, que el Análisis Automático no calcula. Se configura en `sonar-project.properties`:
+
+```bash
+npm run sonar:up     # SonarQube en http://localhost:9000 (primer acceso: admin / admin)
+export SONAR_TOKEN=… # token de My Account → Security
+npm run sonar:scan   # levanta la base de prueba, genera cobertura y ejecuta el scanner
+npm run sonar:down
+```
+
+Si cambias fuentes o exclusiones, actualiza **ambos** archivos de propiedades.
 
 ---
 

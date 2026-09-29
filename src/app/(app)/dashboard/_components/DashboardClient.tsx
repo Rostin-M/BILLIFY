@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { ArrowRight, Minus, ShoppingCart, TrendingDown, TrendingUp, Wallet, Package } from "lucide-react";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { SkeletonKpiCard } from "~/app/_components/Skeletons";
+import { PlanFeatureLocked, usePlanFeature } from "~/app/_components/subscription/PlanFeatureLocked";
 
 type Period = "today" | "week" | "month";
 type DashboardData = RouterOutputs["dashboard"]["summary"];
@@ -441,10 +442,16 @@ export function DashboardClient() {
   const [period, setPeriod] = useState<Period>("today");
   const [chartAnimated, setChartAnimated] = useState(false);
 
-  const { data, isPending } = api.dashboard.summary.useQuery(
+  // El dashboard del mes depende del plan: si no lo incluye, ni se consulta.
+  const hasMonth = usePlanFeature("dashboardMonth");
+  const monthLocked = period === "month" && hasMonth !== true;
+
+  const { data: rawData, isPending: rawPending } = api.dashboard.summary.useQuery(
     { period },
-    { refetchInterval: 60_000 },
+    { refetchInterval: 60_000, enabled: !monthLocked },
   );
+  const data = monthLocked ? undefined : rawData;
+  const isPending = !monthLocked && rawPending;
 
   useEffect(() => {
     if (!data) { setChartAnimated(false); return; }
@@ -462,6 +469,17 @@ export function DashboardClient() {
   return (
     <div className="space-y-5">
       <PeriodSelector period={period} onChange={setPeriod} label={data ? dateRangeLabel(data, period) : null} />
+
+      {monthLocked && hasMonth === false && (
+        <PlanFeatureLocked feature="dashboardMonth" title="El dashboard mensual no está en tu plan" />
+      )}
+      {monthLocked && hasMonth === undefined && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonKpiCard key={i} />
+          ))}
+        </div>
+      )}
 
       {isPending && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

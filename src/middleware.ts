@@ -73,8 +73,12 @@ const CHANGE_PASSWORD_PATH = "/auth/cambiar-contrasena";
 
 /** Rutas exactas públicas. */
 const PUBLIC_EXACT = new Set(["/", "/manifest.webmanifest", "/sw.js"]);
-/** Prefijos públicos (la ruta base y todo lo que cuelga de ella). */
-const PUBLIC_PREFIXES = ["/auth", "/legal", "/api/auth", "/api/trpc", "/icons"];
+/**
+ * Prefijos públicos (la ruta base y todo lo que cuelga de ella).
+ * /api/webhooks y /api/cron no usan sesión: se autentican con firma de la
+ * pasarela y con CRON_SECRET dentro de cada ruta.
+ */
+const PUBLIC_PREFIXES = ["/auth", "/legal", "/api/auth", "/api/trpc", "/icons", "/api/webhooks", "/api/cron"];
 
 function matchesPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

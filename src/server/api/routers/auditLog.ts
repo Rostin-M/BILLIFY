@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { getPeriodRangeBogota } from "~/server/lib/bogotaTime";
+import { assertFeature } from "~/server/subscription/service";
 
 export const auditLogRouter = createTRPCRouter({
   list: ownerProcedure
@@ -12,6 +13,7 @@ export const auditLogRouter = createTRPCRouter({
       }),
     )
     .query(({ ctx, input }) => {
+      assertFeature(ctx.subscription, "audit", "La trazabilidad");
       return ctx.db.auditLog.findMany({
         where: {
           businessId: ctx.session.user.businessId,
@@ -36,6 +38,7 @@ export const auditLogRouter = createTRPCRouter({
     .input(z.object({ period: z.enum(["today", "week", "month"]) }))
     .query(({ ctx, input }) => {
       const { businessId } = ctx.session.user;
+      assertFeature(ctx.subscription, "exports", "Exportar a Excel");
       const { from, to } = getPeriodRangeBogota(input.period);
 
       return ctx.db.cashMovement.findMany({

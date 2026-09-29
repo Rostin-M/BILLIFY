@@ -3,7 +3,8 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, KeyRound, Loader2, LogOut } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CreditCard, KeyRound, Loader2, LogOut } from "lucide-react";
 import { pendingSalesBeforeSignOut, signOutAndClear } from "~/lib/clientSignOut";
 import { api } from "~/trpc/react";
 
@@ -135,6 +136,16 @@ export function UserMenu({ name, role }: Readonly<Props>) {
               >
                 <KeyRound size={15} /> Cambiar contraseña
               </button>
+
+              {role === "OWNER" && (
+                <Link
+                  href="/suscripcion"
+                  onClick={closeMenu}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5"
+                >
+                  <CreditCard size={15} /> Suscripción
+                </Link>
+              )}
 
               {unsyncedCount === null ? (
                 <button

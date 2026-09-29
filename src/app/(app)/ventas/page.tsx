@@ -5,15 +5,23 @@ import { redirect } from "next/navigation";
 import { requirePageUser } from "~/server/auth/requirePageUser";
 import { db } from "~/server/db";
 import { api, HydrateClient } from "~/trpc/server";
-import { VentasClient } from "./_components/VentasClient";
+import { VentasClient, type VentasTab } from "./_components/VentasClient";
+import { requireSubscription } from "~/server/subscription/service";
 import { PageLayout } from "~/app/_components/PageLayout";
 import { resolveInvoiceContact } from "~/lib/invoiceContact";
 
-export default async function VentasPage() {
+const TABS: readonly VentasTab[] = ["quick", "invoiced", "history"];
+
+export default async function VentasPage({
+  searchParams,
+}: Readonly<{ searchParams: Promise<{ tab?: string | string[] }> }>) {
   const user = await requirePageUser();
   if (!user.businessId) redirect("/");
 
-  const [business, owner, activeRegister] = await Promise.all([
+  const { tab } = await searchParams;
+  const initialTab = TABS.find((t) => t === tab) ?? "quick";
+
+  const [business, owner, activeRegister, subscription] = await Promise.all([
     db.business.findUnique({
       where: { id: user.businessId },
       select: {
@@ -38,7 +46,12 @@ export default async function VentasPage() {
       where: { businessId: user.businessId, status: "OPEN" },
       select: { id: true },
     }),
+    requireSubscription(db, user.businessId),
   ]);
+
+  // Solo lectura: no se puede abrir caja ni vender, pero sí ver el historial.
+  const readOnly =
+    subscription.access.mode === "READ_ONLY" ? { plan: subscription.billing.plan } : null;
 
   void api.product.search.prefetch();
 
@@ -48,7 +61,7 @@ export default async function VentasPage() {
         <div className="mx-auto max-w-6xl px-4 py-6">
           <PageLayout title="Punto de venta" />
 
-          {!activeRegister ? (
+          {!activeRegister && !readOnly ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-10 text-center dark:border-amber-500/30 dark:bg-amber-900/10">
               <Lock className="mx-auto h-12 w-12 text-amber-500" />
               <p className="mt-4 text-xl font-bold text-amber-800 dark:text-amber-300">
@@ -72,6 +85,8 @@ export default async function VentasPage() {
               userName={user.name ?? null}
               userId={user.id}
               businessId={user.businessId}
+              initialTab={initialTab}
+              readOnly={readOnly}
               business={{
                 name: business?.name ?? "",
                 document: business?.document ?? "",

@@ -18,6 +18,7 @@ import { auth } from "~/server/auth";
 import { loadActiveUser } from "~/server/auth/currentUser";
 import { db } from "~/server/db";
 import { getClientIp, getUserAgent } from "~/server/lib/requestMeta";
+import { enforceSubscription } from "~/server/subscription/service";
 
 /**
  * 1. CONTEXT
@@ -177,8 +178,12 @@ export const protectedProcedure = t.procedure
  *
  * Extiende protectedProcedure garantizando que businessId sea no nulo.
  * Centraliza el aislamiento lógico por negocio para ambos roles.
+ *
+ * También aplica la suscripción en CADA llamada: en solo lectura se bloquean
+ * las mutaciones (ver enforceSubscription) y `ctx.subscription` trae el plan
+ * efectivo para los límites y funciones de cada procedimiento.
  */
-export const businessProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const businessProcedure = protectedProcedure.use(async ({ ctx, next, path, type }) => {
   const { businessId } = ctx.user;
 
   if (!businessId) {
@@ -188,9 +193,12 @@ export const businessProcedure = protectedProcedure.use(({ ctx, next }) => {
     });
   }
 
+  const subscription = await enforceSubscription({ db: ctx.db, businessId, path, type });
+
   return next({
     ctx: {
       user: { ...ctx.user, businessId },
+      subscription,
       session: {
         ...ctx.session,
         user: { ...ctx.session.user, businessId },
@@ -205,7 +213,7 @@ export const businessProcedure = protectedProcedure.use(({ ctx, next }) => {
  * Extiende protectedProcedure verificando que el usuario tenga rol OWNER
  * y un businessId asociado. Garantiza aislamiento de datos por negocio.
  */
-export const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const ownerProcedure = protectedProcedure.use(async ({ ctx, next, path, type }) => {
   const { role, businessId } = ctx.user;
 
   if (role !== "OWNER") {
@@ -222,9 +230,12 @@ export const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
     });
   }
 
+  const subscription = await enforceSubscription({ db: ctx.db, businessId, path, type });
+
   return next({
     ctx: {
       user: { ...ctx.user, businessId },
+      subscription,
       session: {
         ...ctx.session,
         user: { ...ctx.session.user, businessId },

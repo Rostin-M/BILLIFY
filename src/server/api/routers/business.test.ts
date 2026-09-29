@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { callerFor, createShop, db } from "../../../../tests/integration/helpers";
+import { callerFor, createShop, db, setSubscription } from "../../../../tests/integration/helpers";
 
 const settings = {
   name: "Tienda Don Pepe",
@@ -22,6 +22,7 @@ const settings = {
 describe("business settings", () => {
   it("guarda la configuración y la devuelve con los datos del dueño", async () => {
     const { owner, business } = await createShop();
+    await setSubscription(business.id, { plan: "PRO" }); // 3 cajas: el plan Pro permite hasta 4
     const caller = callerFor(owner);
 
     await expect(caller.business.updateSettings(settings)).resolves.toEqual({
@@ -45,6 +46,7 @@ describe("business settings", () => {
 
   it("conserva el permiso de precios si el cliente no lo envía", async () => {
     const { owner, business } = await createShop({ cashiersCanEditPrices: true });
+    await setSubscription(business.id, { plan: "PRO" });
     const { cashiersCanEditPrices: _omit, ...withoutPermission } = settings;
 
     await callerFor(owner).business.updateSettings(withoutPermission);

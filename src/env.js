@@ -17,6 +17,22 @@ export const env = createEnv({
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     BREVO_API_KEY: z.string().min(1),
     SMTP_FROM: z.string().email(),
+    // ─── Suscripciones ────────────────────────────────────────────────────
+    // "mock": pasarela simulada (sin cobros reales). "wompi": cobros reales.
+    PAYMENTS_PROVIDER: z.enum(["mock", "wompi"]).default("mock"),
+    // La pasarela simulada deja aprobar pagos sin pagar: en producción solo
+    // funciona si esto es "true" (útil mientras no haya clientes reales).
+    PAYMENTS_ALLOW_MOCK_IN_PRODUCTION: z.enum(["true", "false"]).default("false"),
+    WOMPI_PUBLIC_KEY: z.string().optional(),
+    WOMPI_INTEGRITY_SECRET: z.string().optional(),
+    WOMPI_EVENTS_SECRET: z.string().optional(),
+    // Secreto que Vercel Cron envía como "Authorization: Bearer <CRON_SECRET>".
+    // Sin él, /api/cron/subscriptions responde 401 y no corre (no se envían avisos).
+    CRON_SECRET: z.string().min(16, "CRON_SECRET debe tener al menos 16 caracteres").optional(),
+    // IVA de la suscripción como fracción (0.19 = 19 %). 0 = no se cobra IVA.
+    // Valídalo con tu contador antes de cambiarlo.
+    SUBSCRIPTION_VAT_RATE: z.coerce.number().min(0).max(1).default(0),
+    SUBSCRIPTION_PRICES_INCLUDE_VAT: z.enum(["true", "false"]).default("true"),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -43,6 +59,14 @@ export const env = createEnv({
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     BREVO_API_KEY: process.env.BREVO_API_KEY,
     SMTP_FROM: process.env.SMTP_FROM,
+    PAYMENTS_PROVIDER: process.env.PAYMENTS_PROVIDER,
+    PAYMENTS_ALLOW_MOCK_IN_PRODUCTION: process.env.PAYMENTS_ALLOW_MOCK_IN_PRODUCTION,
+    WOMPI_PUBLIC_KEY: process.env.WOMPI_PUBLIC_KEY,
+    WOMPI_INTEGRITY_SECRET: process.env.WOMPI_INTEGRITY_SECRET,
+    WOMPI_EVENTS_SECRET: process.env.WOMPI_EVENTS_SECRET,
+    CRON_SECRET: process.env.CRON_SECRET,
+    SUBSCRIPTION_VAT_RATE: process.env.SUBSCRIPTION_VAT_RATE,
+    SUBSCRIPTION_PRICES_INCLUDE_VAT: process.env.SUBSCRIPTION_PRICES_INCLUDE_VAT,
     NODE_ENV: process.env.NODE_ENV,
   },
   /**

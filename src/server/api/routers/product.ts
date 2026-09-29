@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { adjustStock } from "~/server/lib/inventory";
+import { planHasFeature } from "~/lib/subscription/catalog";
+import { assertCanAddProduct } from "~/server/subscription/quotas";
 
 const MAX_MONEY = 1e9;
 const MAX_STOCK = 10_000_000;
@@ -199,8 +201,13 @@ export const productRouter = createTRPCRouter({
     return products;
   }),
 
-  create: ownerProcedure.input(productSchema).mutation(async ({ ctx, input }) => {
+  create: ownerProcedure.input(productSchema).mutation(async ({ ctx, input: rawInput }) => {
     const { businessId, id: ownerId } = ctx.session.user;
+    const plan = ctx.subscription.billing.plan;
+
+    await assertCanAddProduct(ctx.db, businessId, plan);
+    // Sin la función de lotes en el plan, esos campos se ignoran.
+    const input = planHasFeature(plan, "lots") ? rawInput : { ...rawInput, lotNumber: undefined, expiresAt: undefined };
 
     if (input.barcode) {
       await assertBarcodeAvailable(ctx.db, businessId, input.barcode);
@@ -249,10 +256,13 @@ export const productRouter = createTRPCRouter({
         await assertBarcodeAvailable(ctx.db, businessId, input.barcode, input.id);
       }
 
-      await ctx.db.product.update({
-        where: { id: input.id },
-        data: productData(input),
-      });
+      // Sin la función de lotes en el plan, se conservan los valores guardados.
+      const data: Prisma.ProductUpdateInput = productData(input);
+      if (!planHasFeature(ctx.subscription.billing.plan, "lots")) {
+        delete data.lotNumber;
+        delete data.expiresAt;
+      }
+      await ctx.db.product.update({ where: { id: input.id }, data });
 
       await ctx.db.auditLog.create({
         data: {
@@ -457,7 +467,7 @@ export const productRouter = createTRPCRouter({
 
       const product = await ctx.db.product.findFirst({
         where: { id: input.productId, businessId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, isActive: true },
       });
 
       if (!product) {
@@ -465,6 +475,10 @@ export const productRouter = createTRPCRouter({
           code: "NOT_FOUND",
           message: "Producto no encontrado en este negocio.",
         });
+      }
+
+      if (input.isActive && !product.isActive) {
+        await assertCanAddProduct(ctx.db, businessId, ctx.subscription.billing.plan);
       }
 
       await ctx.db.product.update({

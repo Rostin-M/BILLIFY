@@ -6,6 +6,8 @@ import { type ActiveUser } from "~/server/auth/currentUser";
 import { requireApiUser } from "~/server/auth/requirePageUser";
 import { type DetectedImage, DECLARED_IMAGE_TYPES, detectImageType } from "~/server/lib/imageValidation";
 import { consumeRateLimit, RATE_LIMITS } from "~/server/lib/rateLimit";
+import { db } from "~/server/db";
+import { isBusinessWritable, READ_ONLY_MESSAGE } from "~/server/subscription/service";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
@@ -57,6 +59,11 @@ export async function guardUpload(
       ok: false,
       response: jsonNoStore({ error: "Solo el propietario puede hacer esto" }, 403),
     };
+  }
+
+  // Subir es una escritura: en solo lectura se bloquea igual que las mutaciones tRPC.
+  if (!(await isBusinessWritable(db, businessId))) {
+    return { ok: false, response: jsonNoStore({ error: READ_ONLY_MESSAGE }, 403) };
   }
 
   const limit = await consumeRateLimit(`upload:user:${user.id}`, RATE_LIMITS.uploadByUser);

@@ -45,6 +45,8 @@ export const RATE_LIMITS = {
   invoiceEmailByBusiness: { limit: 60, windowSec: 60 * 60 },
   invoiceEmailByBusinessDaily: { limit: 200, windowSec: 24 * 60 * 60 },
   uploadByUser: { limit: 30, windowSec: 10 * 60 },
+  checkoutByBusiness: { limit: 15, windowSec: 15 * 60 },
+  paymentConfirmByBusiness: { limit: 30, windowSec: 15 * 60 },
 } satisfies Record<string, RateLimitRule>;
 
 export async function consumeRateLimit(

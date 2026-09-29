@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import { api } from "~/trpc/react";
+import { PlanFeatureLocked } from "~/app/_components/subscription/PlanFeatureLocked";
 
 type Period = "today" | "week" | "month";
 
@@ -50,13 +51,20 @@ function downloadBlob(content: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function TrazabilidadClient() {
-  const [tab, setTab] = useState<Tab>("registro");
+export function TrazabilidadClient({
+  canAudit,
+  canExport,
+  initialTab = "registro",
+}: Readonly<{ canAudit: boolean; canExport: boolean; initialTab?: Tab }>) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [actionFilter, setActionFilter] = useState("");
   const [exportPeriod, setExportPeriod] = useState<Period>("today");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const { data: logs, isPending } = api.auditLog.list.useQuery({ limit: 100, action: actionFilter || undefined });
+  const { data: logs, isPending } = api.auditLog.list.useQuery(
+    { limit: 100, action: actionFilter || undefined },
+    { enabled: canAudit },
+  );
 
   const { isFetching: isExportingSales, refetch: refetchSalesExport } =
     api.sale.exportForPeriod.useQuery(
@@ -196,8 +204,15 @@ export function TrazabilidadClient() {
         ))}
       </div>
 
+      {tab === "registro" && !canAudit && (
+        <PlanFeatureLocked feature="audit" title="La trazabilidad no está en tu plan" />
+      )}
+      {tab === "exportar" && !canExport && (
+        <PlanFeatureLocked feature="exports" title="Exportar a Excel no está en tu plan" />
+      )}
+
       {/* Tab: Registro */}
-      {tab === "registro" && (
+      {tab === "registro" && canAudit && (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
           {/* Filtro */}
           <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 dark:border-white/10">
@@ -275,7 +290,7 @@ export function TrazabilidadClient() {
       )}
 
       {/* Tab: Exportar */}
-      {tab === "exportar" && (
+      {tab === "exportar" && canExport && (
         <div className="space-y-4">
           {/* Selector de período */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">

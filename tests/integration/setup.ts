@@ -25,6 +25,7 @@ vi.mock("~/server/lib/email", async (importOriginal) => {
     sendWelcomeEmail: vi.fn(async () => undefined),
     sendEmployeeWelcomeEmail: vi.fn(async () => undefined),
     sendInvoiceEmail: vi.fn(async () => undefined),
+    sendSubscriptionEmail: vi.fn(async () => undefined),
   };
 });
 

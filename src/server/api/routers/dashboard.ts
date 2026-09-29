@@ -2,12 +2,14 @@ import { z } from "zod";
 
 import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { fillDayRange, getPeriodRangeBogota, toBogotaDateKey } from "~/server/lib/bogotaTime";
+import { assertFeature } from "~/server/subscription/service";
 
 export const dashboardRouter = createTRPCRouter({
   summary: ownerProcedure
     .input(z.object({ period: z.enum(["today", "week", "month"]).default("today") }))
     .query(async ({ ctx, input }) => {
       const { businessId } = ctx.session.user;
+      if (input.period === "month") assertFeature(ctx.subscription, "dashboardMonth", "El dashboard mensual");
       const { from, to } = getPeriodRangeBogota(input.period);
       const prevFrom = new Date(from.getTime() - (to.getTime() - from.getTime()));
 

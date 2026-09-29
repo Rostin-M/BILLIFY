@@ -30,7 +30,7 @@ function stripTrailingSlashes(url: string): string {
 }
 
 /** URL pública de la app para los enlaces de los correos (null si no está configurada). */
-function appBaseUrl(): string | null {
+export function appBaseUrl(): string | null {
   const explicit = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
   if (explicit) return stripTrailingSlashes(explicit);
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
@@ -102,8 +102,61 @@ export async function sendInvoiceEmail(
   });
 }
 
+/** Aviso de suscripción (recordatorio, vencimiento, pago recibido). Texto plano: se escapa todo. */
+export type SubscriptionEmail = {
+  subject: string;
+  title: string;
+  /** Párrafos del cuerpo. */
+  paragraphs: string[];
+  ctaLabel: string;
+};
+
+export async function sendSubscriptionEmail(to: string, name: string | null, email: SubscriptionEmail) {
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: FROM,
+    to: [{ email: to }],
+    subject: safeSubject(`${email.subject} — BILLIFY`),
+    htmlContent: subscriptionHtml(name, email),
+  });
+}
+
 // ─── Templates ──────────────────────────────────────────────────────────────
 // Todo valor interpolado pasa por escapeHtml().
+
+function subscriptionHtml(name: string | null, email: SubscriptionEmail) {
+  const baseUrl = appBaseUrl();
+  const cta = baseUrl
+    ? `<a href="${escapeHtml(`${baseUrl}/suscripcion`)}" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px">${escapeHtml(email.ctaLabel)}</a>`
+    : `<p style="margin:0;font-size:14px;color:#e2e8f0">Entra a BILLIFY → Suscripción.</p>`;
+  const body = email.paragraphs
+    .map((p) => `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#94a3b8">${escapeHtml(p)}</p>`)
+    .join("");
+  return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden">
+        <tr><td style="background:#7c3aed;padding:24px 32px">
+          <p style="margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.15em">BILLIFY</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#ddd6fe">Tu suscripción</p>
+        </td></tr>
+        <tr><td style="padding:32px">
+          <p style="margin:0 0 8px;font-size:20px;font-weight:600;color:#f1f5f9">${escapeHtml(email.title)}</p>
+          <p style="margin:0 0 16px;font-size:14px;color:#94a3b8">Hola${name ? ` ${escapeHtml(name)}` : ""},</p>
+          ${body}
+          <div style="margin:24px 0 0">${cta}</div>
+        </td></tr>
+        <tr><td style="padding:16px 32px;border-top:1px solid #334155">
+          <p style="margin:0;font-size:11px;color:#475569;text-align:center">© 2026 BILLIFY · Todos los derechos reservados</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
 
 function verificationHtml(code: string, name: string) {
   return `<!DOCTYPE html>

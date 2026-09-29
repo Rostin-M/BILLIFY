@@ -13,7 +13,7 @@ describe("getNavItemsForRole", () => {
     const cashier = hrefs(getNavItemsForRole("CASHIER"));
     expect(cashier).toContain("/ventas");
     expect(cashier).toContain("/fiados");
-    for (const ownerOnly of ["/dashboard", "/clientes", "/trazabilidad", "/empleados", "/configuracion"]) {
+    for (const ownerOnly of ["/dashboard", "/clientes", "/trazabilidad", "/empleados", "/configuracion", "/suscripcion"]) {
       expect(cashier).not.toContain(ownerOnly);
     }
   });

@@ -39,7 +39,10 @@ export type PendingSale = {
 export type QueueOwner = { userId: string; businessId: string };
 
 /** Datos que se envían al servidor al sincronizar (sin metadatos locales). */
-export type SyncInput = Omit<PendingSale, "localId" | "createdAt" | "userId" | "businessId">;
+export type SyncInput = Omit<PendingSale, "localId" | "createdAt" | "userId" | "businessId"> & {
+  /** ISO de cuando se hizo la venta; solo lo agrega la sincronización. */
+  offlineCreatedAt?: string;
+};
 export type SyncFn = (sale: SyncInput) => Promise<void>;
 
 export type SyncError = { time: string; message: string };
@@ -174,6 +177,9 @@ export function replayPendingSales(owner: QueueOwner, syncFn: SyncFn): Promise<S
             // Misma clave en cada reintento: el servidor no duplica la venta.
             idempotencyKey: sale.idempotencyKey,
             receiptPath: sale.receiptPath,
+            // Hora real de la venta: si el plan vence mientras está sin conexión, el
+            // servidor la acepta solo si se hizo antes del bloqueo.
+            offlineCreatedAt: sale.createdAt,
           });
           await removePendingSale(sale.localId);
         } catch (err) {

@@ -9,6 +9,7 @@ import { sendPasswordReset, sendVerificationCode, sendWelcomeEmail } from "~/ser
 import { enforceRateLimits, RATE_LIMITS } from "~/server/lib/rateLimit";
 import { getClientIp, getUserAgent } from "~/server/lib/requestMeta";
 import { generateNumericCode, hashCode, MAX_CODE_ATTEMPTS, verifyCode } from "~/server/lib/secureCode";
+import { trialSubscriptionData } from "~/server/subscription/service";
 
 // ─── Validaciones compartidas ──────────────────────────────────────────────
 
@@ -259,6 +260,9 @@ export const authRouter = createTRPCRouter({
             document: pending.businessDocument,
           },
         });
+
+        // Todo negocio nuevo arranca con la prueba gratis.
+        await tx.subscription.create({ data: trialSubscriptionData(business.id, new Date()) });
 
         await tx.user.create({
           data: {

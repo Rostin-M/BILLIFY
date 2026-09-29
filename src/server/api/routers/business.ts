@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import { getPlan } from "~/lib/subscription/catalog";
 import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 
 // Límites de longitud: evitan payloads gigantes sin romper los datos válidos actuales
@@ -123,6 +124,16 @@ export const businessRouter = createTRPCRouter({
     .input(updateSettingsSchema)
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: ownerId } = ctx.session.user;
+
+      const plan = getPlan(ctx.subscription.billing.plan);
+      if (input.maxCashRegisters > plan.limits.cashRegisters) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Tu plan ${plan.name} permite máximo ${plan.limits.cashRegisters} caja${
+            plan.limits.cashRegisters > 1 ? "s" : ""
+          } abierta${plan.limits.cashRegisters > 1 ? "s" : ""} al mismo tiempo.`,
+        });
+      }
 
       const [business] = await Promise.all([
         ctx.db.business.update({

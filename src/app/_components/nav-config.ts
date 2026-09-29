@@ -10,6 +10,7 @@ import {
   UserCog,
   Settings,
   HandCoins,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,6 +54,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/trazabilidad", label: "Trazabilidad", icon: ClipboardList, color: "slate", roles: ["OWNER"] },
   { href: "/empleados", label: "Empleados", icon: UserCog, color: "slate", roles: ["OWNER"] },
   { href: "/configuracion", label: "Configuración", icon: Settings, color: "rose", roles: ["OWNER"] },
+  { href: "/suscripcion", label: "Suscripción", icon: CreditCard, color: "violet", roles: ["OWNER"] },
 ];
 
 export function getNavItemsForRole(role: UserRole): NavItem[] {
