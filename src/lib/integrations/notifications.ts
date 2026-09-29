@@ -15,16 +15,16 @@ class NoOpNotificationsAdapter implements NotificationsAdapter {
     return false;
   }
 
-  async enviarConfirmacionVenta(_sale: SaleData, _destinatario: string) {
-    return;
+  enviarConfirmacionVenta(_sale: SaleData, _destinatario: string): Promise<void> {
+    return Promise.resolve();
   }
 
-  async enviarRecibo(_sale: SaleData, _destinatario: string) {
-    return;
+  enviarRecibo(_sale: SaleData, _destinatario: string): Promise<void> {
+    return Promise.resolve();
   }
 
-  async enviarAlertaInventarioBajo(_product: ProductData) {
-    return;
+  enviarAlertaInventarioBajo(_product: ProductData): Promise<void> {
+    return Promise.resolve();
   }
 }
 

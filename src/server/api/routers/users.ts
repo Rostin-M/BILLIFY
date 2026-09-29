@@ -48,7 +48,7 @@ function generateTemporaryPassword(): string {
 }
 
 export const usersRouter = createTRPCRouter({
-  list: ownerProcedure.query(async ({ ctx }) => {
+  list: ownerProcedure.query(({ ctx }) => {
     return ctx.db.user.findMany({
       where: {
         businessId: ctx.session.user.businessId,

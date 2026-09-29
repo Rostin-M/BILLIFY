@@ -44,7 +44,7 @@ export const customerRouter = createTRPCRouter({
   // Búsqueda rápida para el POS — ambos roles
   search: businessProcedure
     .input(z.object({ q: z.string().trim().max(120).default("") }))
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       const { businessId } = ctx.session.user;
 
       return ctx.db.customer.findMany({

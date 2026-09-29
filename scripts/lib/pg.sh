@@ -20,6 +20,7 @@ env_file_value() {
 url_decode() {
   local s="${1//+/ }"
   printf '%b' "${s//%/\\x}"
+  return 0
 }
 
 pg_parse_url() {

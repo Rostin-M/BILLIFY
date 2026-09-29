@@ -474,6 +474,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
             : null,
           user: { name: userName },
           items: cartSnapshot.map((i) => ({
+            id: i.productId,
             name: i.name,
             unit: i.unit,
             quantity: i.quantity,

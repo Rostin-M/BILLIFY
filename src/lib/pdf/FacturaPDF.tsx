@@ -94,6 +94,7 @@ export type SaleForPdf = {
   customer: { name: string; document?: string | null } | null;
   user: { name: string | null } | null;
   items: {
+    id: string;
     name: string;
     unit: string;
     quantity: number;
@@ -206,7 +207,7 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
                 const itemTaxAmount = itemTaxLines.reduce((sum, t) => sum + t.amount, 0);
                 const taxLabel = itemTaxLines.map((t) => `${t.name} ${t.rate}%`).join(", ");
                 return (
-                  <View key={i} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
+                  <View key={item.id} style={[s.tableRow, i % 2 !== 0 ? s.tableRowAlt : {}]}>
                     <Text style={[s.colQty, s.tdText]}>{item.quantity}</Text>
                     <Text style={[s.colUnit, s.tdText]}>{item.unit}</Text>
                     <View style={s.colName}>

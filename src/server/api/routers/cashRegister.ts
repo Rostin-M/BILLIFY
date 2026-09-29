@@ -627,7 +627,7 @@ export const cashRegisterRouter = createTRPCRouter({
     }),
 
   // Historial de cierres — solo OWNER
-  listHistory: ownerProcedure.query(async ({ ctx }) => {
+  listHistory: ownerProcedure.query(({ ctx }) => {
     return ctx.db.cashRegister.findMany({
       where: { businessId: ctx.session.user.businessId, status: "CLOSED" },
       select: {

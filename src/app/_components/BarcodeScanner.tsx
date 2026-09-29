@@ -61,6 +61,22 @@ const CONTINUOUS_SAME_CODE_COOLDOWN_MS = 1200;
 // a costa de un par de frames extra (imperceptible, corre a ~30-60 fps).
 const REQUIRED_CONSECUTIVE_READS = 2;
 
+// Best-effort: ask for continuous autofocus so close-up barcodes stay sharp.
+// Not all browsers/devices support this — failures are silently ignored.
+function requestContinuousFocus(stream: MediaStream) {
+  const [track] = stream.getVideoTracks();
+  if (track && "applyConstraints" in track) {
+    track
+      .applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] })
+      .catch(() => null);
+  }
+}
+
+function startPlayback(video: HTMLVideoElement, stream: MediaStream) {
+  video.srcObject = stream;
+  void video.play().catch(() => null);
+}
+
 type Props = {
   onDetected: (code: string) => void;
   onClose: () => void;
@@ -214,19 +230,11 @@ export function BarcodeScanner({
           return;
         }
 
-        // Best-effort: ask for continuous autofocus so close-up barcodes stay sharp.
-        // Not all browsers/devices support this — failures are silently ignored.
-        const [track] = s.getVideoTracks();
-        if (track && "applyConstraints" in track) {
-          track
-            .applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] })
-            .catch(() => null);
-        }
+        requestContinuousFocus(s);
 
         const video = videoRef.current;
         if (!video) return;
-        video.srcObject = s;
-        void video.play().catch(() => null);
+        startPlayback(video, s);
 
         if (window.BarcodeDetector !== undefined) {
           const detector = new window.BarcodeDetector({ formats: NATIVE_FORMATS });

@@ -192,19 +192,17 @@ async function processCheckoutGroup(params: {
   // Clear paid guests: remove their orders (cascade to items).
   // With keepGuests: keep the guest record so they can order again.
   // Without keepGuests: delete the guest entirely (cascade deletes orders).
-  for (const guestId of group.guestIds) {
-    if (keepGuests) {
-      await tx.tableOrder.deleteMany({ where: { tableGuestId: guestId, tableSessionId: sessionId } });
-    } else {
-      await tx.tableGuest.deleteMany({ where: { id: guestId, tableSessionId: sessionId } });
-    }
+  if (keepGuests) {
+    await tx.tableOrder.deleteMany({ where: { tableGuestId: { in: group.guestIds }, tableSessionId: sessionId } });
+  } else {
+    await tx.tableGuest.deleteMany({ where: { id: { in: group.guestIds }, tableSessionId: sessionId } });
   }
 
   return sale;
 }
 
 // Ventas ya generadas por un cobro con esta clave (una por grupo: "<clave>:<índice>").
-async function findCheckoutSales(db: Prisma.TransactionClient, businessId: string, key: string): Promise<CheckoutSale[]> {
+function findCheckoutSales(db: Prisma.TransactionClient, businessId: string, key: string): Promise<CheckoutSale[]> {
   return db.sale.findMany({
     where: { businessId, idempotencyKey: { startsWith: `${key}:` } },
     select: { id: true, invoiceNumber: true, total: true },
@@ -282,7 +280,7 @@ function checkoutMessage(sessionName: string, tableClosed: boolean, keepGuests: 
 
 export const tableSessionRouter = createTRPCRouter({
   // All OPEN sessions with full nested data
-  listActive: businessProcedure.query(async ({ ctx }) => {
+  listActive: businessProcedure.query(({ ctx }) => {
     const { businessId } = ctx.session.user;
     return ctx.db.tableSession.findMany({
       where: { businessId, status: "OPEN" },

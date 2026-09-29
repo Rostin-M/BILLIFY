@@ -24,16 +24,16 @@ class NoOpDianAdapter implements DianAdapter {
     return false;
   }
 
-  async emitirFactura(_sale: SaleData): Promise<IntegrationResult<DianFacturaResult>> {
-    return { success: true, data: { cufe: "", estado: "NO_ENVIADO", fechaValidacion: null } };
+  emitirFactura(_sale: SaleData): Promise<IntegrationResult<DianFacturaResult>> {
+    return Promise.resolve({ success: true, data: { cufe: "", estado: "NO_ENVIADO", fechaValidacion: null } });
   }
 
-  async anularFactura(_invoiceNumber: string, _motivo: string): Promise<IntegrationResult> {
-    return { success: true, data: undefined };
+  anularFactura(_invoiceNumber: string, _motivo: string): Promise<IntegrationResult> {
+    return Promise.resolve({ success: true, data: undefined });
   }
 
-  async consultarEstado(_invoiceNumber: string): Promise<IntegrationResult<DianEstado>> {
-    return { success: true, data: "NO_ENVIADO" };
+  consultarEstado(_invoiceNumber: string): Promise<IntegrationResult<DianEstado>> {
+    return Promise.resolve({ success: true, data: "NO_ENVIADO" });
   }
 }
 

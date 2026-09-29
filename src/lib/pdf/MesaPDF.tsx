@@ -53,6 +53,7 @@ const fmtTime = (d: Date | string) =>
 export type TaxLineForPdf = { name: string; rate: number; amount: number };
 
 export type TableOrderForPdf = {
+  id: string;
   createdAt: Date | string;
   note: string | null;
   servedBy: string | null;
@@ -60,10 +61,11 @@ export type TableOrderForPdf = {
   taxAmount: number;
   taxLines: TaxLineForPdf[] | null;
   total: number;
-  items: { name: string; unit: string; quantity: number; price: number; subtotal: number }[];
+  items: { id: string; name: string; unit: string; quantity: number; price: number; subtotal: number }[];
 };
 
 export type TableGuestForPdf = {
+  id: string;
   name: string;
   description: string | null;
   orders: TableOrderForPdf[];
@@ -118,20 +120,20 @@ export function MesaPDF({ business, mesa }: Readonly<Props>) {
         {mesa.guests.map((guest, gi) => {
           const guestTotal = guest.orders.reduce((s, o) => s + o.total, 0);
           return (
-            <View key={gi}>
+            <View key={guest.id}>
               <Text style={s.guestHeader}>
                 {guest.name}{guest.description ? ` · ${guest.description}` : ""}
               </Text>
 
               {guest.orders.map((order, oi) => (
-                <View key={oi} style={{ marginBottom: 6, paddingLeft: 8 }}>
+                <View key={order.id} style={{ marginBottom: 6, paddingLeft: 8 }}>
                   <Text style={s.roundLabel}>
                     Ronda #{oi + 1} · {fmtTime(order.createdAt)}
                     {order.note ? ` · ${order.note}` : ""}
                     {order.servedBy ? ` · Atendido por: ${order.servedBy}` : ""}
                   </Text>
-                  {order.items.map((item, ii) => (
-                    <View key={ii} style={s.itemRow}>
+                  {order.items.map((item) => (
+                    <View key={item.id} style={s.itemRow}>
                       <Text style={s.itemName}>{item.name} × {item.quantity}</Text>
                       <Text style={s.itemAmt}>{fmt(item.subtotal)}</Text>
                     </View>

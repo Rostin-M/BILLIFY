@@ -188,7 +188,7 @@ export const saleRouter = createTRPCRouter({
 
   list: businessProcedure
     .input(z.object({ date: z.coerce.date().optional() }))
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       const { businessId } = ctx.session.user;
 
       // Use Bogotá timezone boundaries
@@ -203,7 +203,7 @@ export const saleRouter = createTRPCRouter({
           note: true, voidedAt: true, voidReason: true, receiptPath: true,
           user: { select: { name: true } },
           customer: { select: { name: true } },
-          items: { select: { name: true, unit: true, quantity: true, price: true, subtotal: true, taxLines: true } },
+          items: { select: { id: true, name: true, unit: true, quantity: true, price: true, subtotal: true, taxLines: true } },
         },
         orderBy: { createdAt: "desc" },
       });
@@ -333,7 +333,7 @@ export const saleRouter = createTRPCRouter({
             status: true,
             customer: { select: { name: true, document: true } },
             user: { select: { name: true } },
-            items: { select: { name: true, unit: true, quantity: true, price: true, subtotal: true, taxLines: true } },
+            items: { select: { id: true, name: true, unit: true, quantity: true, price: true, subtotal: true, taxLines: true } },
           },
         }),
         ctx.db.business.findUnique({
@@ -405,7 +405,7 @@ export const saleRouter = createTRPCRouter({
   // Exportación completa de ventas del período (para CSV)
   exportForPeriod: ownerProcedure
     .input(z.object({ period: z.enum(["today", "week", "month"]) }))
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       const { businessId } = ctx.session.user;
       const { from, to } = getPeriodRangeBogota(input.period);
 

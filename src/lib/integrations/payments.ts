@@ -24,12 +24,12 @@ class NoOpPaymentsAdapter implements PaymentsAdapter {
     return false;
   }
 
-  async procesarPago(_monto: number, referencia: string, _descripcion: string): Promise<IntegrationResult<PagoResult>> {
-    return { success: true, data: { referencia, estado: "NO_PROCESADO", fechaProcesado: null } };
+  procesarPago(_monto: number, referencia: string, _descripcion: string): Promise<IntegrationResult<PagoResult>> {
+    return Promise.resolve({ success: true, data: { referencia, estado: "NO_PROCESADO", fechaProcesado: null } });
   }
 
-  async consultarEstado(_referencia: string): Promise<IntegrationResult<EstadoPago>> {
-    return { success: true, data: "NO_PROCESADO" };
+  consultarEstado(_referencia: string): Promise<IntegrationResult<EstadoPago>> {
+    return Promise.resolve({ success: true, data: "NO_PROCESADO" });
   }
 }
 

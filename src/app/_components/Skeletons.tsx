@@ -27,8 +27,8 @@ export function SkeletonCashCard() {
 export function SkeletonListRows({ count = 3 }: Readonly<{ count?: number }>) {
   return (
     <div className="animate-pulse divide-y divide-slate-100 dark:divide-white/5">
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 py-3">
+      {Array.from({ length: count }, (_, i) => `row-${i}`).map((key) => (
+        <div key={key} className="flex items-center gap-3 py-3">
           <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-white/10" />
           <div className="flex-1 space-y-1.5">
             <div className="h-3 w-32 rounded-md bg-slate-200 dark:bg-white/10" />

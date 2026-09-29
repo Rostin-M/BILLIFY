@@ -11,7 +11,7 @@ export const auditLogRouter = createTRPCRouter({
         action: z.string().trim().max(64).optional(),
       }),
     )
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       return ctx.db.auditLog.findMany({
         where: {
           businessId: ctx.session.user.businessId,
@@ -34,7 +34,7 @@ export const auditLogRouter = createTRPCRouter({
   // Exportación de movimientos de caja del período (para CSV)
   exportCashPeriod: ownerProcedure
     .input(z.object({ period: z.enum(["today", "week", "month"]) }))
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       const { businessId } = ctx.session.user;
       const { from, to } = getPeriodRangeBogota(input.period);
 

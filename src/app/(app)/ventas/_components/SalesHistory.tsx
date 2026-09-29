@@ -248,8 +248,8 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                   {isExpanded && !isVoiding && (
                     <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
                       <ul className="divide-y divide-slate-200 dark:divide-white/10">
-                        {sale.items.map((item, idx) => (
-                          <li key={idx} className="flex justify-between py-1 text-xs text-slate-600 first:pt-0 last:pb-0 dark:text-slate-300">
+                        {sale.items.map((item) => (
+                          <li key={item.id} className="flex justify-between py-1 text-xs text-slate-600 first:pt-0 last:pb-0 dark:text-slate-300">
                             <span>{item.name} × {item.quantity}</span>
                             <span>{formatCOP(item.subtotal)}</span>
                           </li>

@@ -14,12 +14,12 @@ class NoOpPrinterAdapter implements PrinterAdapter {
     return false;
   }
 
-  async imprimirRecibo(_sale: SaleData) {
-    return;
+  imprimirRecibo(_sale: SaleData): Promise<void> {
+    return Promise.resolve();
   }
 
-  async imprimirCierreCaja(_register: CashRegisterData) {
-    return;
+  imprimirCierreCaja(_register: CashRegisterData): Promise<void> {
+    return Promise.resolve();
   }
 }
 

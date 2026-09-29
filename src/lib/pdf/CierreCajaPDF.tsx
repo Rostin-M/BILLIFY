@@ -190,8 +190,8 @@ export function CierreCajaPDF({
           <>
             <View style={[s.divider, { marginTop: 16 }]} />
             <Text style={s.sectionTitle}>Otros medios de pago (no incluidos en caja)</Text>
-            {register.nonCashSales.map((entry, i) => (
-              <View key={i} style={s.row}>
+            {register.nonCashSales.map((entry) => (
+              <View key={entry.paymentMethod} style={s.row}>
                 <Text style={s.label}>
                   {PAYMENT_LABELS[entry.paymentMethod] ?? entry.paymentMethod}
                   {" "}({entry.count} {entry.count === 1 ? "venta" : "ventas"})
@@ -213,8 +213,8 @@ export function CierreCajaPDF({
               <Text style={[s.movDesc, s.movThText]}>Descripción</Text>
               <Text style={[s.movAmount, s.movThText]}>Monto</Text>
             </View>
-            {manualMovements.map((m, i) => (
-              <View key={i} style={s.movRow}>
+            {manualMovements.map((m) => (
+              <View key={m.id} style={s.movRow}>
                 <Text style={s.movTime}>{formatTime(m.createdAt)}</Text>
                 <Text style={[s.movType, { color: m.type === "EXPENSE" ? "#dc2626" : "#059669" }]}>
                   {MOV_LABELS[m.type] ?? m.type}

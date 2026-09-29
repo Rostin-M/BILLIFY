@@ -77,7 +77,7 @@ export function CustomerManager() {
   });
 
   const setActive = api.customer.setActive.useMutation({
-    onSuccess: async () => utils.customer.list.invalidate(),
+    onSuccess: () => utils.customer.list.invalidate(),
   });
 
   function startEdit(c: Customer) {

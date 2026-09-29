@@ -128,9 +128,11 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
       closedAt: null,
       openedBy: session.user?.name ?? null,
       guests: session.guests.map((g): TableGuestForPdf => ({
+        id: g.id,
         name: g.name,
         description: g.description,
         orders: g.orders.map((o) => ({
+          id: o.id,
           createdAt: o.createdAt,
           note: o.note,
           servedBy: o.user?.name ?? null,
@@ -138,7 +140,7 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
           taxAmount: o.taxAmount,
           taxLines: Array.isArray(o.taxLines) ? (o.taxLines as TaxLineForPdf[]) : null,
           total: o.total,
-          items: o.items.map((i) => ({ name: i.name, unit: i.unit, quantity: i.quantity, price: i.price, subtotal: i.subtotal })),
+          items: o.items.map((i) => ({ id: i.id, name: i.name, unit: i.unit, quantity: i.quantity, price: i.price, subtotal: i.subtotal })),
         })),
       })),
     };
