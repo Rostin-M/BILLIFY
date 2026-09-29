@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -13,7 +13,7 @@ test("estructura base requerida por la historia existe", async () => {
     "package.json",
     ".env.example",
     "prisma/schema.prisma",
-    "src/app/page.tsx",
+    "src/app/(app)/page.tsx",
     "src/server/api/root.ts",
     "src/server/auth/config.ts",
   ];

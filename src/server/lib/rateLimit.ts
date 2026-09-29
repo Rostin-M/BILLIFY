@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomInt } from "node:crypto";
+
 import { TRPCError } from "@trpc/server";
 
 import { db } from "~/server/db";
@@ -64,7 +66,7 @@ export async function consumeRateLimit(
   `;
 
   // Limpieza oportunista (~1 % de las llamadas) para que la tabla no crezca sin límite.
-  if (Math.random() < 0.01) void purgeExpiredRateLimits().catch(() => null);
+  if (randomInt(100) === 0) void purgeExpiredRateLimits().catch(() => null);
 
   const row = rows[0];
   const count = row?.count ?? 1;

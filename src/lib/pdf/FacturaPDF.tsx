@@ -118,8 +118,8 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
           <Text style={s.totalLabel}>Subtotal</Text>
           <Text style={s.totalValue}>{formatCOP(sale.subtotal)}</Text>
         </View>
-        {(sale.taxLines ?? []).map((tax, i) => (
-          <View key={i} style={s.totalRow}>
+        {(sale.taxLines ?? []).map((tax) => (
+          <View key={`${tax.name}|${tax.rate}`} style={s.totalRow}>
             <Text style={s.totalLabel}>{tax.name} ({tax.rate}%)</Text>
             <Text style={s.totalValue}>{formatCOP(tax.amount)}</Text>
           </View>

@@ -100,8 +100,8 @@ export function OfflineBanner({
               : `${syncErrors.length} ventas no pudieron sincronizarse`}
           </p>
           <ul className="space-y-0.5">
-            {syncErrors.map((e, i) => (
-              <li key={i} className="text-xs text-red-600 dark:text-red-400">
+            {syncErrors.map((e) => (
+              <li key={`${e.time}|${e.message}`} className="text-xs text-red-600 dark:text-red-400">
                 {e.time}: {e.message}
               </li>
             ))}

@@ -16,7 +16,7 @@ export function Logo({ size = "md", className }: Readonly<{ size?: LogoSize; cla
       alt="BILLIFY"
       width={px}
       height={px}
-      className={`logo-eagle object-contain${className ? ` ${className}` : ""}`}
+      className={className ? `logo-eagle object-contain ${className}` : "logo-eagle object-contain"}
       priority={size !== "sm"}
     />
   );

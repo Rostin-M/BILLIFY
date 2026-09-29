@@ -7,6 +7,8 @@
  * need to use are documented accordingly near the end.
  */
 
+import { randomInt } from "node:crypto";
+
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
@@ -103,7 +105,7 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 
   const start = Date.now();
   // artificial delay in dev
-  const waitMs = Math.floor(Math.random() * 400) + 100;
+  const waitMs = randomInt(100, 500);
   await new Promise((resolve) => setTimeout(resolve, waitMs));
 
   const result = await next();

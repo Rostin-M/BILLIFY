@@ -33,7 +33,7 @@ function startsWith(buf: Uint8Array, bytes: number[], offset = 0): boolean {
 }
 
 function ascii(s: string): number[] {
-  return Array.from(s, (c) => c.charCodeAt(0));
+  return Array.from(s, (c) => c.codePointAt(0)!);
 }
 
 /** Devuelve el tipo real de la imagen o null si no es PNG, JPEG ni WebP. */

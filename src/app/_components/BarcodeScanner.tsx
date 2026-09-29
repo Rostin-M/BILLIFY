@@ -228,7 +228,7 @@ export function BarcodeScanner({
         video.srcObject = s;
         void video.play().catch(() => null);
 
-        if (typeof window.BarcodeDetector !== "undefined") {
+        if (window.BarcodeDetector !== undefined) {
           const detector = new window.BarcodeDetector({ formats: NATIVE_FORMATS });
           runNativeDetector(detector);
         } else {

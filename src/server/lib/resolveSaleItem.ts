@@ -20,11 +20,11 @@ export const saleItemInputSchema = z.object({
 
 // Ruta que genera /api/upload/receipt: "<businessId>/<timestamp>-<uuid>.<ext>".
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 export function isValidReceiptPath(businessId: string, path: string): boolean {
-  const pattern = new RegExp(`^${escapeRegExp(businessId)}/\\d+-[0-9a-f-]{36}\\.(png|jpg|webp)$`);
+  const pattern = new RegExp(String.raw`^${escapeRegExp(businessId)}/\d+-[0-9a-f-]{36}\.(png|jpg|webp)$`);
   return pattern.test(path);
 }
 

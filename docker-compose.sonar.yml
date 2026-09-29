@@ -1,0 +1,58 @@
+# SonarQube local para análisis de calidad y cobertura de BILLIFY.
+#
+#   npm run sonar:up     → levanta SonarQube en http://localhost:9000
+#   npm run sonar:scan   → ejecuta el scanner (requiere SONAR_TOKEN en el entorno)
+#   npm run sonar:down   → detiene SonarQube (los datos quedan en los volúmenes)
+#
+# Solo escucha en 127.0.0.1: no queda expuesto en la red local.
+
+name: billify-sonar
+
+services:
+  sonarqube:
+    image: sonarqube:community
+    container_name: billify-sonarqube
+    ports:
+      - "127.0.0.1:9000:9000"
+    environment:
+      # Evita el bootstrap check de vm.max_map_count en Docker Desktop (base H2 embebida).
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    healthcheck:
+      # La imagen no trae wget ni curl: se consulta el estado con /dev/tcp de bash.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000
+          && printf 'GET /api/system/status HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3
+          && grep -q '"status":"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+
+  scanner:
+    image: sonarsource/sonar-scanner-cli:latest
+    profiles: ["scan"]
+    depends_on:
+      sonarqube:
+        condition: service_healthy
+    environment:
+      - SONAR_HOST_URL=http://sonarqube:9000
+      # Se toma del entorno del host: token generado en SonarQube → My Account → Security
+      - SONAR_TOKEN
+    volumes:
+      - .:/usr/src
+    working_dir: /usr/src
+
+# Volúmenes propios del proyecto (billify-sonar_*). Primer acceso: admin / admin.
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

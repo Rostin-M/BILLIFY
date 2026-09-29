@@ -142,8 +142,8 @@ export function MesaPDF({ business, mesa }: Readonly<Props>) {
                         <Text style={s.roundTotLabel}>Subtotal</Text>
                         <Text style={s.roundTotValue}>{fmt(order.subtotal)}</Text>
                       </View>
-                      {(order.taxLines ?? []).map((tl, ti) => (
-                        <View key={ti} style={s.roundTotRow}>
+                      {(order.taxLines ?? []).map((tl) => (
+                        <View key={`${tl.name}|${tl.rate}`} style={s.roundTotRow}>
                           <Text style={s.roundTotLabel}>{tl.name} ({tl.rate}%)</Text>
                           <Text style={s.roundTotValue}>{fmt(tl.amount)}</Text>
                         </View>

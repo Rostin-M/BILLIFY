@@ -10,11 +10,11 @@ const FROM = { name: "BILLIFY", email: env.SMTP_FROM };
 /** Escapa un valor para interpolarlo de forma segura dentro de HTML. */
 export function escapeHtml(value: string | number | null | undefined): string {
   return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 /** Limpia el asunto: sin saltos de línea (inyección de cabeceras) y máximo 120 caracteres. */
@@ -22,10 +22,17 @@ function safeSubject(value: string): string {
   return value.replace(/[\r\n]+/g, " ").trim().slice(0, 120);
 }
 
+/** Quita las "/" finales sin regex (evita backtracking con entradas largas). */
+function stripTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") end--;
+  return url.slice(0, end);
+}
+
 /** URL pública de la app para los enlaces de los correos (null si no está configurada). */
 function appBaseUrl(): string | null {
   const explicit = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
-  if (explicit) return explicit.replace(/\/+$/, "");
+  if (explicit) return stripTrailingSlashes(explicit);
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   return vercel ? `https://${vercel}` : null;
 }

@@ -21,6 +21,35 @@ const SALE_STATUS_LABELS: Record<string, string> = { COMPLETED: "Completada", VO
 
 type Tab = "registro" | "exportar";
 
+function formatBogota(utcDate: Date | string): string {
+  return new Date(utcDate).toLocaleString("es-CO", {
+    timeZone: "America/Bogota",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function escapeCSV(v: string | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "";
+  let s = String(v);
+  // Evita inyección de fórmulas al abrir el CSV en Excel/Sheets.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return `"${s.replaceAll('"', '""')}"`;
+}
+
+function downloadBlob(content: string, filename: string) {
+  const blob = new Blob(["﻿" + content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function TrazabilidadClient() {
   const [tab, setTab] = useState<Tab>("registro");
   const [actionFilter, setActionFilter] = useState("");
@@ -40,35 +69,6 @@ export function TrazabilidadClient() {
       { period: exportPeriod },
       { enabled: false, refetchOnWindowFocus: false },
     );
-
-  function formatBogota(utcDate: Date | string): string {
-    return new Date(utcDate).toLocaleString("es-CO", {
-      timeZone: "America/Bogota",
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  function escapeCSV(v: string | null | undefined): string {
-    if (v === null || v === undefined || v === "") return "";
-    let s = String(v);
-    // Evita inyección de fórmulas al abrir el CSV en Excel/Sheets.
-    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-
-  function downloadBlob(content: string, filename: string) {
-    const blob = new Blob(["﻿" + content], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
 
   async function handleExportSales() {
     const result = await refetchSalesExport();
@@ -153,11 +153,13 @@ export function TrazabilidadClient() {
       return String(v);
     };
 
+    const invoiceSuffix = d.invoiceNumber ? " · " + str(d.invoiceNumber) : "";
+
     switch (action) {
       case "CREATE_SALE":
-        return `Total: ${cop(d.total)} · ${str(d.itemCount)} ítem(s) · ${PAYMENT_LABELS[str(d.paymentMethod)] ?? str(d.paymentMethod)}${d.invoiceNumber ? ` · ${str(d.invoiceNumber)}` : ""}`;
+        return `Total: ${cop(d.total)} · ${str(d.itemCount)} ítem(s) · ${PAYMENT_LABELS[str(d.paymentMethod)] ?? str(d.paymentMethod)}${invoiceSuffix}`;
       case "VOID_SALE":
-        return `Motivo: ${str(d.reason)}${d.invoiceNumber ? ` · ${str(d.invoiceNumber)}` : ""}`;
+        return `Motivo: ${str(d.reason)}${invoiceSuffix}`;
       case "OPEN_CASH_REGISTER":
         return `Fondo inicial: ${cop(d.openingBalance)}`;
       case "CLOSE_CASH_REGISTER":

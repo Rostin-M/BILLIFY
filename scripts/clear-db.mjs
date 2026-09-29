@@ -83,9 +83,11 @@ async function main() {
   console.log("\n✅ Base de datos limpia. Tablas y relaciones intactas.");
 }
 
-main()
-  .catch((e) => {
-    console.error("❌ Error:", e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+try {
+  await main();
+} catch (e) {
+  console.error("❌ Error:", e);
+  process.exitCode = 1;
+} finally {
+  await prisma.$disconnect();
+}

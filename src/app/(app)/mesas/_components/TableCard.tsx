@@ -473,8 +473,8 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                                   <div className="flex justify-between text-xs text-slate-500">
                                     <span>Subtotal</span><span>{fmt(order.subtotal)}</span>
                                   </div>
-                                  {(Array.isArray(order.taxLines) ? (order.taxLines as TaxLine[]) : []).map((tl, ti) => (
-                                    <div key={ti} className="flex justify-between text-xs text-slate-500">
+                                  {(Array.isArray(order.taxLines) ? (order.taxLines as TaxLine[]) : []).map((tl) => (
+                                    <div key={`${tl.name}|${tl.rate}`} className="flex justify-between text-xs text-slate-500">
                                       <span>{tl.name} ({tl.rate}%)</span><span>{fmt(tl.amount)}</span>
                                     </div>
                                   ))}

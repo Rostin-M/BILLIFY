@@ -145,7 +145,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
   const includedGuests = payableGuests.filter((g) => !excluded.has(g.id));
 
   const grandTotal = includedGuests.reduce((s, g) => s + guestTotal(g), 0);
-  const noOrders = includedGuests.length === 0 || includedGuests.every((g) => g.orders.length === 0);
+  const noOrders = includedGuests.every((g) => g.orders.length === 0);
   const allIncluded = excluded.size === 0;
 
   // When keepGuests is on, closing requires all guests to be included
