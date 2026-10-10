@@ -5,7 +5,9 @@
  * Tipos de cobro:
  *  - UPGRADE: sube de plan en el MISMO ciclo con un período pagado vigente. Se
  *    cobra solo la diferencia por los días restantes y aplica de inmediato; la
- *    fecha de vencimiento no cambia.
+ *    fecha de vencimiento no cambia. Si el período vigente no dura exactamente
+ *    un ciclo (activación manual por días, períodos apilados), la diferencia se
+ *    cobra por día con la tarifa mensual, sin importar el ciclo (ver prorateUpgrade).
  *  - PERIOD: paga un período completo (mes o año). Empieza cuando termina lo que
  *    ya tiene (prueba o período vigente, incluida la gracia) o, si está en solo
  *    lectura, desde el momento del pago. Si el plan o el ciclo cambian y el nuevo
@@ -88,9 +90,30 @@ function roundUpTo100(value: number): number {
   return Math.ceil(value / 100) * 100;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Días por los que se divide la tarifa mensual para cobrar por día. */
+const DAILY_RATE_DAYS = 30;
+
 /**
- * Diferencia a pagar al subir de plan: (precio nuevo − precio actual) del mismo
- * ciclo, proporcional al tiempo que le queda al período.
+ * ¿El período dura exactamente un ciclo (un mes o un año de calendario)? Así son
+ * los que crea un pago por pasarela. No lo son los de una activación manual
+ * (duran N días, y el ciclo guardado no dice nada de ellos) ni los apilados
+ * (renovar antes de tiempo deja un período de dos ciclos).
+ */
+export function isStandardPeriod(periodStart: Date | null, periodEnd: Date | null, cycle: BillingCycle): boolean {
+  if (!periodStart || !periodEnd) return false;
+  return addMonths(periodStart, cycleMonths(cycle)).getTime() === periodEnd.getTime();
+}
+
+/**
+ * Diferencia a pagar al subir de plan por el tiempo que le queda al período.
+ *
+ *  - Período de exactamente un ciclo: (precio nuevo − precio actual) de ese
+ *    ciclo, proporcional al tiempo restante.
+ *  - Cualquier otro período: la diferencia MENSUAL / 30 por cada día restante
+ *    (redondeado hacia arriba), sin importar `cycle`. Prorratear la diferencia de
+ *    un ciclo sobre un período que no dura un ciclo cobraría de menos (un mes de
+ *    diferencia por un año otorgado) o de más (un año de diferencia por 30 días).
  */
 export function prorateUpgrade(params: {
   from: PlanCode;
@@ -105,10 +128,17 @@ export function prorateUpgrade(params: {
   // Acotado a `total`: un período pagado por adelantado aún no ha empezado.
   const remaining = Math.min(total, Math.max(0, periodEnd.getTime() - now.getTime()));
   if (total <= 0 || remaining <= 0) return 0;
-  const diff = planPrice(to, cycle) - planPrice(from, cycle);
-  if (diff <= 0) return 0;
-  const prorated = roundUpTo100((diff * remaining) / total);
-  return Math.max(MIN_CHARGE_COP, prorated);
+
+  if (isStandardPeriod(periodStart, periodEnd, cycle)) {
+    const diff = planPrice(to, cycle) - planPrice(from, cycle);
+    if (diff <= 0) return 0;
+    return Math.max(MIN_CHARGE_COP, roundUpTo100((diff * remaining) / total));
+  }
+
+  const monthlyDiff = planPrice(to, "MONTHLY") - planPrice(from, "MONTHLY");
+  if (monthlyDiff <= 0) return 0;
+  const days = Math.ceil(remaining / DAY_MS);
+  return Math.max(MIN_CHARGE_COP, roundUpTo100((monthlyDiff / DAILY_RATE_DAYS) * days));
 }
 
 /** Decide qué tipo de cobro corresponde y cuánto, o por qué no se puede. */
@@ -130,6 +160,8 @@ export function quoteCheckout(params: {
     };
   }
 
+  // Pedir otro ciclo nunca es una mejora: es un período completo que empieza al
+  // terminar lo vigente (también sobre una activación manual por días).
   const isUpgrade =
     access.phase === "ACTIVE" &&
     target.rank > getPlan(state.plan).rank &&

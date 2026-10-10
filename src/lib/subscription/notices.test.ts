@@ -43,7 +43,9 @@ describe("dueNotice — avisos 7, 3 y 1 día antes", () => {
     const endsAt = new Date("2026-10-20T03:00:00Z"); // 19 de octubre, 10 p. m. en Bogotá
     const access = paidAccess(endsAt);
     const content = noticeContent(dueNotice(access, NOW)!, access, "Café La 70");
-    expect(content.subject).toBe("Tu plan vence en 7 días");
+    // Aviso de la ventana de 7 días, pero el texto dice los días que de verdad faltan.
+    expect(dueNotice(access, NOW)?.kind).toBe("renewal_7d");
+    expect(content.subject).toBe("Tu plan vence en 5 días");
     expect(content.paragraphs.join(" ")).toContain("Café La 70");
     expect(content.paragraphs.join(" ")).toContain("19 de octubre de 2026");
   });

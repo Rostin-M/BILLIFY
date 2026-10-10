@@ -6,6 +6,10 @@
  * revalidación contra la BD (isActive, sessionVersion, rol) la hacen las
  * páginas, tRPC y los route handlers con `loadActiveUser`.
  *
+ * /admin (panel de la plataforma) es una primera capa: aquí solo se mira el JWT
+ * (rol SUPERADMIN + correo en PLATFORM_ADMIN_EMAILS). La verificación real
+ * contra la BD son `requirePlatformAdminPage` y `platformAdminProcedure`.
+ *
  * También emite la Content-Security-Policy con un nonce por petición (enfoque
  * oficial de Next.js 15): el nonce viaja en la cabecera `x-nonce` y en la CSP de
  * la petición, de donde Next lo toma para sus propios <script>; el layout raíz lo
@@ -16,6 +20,7 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
 import { edgeAuthConfig } from "~/server/auth/edge.config";
+import { isPlatformAdmin, PLATFORM_ADMIN_HOME, PLATFORM_ADMIN_ROLE } from "~/server/auth/platformAdminPolicy";
 
 const { auth } = NextAuth(edgeAuthConfig);
 
@@ -160,6 +165,20 @@ export default auth((req) => {
     // Solo la ruta relativa: nunca una URL absoluta (evita open redirect).
     loginUrl.searchParams.set("callbackUrl", `${pathname}${search}`);
     return withCsp(NextResponse.redirect(loginUrl));
+  }
+
+  // ── Separación entre el panel de la plataforma y la app de negocio ───────
+  if (matchesPrefix(pathname, PLATFORM_ADMIN_HOME)) {
+    // Propietarios, cajeros o un SUPERADMIN fuera de la lista: no entran.
+    if (!isPlatformAdmin({ role: user.role, businessId: user.businessId, email: user.email ?? null })) {
+      return withCsp(NextResponse.redirect(new URL("/", req.nextUrl.origin)));
+    }
+    return next();
+  }
+  // Aislamiento inverso: el administrador no usa las páginas de negocio. Las
+  // APIs no se redirigen: las rechazan sus propios guards (no tiene negocio).
+  if (user.role === PLATFORM_ADMIN_ROLE && !isApi) {
+    return withCsp(NextResponse.redirect(new URL(PLATFORM_ADMIN_HOME, req.nextUrl.origin)));
   }
 
   return next();

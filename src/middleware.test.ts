@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // NextAuth en el Edge envuelve el handler y le agrega `req.auth`; aquí se inyecta a mano.
 vi.mock("next-auth", () => ({
@@ -10,7 +10,12 @@ vi.mock("next-auth", () => ({
 
 const { default: middleware } = await import("./middleware");
 
-type AuthUser = { mustChangePassword?: boolean } | null;
+type AuthUser = {
+  mustChangePassword?: boolean;
+  role?: "OWNER" | "CASHIER" | "SUPERADMIN";
+  businessId?: string | null;
+  email?: string | null;
+} | null;
 
 function request(path: string, opts: { method?: string; user?: AuthUser; origin?: string } = {}) {
   const headers = new Headers();
@@ -76,5 +81,64 @@ describe("middleware", () => {
     expect(nullOrigin.status).toBe(403);
     expect(sameOrigin.headers.get("x-middleware-next")).toBe("1");
     expect(safeMethod.headers.get("x-middleware-next")).toBe("1");
+  });
+});
+
+describe("middleware: panel de la plataforma (/admin)", () => {
+  const admin = { role: "SUPERADMIN", businessId: null, email: "admin@billify.co" } as const;
+  const location = (res: Response) => new URL(res.headers.get("location")!).pathname;
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("sin sesión envía al login", () => {
+    const res = run(request("/admin/negocios"));
+
+    expect(location(res)).toBe("/auth/login");
+    expect(new URL(res.headers.get("location")!).searchParams.get("callbackUrl")).toBe("/admin/negocios");
+  });
+
+  it("deja entrar solo al SUPERADMIN cuyo correo está en PLATFORM_ADMIN_EMAILS", () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", "Admin@Billify.co");
+
+    expect(run(request("/admin", { user: admin })).headers.get("x-middleware-next")).toBe("1");
+    expect(run(request("/admin/negocios/b1", { user: admin })).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("envía al inicio a propietarios, cajeros y administradores fuera de la lista", () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", "admin@billify.co");
+    const owner = { role: "OWNER", businessId: "b1", email: "admin@billify.co" } as const;
+    const cashier = { role: "CASHIER", businessId: "b1", email: "caja@x.co" } as const;
+
+    expect(location(run(request("/admin", { user: owner })))).toBe("/");
+    expect(location(run(request("/admin/negocios", { user: cashier })))).toBe("/");
+    expect(location(run(request("/admin", { user: { ...admin, email: "otro@billify.co" } })))).toBe("/");
+    // Un token SUPERADMIN con negocio no es un administrador válido.
+    expect(location(run(request("/admin", { user: { ...admin, businessId: "b1" } })))).toBe("/");
+    // Rutas que solo empiezan parecido no son el panel.
+    expect(run(request("/administracion", { user: owner })).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("falla cerrado si no está definida PLATFORM_ADMIN_EMAILS", () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", undefined);
+
+    expect(location(run(request("/admin", { user: admin })))).toBe("/");
+  });
+
+  it("saca al administrador de las páginas de negocio, pero no de las públicas ni de las APIs", () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", "admin@billify.co");
+
+    expect(location(run(request("/ventas", { user: admin })))).toBe("/admin");
+    expect(location(run(request("/suscripcion/resultado", { user: admin })))).toBe("/admin");
+    expect(run(request("/", { user: admin })).headers.get("x-middleware-next")).toBe("1");
+    expect(run(request("/auth/cambiar-contrasena", { user: admin })).headers.get("x-middleware-next")).toBe("1");
+    expect(run(request("/api/upload/logo", { method: "POST", user: admin })).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("exige cambiar la contraseña antes de entrar al panel", () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", "admin@billify.co");
+
+    const res = run(request("/admin", { user: { ...admin, mustChangePassword: true } }));
+
+    expect(location(res)).toBe("/auth/cambiar-contrasena");
   });
 });

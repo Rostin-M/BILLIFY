@@ -6,6 +6,7 @@ import { Receipt } from "lucide-react";
 import { CYCLE_LABELS, getPlan } from "~/lib/subscription/catalog";
 import { formatDate } from "~/lib/subscription/notices";
 import {
+  days,
   formatCents,
   PAYMENT_STATUS_CLASSES,
   PAYMENT_STATUS_LABELS,
@@ -18,10 +19,17 @@ type Payment = RouterOutputs["billing"]["payments"][number];
 function concept(p: Payment): string {
   const plan = getPlan(p.plan).name;
   if (p.kind === "UPGRADE") return `Cambio a ${plan} (resto del período)`;
+  // Activación hecha por BILLIFY (pago por Nequi o transferencia, cortesía...): no
+  // es un cobro mensual ni anual, así que se nombra por los días que otorgó.
+  if (p.kind === "MANUAL") {
+    return p.grantDays ? `Plan ${plan}, ${days(p.grantDays)} (activado por BILLIFY)` : `Plan ${plan} (activado por BILLIFY)`;
+  }
   return `Plan ${plan} ${CYCLE_LABELS[p.billingCycle].toLowerCase()}`;
 }
 
 function periodText(p: Payment): string | null {
+  // Una activación revocada ya no cubre ningún período.
+  if (p.revokedAt) return null;
   if (p.status !== "APPROVED" || !p.periodStart || !p.periodEnd) return null;
   return `${formatDate(p.periodStart)} – ${formatDate(p.periodEnd)}`;
 }
@@ -49,12 +57,24 @@ export function PaymentHistory({ mockPayments }: Readonly<{ mockPayments: boolea
             return (
               <li key={p.id} className="flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-6">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{concept(p)}</p>
+                  <p
+                    className={`text-sm font-medium text-slate-800 dark:text-slate-100 ${
+                      p.revokedAt ? "line-through decoration-slate-400" : ""
+                    }`}
+                  >
+                    {concept(p)}
+                  </p>
                   <p className="text-xs text-slate-500 dark:text-slate-500">
                     {formatDate(p.paidAt ?? p.createdAt)}
                     {period && <span className="block sm:inline"> · Cubre {period}</span>}
                   </p>
-                  {p.statusMessage && p.status !== "APPROVED" && (
+                  {p.revokedAt && (
+                    <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                      BILLIFY retiró esta activación el {formatDate(p.revokedAt)}.
+                    </p>
+                  )}
+                  {/* En activaciones manuales el mensaje es una nota interna de BILLIFY: no se muestra. */}
+                  {p.statusMessage && p.status !== "APPROVED" && p.kind !== "MANUAL" && (
                     <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{p.statusMessage}</p>
                   )}
                   <p className="mt-0.5 font-mono text-[11px] text-slate-400 dark:text-slate-500">{p.reference}</p>
@@ -63,9 +83,15 @@ export function PaymentHistory({ mockPayments }: Readonly<{ mockPayments: boolea
                   <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
                     {formatCents(p.amountInCents)}
                   </span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PAYMENT_STATUS_CLASSES[p.status]}`}>
-                    {PAYMENT_STATUS_LABELS[p.status]}
-                  </span>
+                  {p.revokedAt ? (
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PAYMENT_STATUS_CLASSES.VOIDED}`}>
+                      Revocado
+                    </span>
+                  ) : (
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PAYMENT_STATUS_CLASSES[p.status]}`}>
+                      {PAYMENT_STATUS_LABELS[p.status]}
+                    </span>
+                  )}
                   {canComplete && (
                     <Link
                       href={`/suscripcion/pago-simulado?ref=${encodeURIComponent(p.reference)}`}

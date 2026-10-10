@@ -16,6 +16,7 @@ import { ZodError } from "zod";
 import { env } from "~/env";
 import { auth } from "~/server/auth";
 import { loadActiveUser } from "~/server/auth/currentUser";
+import { isPlatformAdmin } from "~/server/auth/platformAdminPolicy";
 import { db } from "~/server/db";
 import { getClientIp, getUserAgent } from "~/server/lib/requestMeta";
 import { enforceSubscription } from "~/server/subscription/service";
@@ -240,6 +241,31 @@ export const ownerProcedure = protectedProcedure.use(async ({ ctx, next, path, t
         ...ctx.session,
         user: { ...ctx.session.user, businessId },
       },
+    },
+  });
+});
+
+/**
+ * Platform-admin procedure (panel /admin)
+ *
+ * Solo el dueño de la plataforma: rol SUPERADMIN sin negocio y con su correo en
+ * PLATFORM_ADMIN_EMAILS (`isPlatformAdmin`), verificado contra la BD en cada
+ * llamada. Propietarios y cajeros reciben FORBIDDEN.
+ *
+ * No pasa por `enforceSubscription`: el administrador no tiene negocio ni
+ * suscripción, y debe poder actuar sobre negocios en solo lectura.
+ */
+export const platformAdminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  if (!isPlatformAdmin(ctx.user)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Solo el administrador de la plataforma puede realizar esta acción.",
+    });
+  }
+
+  return next({
+    ctx: {
+      user: { ...ctx.user, role: "SUPERADMIN" as const, businessId: null },
     },
   });
 });

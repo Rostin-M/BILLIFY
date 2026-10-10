@@ -18,6 +18,10 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   // que aquí no se monta el AppHeader de la app para no duplicar cabeceras.
   if (!user) return <>{children}</>;
 
+  // El administrador de la plataforma no usa la app de negocio: no se monta su
+  // shell (menú, caja, aviso de suscripción); las páginas lo envían a /admin.
+  if (user.role === "SUPERADMIN") return <>{children}</>;
+
   const hasOpenRegister = await hasOpenCashRegister();
 
   return (

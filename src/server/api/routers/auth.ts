@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
+import { PLATFORM_ADMIN_ROLE, platformAdminPasswordProblem } from "~/server/auth/platformAdminPolicy";
 import { logAuthEvent } from "~/server/lib/authEvents";
 import { sendPasswordReset, sendVerificationCode, sendWelcomeEmail } from "~/server/lib/email";
 import { enforceRateLimits, RATE_LIMITS } from "~/server/lib/rateLimit";
@@ -334,8 +335,10 @@ export const authRouter = createTRPCRouter({
         "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.",
       );
 
+      // El administrador de la plataforma no recupera su contraseña por correo:
+      // un buzón comprometido no debe abrir el panel /admin.
       const user = await ctx.db.user.findFirst({
-        where: { email: input.email, document: input.document },
+        where: { email: input.email, document: input.document, role: { not: "SUPERADMIN" } },
         select: { id: true, name: true, email: true, businessId: true },
       });
 
@@ -407,9 +410,12 @@ export const authRouter = createTRPCRouter({
 
       const user = await ctx.db.user.findUnique({
         where: { email: input.email },
-        select: { id: true, businessId: true },
+        select: { id: true, businessId: true, role: true },
       });
       if (!user) return fail(null, null);
+      // El administrador de la plataforma no restablece su contraseña por correo
+      // (tampoco puede pedir el código: ver forgotPassword).
+      if (user.role === PLATFORM_ADMIN_ROLE) return fail(user.id, null);
 
       const now = new Date();
       const record = await ctx.db.passwordResetToken.findFirst({
@@ -500,6 +506,15 @@ export const authRouter = createTRPCRouter({
       await enforceRateLimits([
         { key: `pwchange:user:${userId}`, rule: RATE_LIMITS.verifyCodeByEmailIp },
       ]);
+
+      // El administrador de la plataforma no puede bajar de la política con la
+      // que se creó su cuenta (14 caracteres, mayúscula, minúscula, número y símbolo).
+      if (ctx.user.role === PLATFORM_ADMIN_ROLE) {
+        const problem = platformAdminPasswordProblem(input.newPassword, ctx.user.email);
+        if (problem) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `La contraseña del administrador ${problem}.` });
+        }
+      }
 
       const user = await ctx.db.user.findUnique({
         where: { id: userId },

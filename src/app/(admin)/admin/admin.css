@@ -1,0 +1,59 @@
+/*
+ * Estilos propios del panel de plataforma (/admin). CSS plano, sin directivas de
+ * Tailwind: solo lo que las utilidades no cubren (foco visible uniforme y la
+ * entrada de los paneles). Todo va bajo .platform-admin para no tocar la app.
+ */
+
+.platform-admin {
+  --admin-focus: #1d4ed8;
+}
+.dark .platform-admin,
+.platform-admin .admin-chrome {
+  /* Sobre el azul noche (modo oscuro y la barra de navegación) el foco va en cian. */
+  --admin-focus: #22d3ee;
+}
+
+.platform-admin :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+/* Los radios y casillas ocultos pintan el foco en su tarjeta. */
+.platform-admin .admin-choice:has(input:focus-visible) {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+.platform-admin .admin-choice input:focus-visible {
+  outline: none;
+}
+
+@keyframes admin-sheet-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+@keyframes admin-modal-in {
+  from { transform: translateY(8px) scale(0.98); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes admin-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.platform-admin dialog.admin-sheet[open] {
+  animation: admin-sheet-in 0.2s ease-out both;
+}
+.platform-admin dialog.admin-modal[open] {
+  animation: admin-modal-in 0.16s ease-out both;
+}
+.platform-admin dialog[open]::backdrop {
+  background: rgba(6, 11, 36, 0.62);
+  animation: admin-backdrop-in 0.2s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .platform-admin dialog[open],
+  .platform-admin dialog[open]::backdrop {
+    animation: none;
+  }
+}

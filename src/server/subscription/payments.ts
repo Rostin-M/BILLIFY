@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 
-import { type PrismaClient, type SubscriptionPaymentStatus } from "@prisma/client";
+import { type Prisma, type PrismaClient, type SubscriptionPaymentStatus } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 
 import { applyApprovedPayment, quoteCheckout } from "~/lib/subscription/billing";
@@ -19,6 +19,28 @@ const CHECKOUT_REUSE_MS = 30 * 60 * 1000;
 export function newPaymentReference(): string {
   return `BLF-${Date.now().toString(36).toUpperCase()}-${randomBytes(6).toString("hex").toUpperCase()}`;
 }
+
+/**
+ * Marca de tiempo de aprobación (`paidAt`), creciente por negocio. Llamar SOLO
+ * con la suscripción bloqueada (FOR UPDATE).
+ *
+ * El `now` de quien llama se tomó antes de esperar el bloqueo, así que un pago
+ * que esperó podría aplicarse después de otro y quedar con una hora anterior.
+ * El orden de `paidAt` decide qué activación manual es "la última" y revocable
+ * (ver ~/server/platform/revocation.ts): por eso nunca puede retroceder.
+ */
+export async function nextPaidAt(tx: Prisma.TransactionClient, businessId: string, now: Date): Promise<Date> {
+  const last = await tx.subscriptionPayment.aggregate({
+    where: { businessId, status: "APPROVED" },
+    _max: { paidAt: true },
+  });
+  const latest = last._max.paidAt;
+  return latest && latest >= now ? new Date(latest.getTime() + 1) : now;
+}
+
+/** Mensaje de una mejora aprobada cuyo período cambió después de cotizarla. */
+export const STALE_UPGRADE_MESSAGE =
+  "Mejora de plan cotizada antes de un cambio en el período (activación manual u otro pago): revisar el valor cobrado.";
 
 export type CheckoutResult = {
   paymentId: string;
@@ -137,21 +159,30 @@ export async function processGatewayTransaction(
       const ids = { paymentId: payment.id, businessId: payment.businessId };
 
       if (payment.provider !== tx.provider) return { outcome: "provider_mismatch", ...ids };
+      // Las activaciones manuales (panel /admin) no pasan por ninguna pasarela.
+      if (payment.kind === "MANUAL") return { outcome: "provider_mismatch", ...ids };
       // La firma de integridad ya lo impide, pero nunca se aplica un pago por otro monto.
       if (payment.amountInCents !== tx.amountInCents || payment.currency !== tx.currency) {
         await t.subscriptionPayment.update({
           where: { id: payment.id },
-          data: { statusMessage: `Monto recibido no coincide: ${tx.amountInCents} ${tx.currency}` },
+          data: {
+            statusMessage: `Monto recibido no coincide: ${tx.amountInCents} ${tx.currency}`,
+            needsReview: true,
+          },
         });
         return { outcome: "amount_mismatch", ...ids };
       }
 
       if (payment.status === "APPROVED") {
         // Una anulación posterior (reverso) se deja para revisión manual; no se quita el acceso solo.
+        // `needsReview` lo muestra en el panel de administración.
         if (tx.status === "VOIDED") {
           await t.subscriptionPayment.update({
             where: { id: payment.id },
-            data: { statusMessage: "Wompi reportó anulación después de aprobado: revisar manualmente." },
+            data: {
+              statusMessage: "Wompi reportó anulación después de aprobado: revisar manualmente.",
+              needsReview: true,
+            },
           });
           return { outcome: "voided_after_approval", ...ids };
         }
@@ -176,6 +207,21 @@ export async function processGatewayTransaction(
         where: { id: payment.subscriptionId },
         select: SUBSCRIPTION_SELECT,
       });
+      // El valor de una mejora depende del período vigente al cotizarla. Si desde
+      // entonces otro pago o una activación manual lo cambió, el dinero ya se
+      // cobró y se aplica igual, pero queda para revisión en el panel /admin.
+      const staleUpgrade =
+        payment.kind === "UPGRADE" &&
+        (await t.subscriptionPayment.count({
+          where: {
+            businessId: payment.businessId,
+            id: { not: payment.id },
+            status: "APPROVED",
+            revokedAt: null,
+            paidAt: { gt: payment.createdAt },
+          },
+        })) > 0;
+
       const current = effectiveSubscription(row, now);
       const applied = applyApprovedPayment({
         state: current.billing,
@@ -215,8 +261,10 @@ export async function processGatewayTransaction(
         data: {
           status: "APPROVED",
           providerTransactionId: tx.transactionId,
-          statusMessage: tx.statusMessage,
-          paidAt: now,
+          statusMessage: staleUpgrade ? STALE_UPGRADE_MESSAGE : tx.statusMessage,
+          // Un intento anterior con monto distinto ya quedó resuelto por este.
+          needsReview: staleUpgrade,
+          paidAt: await nextPaidAt(t, payment.businessId, now),
           periodStart: applied.periodStart,
           periodEnd: applied.periodEnd,
         },

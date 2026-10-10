@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { hasOpenCashRegister } from "~/app/_components/sessionExpiryActions";
 import { auth } from "~/server/auth";
 import { createShop, createUser, db } from "../../../tests/integration/helpers";
+import { requirePlatformAdminPage } from "./platformAdmin";
 import { requireApiUser, requirePageUser } from "./requirePageUser";
 
 // redirect() de Next lanza para cortar el render; aquí se captura el destino.
@@ -18,7 +19,13 @@ function signIn(user: { id: string } | null) {
   );
 }
 
-afterEach(() => vi.mocked(auth).mockReset());
+afterEach(() => {
+  vi.mocked(auth).mockReset();
+  vi.unstubAllEnvs();
+});
+
+const ADMIN_EMAIL = "admin@billify.test";
+const createAdmin = (email = ADMIN_EMAIL) => createUser({ businessId: null, role: "SUPERADMIN", email });
 
 describe("requirePageUser", () => {
   it("devuelve el usuario activo con datos frescos de la BD", async () => {
@@ -41,6 +48,66 @@ describe("requirePageUser", () => {
 
     await db.user.update({ where: { id: cashier.id }, data: { mustChangePassword: true } });
     await expect(requirePageUser()).rejects.toThrow("REDIRECT:/auth/cambiar-contrasena");
+  });
+});
+
+describe("administrador de la plataforma", () => {
+  it("requirePlatformAdminPage devuelve al administrador válido", async () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", ADMIN_EMAIL);
+    const admin = await createAdmin();
+    signIn(admin);
+
+    await expect(requirePlatformAdminPage()).resolves.toMatchObject({
+      id: admin.id,
+      role: "SUPERADMIN",
+      businessId: null,
+      email: ADMIN_EMAIL,
+    });
+  });
+
+  it("requirePlatformAdminPage redirige al login, al cambio de contraseña o al inicio", async () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", ADMIN_EMAIL);
+    const admin = await createAdmin();
+    const { owner, cashier } = await createShop();
+
+    signIn(null);
+    await expect(requirePlatformAdminPage()).rejects.toThrow("REDIRECT:/auth/login");
+
+    for (const user of [owner, cashier]) {
+      signIn(user);
+      await expect(requirePlatformAdminPage()).rejects.toThrow("REDIRECT:/");
+    }
+
+    await db.user.update({ where: { id: admin.id }, data: { mustChangePassword: true } });
+    signIn(admin);
+    await expect(requirePlatformAdminPage()).rejects.toThrow("REDIRECT:/auth/cambiar-contrasena");
+  });
+
+  it("sin la lista, o con el correo fuera de ella, el SUPERADMIN no tiene sesión", async () => {
+    const admin = await createAdmin();
+    signIn(admin);
+
+    // Sin PLATFORM_ADMIN_EMAILS.
+    await expect(requirePlatformAdminPage()).rejects.toThrow("REDIRECT:/auth/login");
+    await expect(requireApiUser()).resolves.toBeNull();
+
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", "otro@billify.test");
+    await expect(requirePlatformAdminPage()).rejects.toThrow("REDIRECT:/auth/login");
+    await expect(requirePageUser()).rejects.toThrow("REDIRECT:/auth/login");
+  });
+
+  it("requirePageUser saca al administrador de las páginas de negocio", async () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", ADMIN_EMAIL);
+    const admin = await createAdmin();
+    signIn(admin);
+
+    await expect(requirePageUser()).rejects.toThrow("REDIRECT:/admin");
+    await expect(requirePageUser({ roles: ["OWNER"] })).rejects.toThrow("REDIRECT:/admin");
+    await expect(requirePageUser({ roles: ["OWNER", "CASHIER"], fallback: "/ventas" })).rejects.toThrow(
+      "REDIRECT:/admin",
+    );
+    // Sin negocio: tampoco tiene caja.
+    await expect(hasOpenCashRegister()).resolves.toBe(false);
   });
 });
 

@@ -56,7 +56,9 @@ type BillifyJWT = {
   [key: string]: unknown;
 };
 
-const ROLES: ReadonlySet<UserRole> = new Set(["OWNER", "CASHIER"]);
+// SUPERADMIN: administrador de la plataforma. Aquí solo se acepta el token; que
+// de verdad lo sea (BD + PLATFORM_ADMIN_EMAILS) se decide en `isPlatformAdmin`.
+const ROLES: ReadonlySet<UserRole> = new Set(["OWNER", "CASHIER", "SUPERADMIN"]);
 
 /** Un token es válido solo si trae todos los campos que emitimos en el login. */
 function isCompleteToken(jwt: BillifyJWT): boolean {

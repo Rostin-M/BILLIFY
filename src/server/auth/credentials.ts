@@ -10,6 +10,7 @@ import { consumeRateLimit, RATE_LIMITS, resetRateLimit } from "~/server/lib/rate
 import { getClientIp, getUserAgent } from "~/server/lib/requestMeta";
 
 import { type AuthorizedUser } from "./edge.config";
+import { isPlatformAdmin, PLATFORM_ADMIN_ROLE } from "./platformAdminPolicy";
 
 /**
  * Error que el cliente recibe como `code: "too_many_attempts"` en el resultado
@@ -109,6 +110,21 @@ export async function authorizeCredentials(
   // Contraseña correcta pero cuenta inactiva (p. ej. correo sin verificar o
   // empleado desactivado): se rechaza sin contar como fallo.
   if (!user.isActive) {
+    await logAuthEvent({
+      type: "LOGIN_FAILED",
+      email,
+      userId: user.id,
+      businessId: user.businessId,
+      ip,
+      userAgent,
+    });
+    return null;
+  }
+
+  // Administrador de la plataforma: además de la contraseña, su correo debe
+  // estar en PLATFORM_ADMIN_EMAILS y la cuenta no puede tener negocio. Si no,
+  // no entra (misma respuesta que una contraseña incorrecta).
+  if (user.role === PLATFORM_ADMIN_ROLE && !isPlatformAdmin(user)) {
     await logAuthEvent({
       type: "LOGIN_FAILED",
       email,

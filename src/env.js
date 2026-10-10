@@ -33,6 +33,22 @@ export const env = createEnv({
     // Valídalo con tu contador antes de cambiarlo.
     SUBSCRIPTION_VAT_RATE: z.coerce.number().min(0).max(1).default(0),
     SUBSCRIPTION_PRICES_INCLUDE_VAT: z.enum(["true", "false"]).default("true"),
+    // ─── Administración de la plataforma (/admin) ─────────────────────────
+    // Correos (separados por comas) que pueden entrar al panel. Segunda llave
+    // además del rol SUPERADMIN: sin esta variable nadie es administrador.
+    // Se lee en cada petición desde process.env (ver platformAdminPolicy.ts).
+    PLATFORM_ADMIN_EMAILS: z
+      .string()
+      .refine(
+        (value) =>
+          value
+            .split(",")
+            .map((email) => email.trim())
+            .filter(Boolean)
+            .every((email) => z.string().email().safeParse(email).success),
+        "PLATFORM_ADMIN_EMAILS debe ser una lista de correos separados por comas",
+      )
+      .optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -67,6 +83,7 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     SUBSCRIPTION_VAT_RATE: process.env.SUBSCRIPTION_VAT_RATE,
     SUBSCRIPTION_PRICES_INCLUDE_VAT: process.env.SUBSCRIPTION_PRICES_INCLUDE_VAT,
+    PLATFORM_ADMIN_EMAILS: process.env.PLATFORM_ADMIN_EMAILS,
     NODE_ENV: process.env.NODE_ENV,
   },
   /**

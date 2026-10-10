@@ -29,6 +29,12 @@ describe("edgeAuthConfig.callbacks.jwt", () => {
     expect((token as { loginAt: number }).loginAt).toBeCloseTo(Date.now(), -3);
   });
 
+  it("emite el token del administrador de la plataforma (SUPERADMIN, sin negocio)", () => {
+    const token = runJwt({ sub: "a1" }, { ...authorized, id: "a1", role: "SUPERADMIN", businessId: null });
+
+    expect(token).toMatchObject({ sub: "a1", role: "SUPERADMIN", businessId: null, isActive: true });
+  });
+
   it("rechaza el login de usuarios inactivos", () => {
     expect(runJwt({ sub: "u1" }, { ...authorized, isActive: false })).toBeNull();
   });
@@ -37,6 +43,8 @@ describe("edgeAuthConfig.callbacks.jwt", () => {
     const valid = { sub: "u1", role: "OWNER", sv: 0, isActive: true, mustChangePassword: false, loginAt: Date.now() };
 
     expect(runJwt(valid)).toEqual(valid);
+    // El administrador de la plataforma inicia sesión por el mismo login.
+    expect(runJwt({ ...valid, role: "SUPERADMIN", businessId: null })).toMatchObject({ role: "SUPERADMIN" });
     expect(runJwt({ ...valid, role: "ADMIN" })).toBeNull();
     expect(runJwt({ ...valid, sub: "" })).toBeNull();
     expect(runJwt({ ...valid, sv: undefined })).toBeNull();

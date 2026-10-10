@@ -40,7 +40,18 @@ const PAYMENT_SELECT = {
   paidAt: true,
   provider: true,
   createdAt: true,
+  // Activaciones manuales del panel /admin: días otorgados y si se revocó.
+  grantDays: true,
+  revokedAt: true,
 } as const;
+
+/**
+ * En las activaciones manuales `statusMessage` es texto interno del panel de
+ * administración (motivo de la activación): no se envía al negocio.
+ */
+function forOwner<T extends { kind: string; statusMessage: string | null }>(payment: T): T {
+  return payment.kind === "MANUAL" ? { ...payment, statusMessage: null } : payment;
+}
 
 export const billingRouter = createTRPCRouter({
   /** Estado de la suscripción y consumo. Cajeros también lo ven (para el aviso de vencimiento). */
@@ -105,14 +116,15 @@ export const billingRouter = createTRPCRouter({
       });
     }),
 
-  payments: ownerProcedure.query(({ ctx }) =>
-    ctx.db.subscriptionPayment.findMany({
+  payments: ownerProcedure.query(async ({ ctx }) => {
+    const payments = await ctx.db.subscriptionPayment.findMany({
       where: { businessId: ctx.user.businessId },
       select: PAYMENT_SELECT,
       orderBy: { createdAt: "desc" },
       take: 24,
-    }),
-  ),
+    });
+    return payments.map(forOwner);
+  }),
 
   paymentByReference: ownerProcedure
     .input(z.object({ reference: referenceSchema }))
@@ -122,7 +134,7 @@ export const billingRouter = createTRPCRouter({
         select: PAYMENT_SELECT,
       });
       if (!payment) throw new TRPCError({ code: "NOT_FOUND", message: "Pago no encontrado." });
-      return payment;
+      return forOwner(payment);
     }),
 
   /** Crea el pago pendiente y devuelve la URL de la pasarela. Permitido en solo lectura. */

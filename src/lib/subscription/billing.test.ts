@@ -7,6 +7,7 @@ import {
   applyVat,
   type BillingState,
   MIN_CHARGE_COP,
+  isStandardPeriod,
   prorateUpgrade,
   quoteCheckout,
 } from "./billing";
@@ -136,5 +137,62 @@ describe("applyApprovedPayment — renovaciones", () => {
   it("no deja pagar otro período si ya hay un cambio programado pendiente", () => {
     const s = state({ scheduledFrom: addDays(NOW, 5) });
     expect(quoteCheckout({ state: s, access: accessFor(s), plan: "PRO", cycle: "MONTHLY", vat: NO_VAT, now: NOW }).ok).toBe(false);
+  });
+});
+
+describe("upgrade sobre períodos que no duran un ciclo (activación manual, períodos apilados)", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const upgrade = (cycle: "MONTHLY" | "ANNUAL", periodStart: Date, periodEnd: Date, now = NOW) =>
+    prorateUpgrade({ from: "BASIC", to: "PRO", cycle, periodStart, periodEnd, now });
+
+  it("un mes o un año de calendario exactos se siguen prorrateando sobre el ciclo", () => {
+    // Octubre completo (31 días), faltan 16 días y 9 horas: 50.000 × 16,375/31 = 26.411 → 26.500
+    expect(upgrade("MONTHLY", new Date("2026-10-01T00:00:00Z"), new Date("2026-11-01T00:00:00Z"))).toBe(26_500);
+    // Año completo, falta exactamente la mitad... menos un día (2027 no es bisiesto): 500.000 × 182/365 → 249.400
+    expect(
+      upgrade("ANNUAL", new Date("2026-04-16T15:00:00Z"), new Date("2027-04-16T15:00:00Z"), NOW),
+    ).toBe(Math.ceil((500_000 * 183) / 365 / 100) * 100);
+    expect(isStandardPeriod(new Date("2026-01-31T10:00:00Z"), new Date("2026-02-28T10:00:00Z"), "MONTHLY")).toBe(true);
+    expect(isStandardPeriod(new Date("2026-10-01T15:00:00Z"), new Date("2026-10-31T15:00:00Z"), "MONTHLY")).toBe(false);
+    expect(isStandardPeriod(null, NOW, "MONTHLY")).toBe(false);
+  });
+
+  it("activación de 366 días en ciclo mensual: cobra por día, no la diferencia de un solo mes", () => {
+    // (79.900 − 29.900) / 30 × 366 días = 610.000
+    expect(upgrade("MONTHLY", NOW, new Date(NOW.getTime() + 366 * DAY))).toBe(610_000);
+    // A mitad de camino: 183 días → 305.000
+    expect(upgrade("MONTHLY", new Date(NOW.getTime() - 183 * DAY), new Date(NOW.getTime() + 183 * DAY))).toBe(305_000);
+  });
+
+  it("activación de 30 días con ciclo anual guardado: cobra 30 días, no la diferencia de un año", () => {
+    // 50.000 / 30 × 30 = 50.000 (con la diferencia anual serían 500.000)
+    expect(upgrade("ANNUAL", NOW, new Date(NOW.getTime() + 30 * DAY))).toBe(50_000);
+    // Quedan 10 días y unas horas → 11 días: 18.333 → 18.400
+    expect(upgrade("ANNUAL", new Date(NOW.getTime() - 19.5 * DAY), new Date(NOW.getTime() + 10.5 * DAY))).toBe(18_400);
+  });
+
+  it("períodos apilados (renovó antes de tiempo): cobra todos los días que quedan", () => {
+    // Dos meses pagados, quedan 61 días: 50.000 / 30 × 61 = 101.666 → 101.700 (antes: 50.000 como máximo)
+    expect(upgrade("MONTHLY", new Date("2026-10-15T15:00:00Z"), new Date("2026-12-15T15:00:00Z"))).toBe(101_700);
+  });
+
+  it("mantiene el mínimo, y no cobra si el plan no es superior o el período ya terminó", () => {
+    const end = new Date(NOW.getTime() + 60 * 60 * 1000);
+    expect(
+      prorateUpgrade({ from: "BASIC", to: "BUSINESS", cycle: "MONTHLY", periodStart: new Date(NOW.getTime() - 9 * DAY), periodEnd: end, now: NOW }),
+    ).toBe(MIN_CHARGE_COP);
+    expect(
+      prorateUpgrade({ from: "PRO", to: "BASIC", cycle: "ANNUAL", periodStart: NOW, periodEnd: new Date(NOW.getTime() + 30 * DAY), now: NOW }),
+    ).toBe(0);
+    expect(upgrade("MONTHLY", new Date(NOW.getTime() - 40 * DAY), new Date(NOW.getTime() - DAY))).toBe(0);
+  });
+
+  it("quoteCheckout: mismo ciclo = mejora por días; otro ciclo = período completo al terminar lo vigente", () => {
+    const granted = state({ billingCycle: "ANNUAL", currentPeriodStart: NOW, currentPeriodEnd: new Date(NOW.getTime() + 30 * DAY) });
+    const quote = (cycle: "MONTHLY" | "ANNUAL") =>
+      quoteCheckout({ state: granted, access: accessFor(granted), plan: "PRO", cycle, vat: NO_VAT, now: NOW });
+
+    expect(quote("ANNUAL")).toMatchObject({ ok: true, kind: "UPGRADE", baseAmount: 50_000 });
+    expect(quote("MONTHLY")).toMatchObject({ ok: true, kind: "PERIOD", baseAmount: 79_900 });
   });
 });

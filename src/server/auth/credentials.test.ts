@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createShop, db } from "../../../tests/integration/helpers";
+import { createShop, createUser, db } from "../../../tests/integration/helpers";
 import { TooManyAttemptsError, authorizeCredentials } from "./credentials";
 
 const PASSWORD = "ClaveCorrecta123";
@@ -61,5 +61,42 @@ describe("authorizeCredentials", () => {
     await expect(db.authEvent.count({ where: { type: "LOGIN_RATE_LIMITED" } })).resolves.toBe(1);
     // El dueño legítimo sigue entrando desde su propia IP.
     await expect(login(PASSWORD, "10.0.0.1")).resolves.toMatchObject({ id: owner.id });
+  });
+});
+
+describe("authorizeCredentials: administrador de la plataforma", () => {
+  const ADMIN_EMAIL = "admin@billify.test";
+
+  async function createAdmin() {
+    return createUser({
+      businessId: null,
+      role: "SUPERADMIN",
+      email: ADMIN_EMAIL,
+      passwordHash: await bcrypt.hash(PASSWORD, 4),
+    });
+  }
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("entra por el mismo login si su correo está en PLATFORM_ADMIN_EMAILS", async () => {
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", `otro@billify.test,${ADMIN_EMAIL}`);
+    const admin = await createAdmin();
+
+    await expect(login(PASSWORD, "10.0.0.1", ADMIN_EMAIL)).resolves.toMatchObject({
+      id: admin.id,
+      role: "SUPERADMIN",
+      businessId: null,
+    });
+  });
+
+  it("con la contraseña correcta no entra si falta la lista o su correo no está en ella", async () => {
+    const admin = await createAdmin();
+
+    await expect(login(PASSWORD, "10.0.0.1", ADMIN_EMAIL)).resolves.toBeNull();
+    vi.stubEnv("PLATFORM_ADMIN_EMAILS", "otro@billify.test");
+    await expect(login(PASSWORD, "10.0.0.1", ADMIN_EMAIL)).resolves.toBeNull();
+
+    await expect(db.authEvent.count({ where: { type: "LOGIN_FAILED", userId: admin.id } })).resolves.toBe(2);
+    await expect(db.authEvent.count({ where: { type: "LOGIN_SUCCESS" } })).resolves.toBe(0);
   });
 });

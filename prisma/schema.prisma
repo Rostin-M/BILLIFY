@@ -14,6 +14,10 @@ datasource db {
 enum UserRole {
   OWNER
   CASHIER
+  // Dueño de la plataforma (panel /admin). Nunca pertenece a un negocio y solo se
+  // crea con scripts/create-platform-admin.mjs; además su correo debe estar en
+  // PLATFORM_ADMIN_EMAILS (ver src/server/auth/platformAdmin.ts).
+  SUPERADMIN
 }
 
 enum InvoiceContactSource {
@@ -100,6 +104,15 @@ enum SubscriptionPaymentStatus {
 enum SubscriptionPaymentKind {
   PERIOD
   UPGRADE
+  // Activación hecha desde el panel de administración (sin pasarela).
+  MANUAL
+}
+
+// Motivo de una activación manual (mismos valores que GRANT_REASONS del contrato).
+enum SubscriptionGrantReason {
+  MANUAL_PAYMENT
+  COURTESY
+  COMPENSATION
 }
 
 model User {
@@ -131,31 +144,32 @@ model User {
   tableOrders         TableOrder[]
   passwordResetTokens PasswordResetToken[]
   authEvents          AuthEvent[]
+  platformAuditLogs   PlatformAuditLog[]
 
   @@index([businessId])
 }
 
 model Business {
-  id                    String               @id @default(cuid())
+  id                    String                @id @default(cuid())
   name                  String
-  document              String               @unique
+  document              String                @unique
   address               String?
   phone                 String?
   email                 String?
-  invoicePhoneSource    InvoiceContactSource @default(NONE) @map("invoice_phone_source")
-  invoiceEmailSource    InvoiceContactSource @default(NONE) @map("invoice_email_source")
-  invoiceTaxDetail      InvoiceTaxDetail     @default(SUMMARY) @map("invoice_tax_detail")
-  taxes                 Json                 @default("[]") @map("taxes")
-  categories            String[]             @default([]) @map("categories")
+  invoicePhoneSource    InvoiceContactSource  @default(NONE) @map("invoice_phone_source")
+  invoiceEmailSource    InvoiceContactSource  @default(NONE) @map("invoice_email_source")
+  invoiceTaxDetail      InvoiceTaxDetail      @default(SUMMARY) @map("invoice_tax_detail")
+  taxes                 Json                  @default("[]") @map("taxes")
+  categories            String[]              @default([]) @map("categories")
   // Obsoleto: el plan vigente está en Subscription. Se conserva por compatibilidad.
-  plan                  String               @default("MVP") @map("plan")
-  autoTax               Boolean              @default(false) @map("auto_tax")
-  maxCashRegisters      Int                  @default(1) @map("max_cash_registers")
+  plan                  String                @default("MVP") @map("plan")
+  autoTax               Boolean               @default(false) @map("auto_tax")
+  maxCashRegisters      Int                   @default(1) @map("max_cash_registers")
   // Habilita el modo "se vende por peso" en el formulario de productos (frutas/verduras)
-  produceModuleEnabled  Boolean              @default(false) @map("produce_module_enabled")
+  produceModuleEnabled  Boolean               @default(false) @map("produce_module_enabled")
   // Permite a los cajeros cambiar el precio de venta de los productos.
-  cashiersCanEditPrices Boolean              @default(false) @map("cashiers_can_edit_prices")
-  logoUrl               String?              @map("logo_url")
+  cashiersCanEditPrices Boolean               @default(false) @map("cashiers_can_edit_prices")
+  logoUrl               String?               @map("logo_url")
   users                 User[]
   auditLogs             AuditLog[]
   products              Product[]
@@ -170,8 +184,9 @@ model Business {
   subscription          Subscription?
   subscriptionPayments  SubscriptionPayment[]
   usageCounters         UsageCounter[]
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  platformAuditLogs     PlatformAuditLog[]
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 }
 
 model Product {
@@ -600,7 +615,22 @@ model SubscriptionPayment {
   periodStart           DateTime?                 @map("period_start")
   periodEnd             DateTime?                 @map("period_end")
   paidAt                DateTime?                 @map("paid_at")
+  // Quién lo creó: el dueño (checkout) o el administrador (activación manual).
   createdById           String?                   @map("created_by_id")
+  // Requiere revisión manual desde /admin (anulado después de aprobado, monto distinto).
+  needsReview           Boolean                   @default(false) @map("needs_review")
+  // ─── Solo activaciones manuales (kind = MANUAL, provider = "manual") ───
+  grantReason           SubscriptionGrantReason?  @map("grant_reason")
+  grantDays             Int?                      @map("grant_days")
+  grantNote             String?                   @map("grant_note")
+  // Número del comprobante de Nequi/transferencia.
+  externalReference     String?                   @map("external_reference")
+  // Foto de la suscripción justo antes de la activación: revocar la restaura tal cual
+  // (forma en src/server/platform/revocation.ts).
+  grantSnapshot         Json?                     @map("grant_snapshot")
+  revokedAt             DateTime?                 @map("revoked_at")
+  revokedById           String?                   @map("revoked_by_id")
+  revokeNote            String?                   @map("revoke_note")
   createdAt             DateTime                  @default(now()) @map("created_at")
   updatedAt             DateTime                  @updatedAt @map("updated_at")
 
@@ -609,6 +639,8 @@ model SubscriptionPayment {
 
   @@index([businessId, createdAt])
   @@index([status, createdAt])
+  @@index([kind, createdAt])
+  @@index([needsReview, createdAt])
   @@map("subscription_payments")
 }
 
@@ -629,11 +661,11 @@ model PaymentWebhookEvent {
 
 // Correos de aviso ya enviados (uno por tipo y fecha de vencimiento).
 model SubscriptionNotice {
-  id             String       @id @default(cuid())
-  subscriptionId String       @map("subscription_id")
+  id             String   @id @default(cuid())
+  subscriptionId String   @map("subscription_id")
   kind           String
-  dueAt          DateTime     @map("due_at")
-  sentAt         DateTime     @default(now()) @map("sent_at")
+  dueAt          DateTime @map("due_at")
+  sentAt         DateTime @default(now()) @map("sent_at")
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
@@ -653,4 +685,35 @@ model UsageCounter {
 
   @@id([businessId, metric, period])
   @@map("usage_counters")
+}
+
+// Bitácora del panel de administración de la plataforma (/admin). AuditLog exige
+// negocio y usuario del negocio; aquí actúa un SUPERADMIN y el negocio es opcional.
+// Borrar al administrador o al negocio no borra el registro: las relaciones quedan
+// en null y se conservan el correo/nombre copiados al momento de la acción.
+model PlatformAuditLog {
+  id           String   @id @default(cuid())
+  adminId      String?  @map("admin_id")
+  adminEmail   String   @map("admin_email")
+  adminName    String?  @map("admin_name")
+  // p. ej. "GRANT_PLAN", "EXTEND_TRIAL", "REVOKE_GRANT".
+  action       String
+  businessId   String?  @map("business_id")
+  businessName String?  @map("business_name")
+  entityType   String?  @map("entity_type")
+  entityId     String?  @map("entity_id")
+  // Resumen legible de la acción, armado en el servidor al registrarla.
+  summary      String
+  detail       Json?
+  ip           String?
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  admin    User?     @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  business Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([businessId, createdAt])
+  @@index([adminId, createdAt])
+  @@map("platform_audit_logs")
 }

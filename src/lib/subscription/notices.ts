@@ -93,7 +93,11 @@ export function noticeContent(notice: DueNotice, access: SubscriptionAccess, bus
   }
 
   if (kind.startsWith("renewal_")) {
-    const days = Number(kind.slice("renewal_".length, -1));
+    // El tipo de aviso dice qué ventana tocó (7, 3 o 1); el texto usa los días que
+    // de verdad faltan: un período corto (activación manual de 5 días) o un cron
+    // que se saltó un día no deben decir "vence en 7 días".
+    const window = Number(kind.slice("renewal_".length, -1));
+    const days = Math.min(window, Math.max(1, access.daysLeft));
     return {
       subject: days === 1 ? "Tu plan vence mañana" : `Tu plan vence en ${days} días`,
       title: days === 1 ? "Tu plan vence mañana" : `Tu plan vence en ${days} días`,

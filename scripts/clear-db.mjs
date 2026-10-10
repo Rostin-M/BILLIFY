@@ -52,6 +52,7 @@ async function main() {
     ["CustomerPayment",     (tx) => tx.customerPayment.deleteMany()],
     ["InventoryMovement",   (tx) => tx.inventoryMovement.deleteMany()],
     ["AuditLog",            (tx) => tx.auditLog.deleteMany()],
+    ["PlatformAuditLog",    (tx) => tx.platformAuditLog.deleteMany()],
     ["AuthEvent",           (tx) => tx.authEvent.deleteMany()],
     ["PasswordResetToken",  (tx) => tx.passwordResetToken.deleteMany()],
     ["PendingRegistration", (tx) => tx.pendingRegistration.deleteMany()],

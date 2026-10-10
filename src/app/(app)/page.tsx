@@ -189,6 +189,8 @@ export default async function Home() {
   const user = await loadActiveUser(await auth());
   if (!user) return <Landing />;
   if (user.mustChangePassword) redirect("/auth/cambiar-contrasena");
+  // El administrador de la plataforma tiene su propio panel (el login envía a "/").
+  if (user.role === "SUPERADMIN") redirect("/admin");
 
   const business = user.businessId
     ? await db.business.findUnique({

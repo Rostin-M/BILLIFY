@@ -6,6 +6,7 @@ import { businessRouter } from "~/server/api/routers/business";
 import { cashRegisterRouter } from "~/server/api/routers/cashRegister";
 import { customerRouter } from "~/server/api/routers/customer";
 import { dashboardRouter } from "~/server/api/routers/dashboard";
+import { platformRouter } from "~/server/api/routers/platform";
 import { productRouter } from "~/server/api/routers/product";
 import { saleRouter } from "~/server/api/routers/sale";
 import { tableSessionRouter } from "~/server/api/routers/tableSession";
@@ -26,6 +27,7 @@ export const appRouter = createTRPCRouter({
   cashRegister: cashRegisterRouter,
   customer: customerRouter,
   dashboard: dashboardRouter,
+  platform: platformRouter,
   product: productRouter,
   sale: saleRouter,
   tableSession: tableSessionRouter,
