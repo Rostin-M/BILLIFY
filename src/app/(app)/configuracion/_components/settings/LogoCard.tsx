@@ -88,7 +88,7 @@ export function LogoCard({
             />
           </div>
         ) : (
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-slate-600">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <circle cx="8.5" cy="8.5" r="1.5" />
@@ -106,11 +106,13 @@ export function LogoCard({
             className="hidden"
             onChange={handleFileChange}
             disabled={uploading}
+            aria-busy={uploading}
           />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
+            aria-busy={uploading}
             className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 disabled:opacity-50 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
           >
             {uploading ? "Subiendo..." : uploadButtonLabel}
@@ -120,12 +122,13 @@ export function LogoCard({
               type="button"
               onClick={handleDelete}
               disabled={uploading}
+              aria-busy={uploading}
               className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
             >
               Eliminar logo
             </button>
           )}
-          <p className="text-xs text-slate-500 dark:text-slate-500">PNG · JPG · WebP · máx. 2 MB</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">PNG · JPG · WebP · máx. 2 MB</p>
         </div>
       </div>
 

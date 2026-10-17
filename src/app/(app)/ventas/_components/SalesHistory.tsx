@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import type { BusinessInfoForPdf, TaxLine } from "~/lib/pdf/FacturaPDF";
+import { formatCOP } from "~/lib/format/money";
 
 const FacturaPdfActions = dynamic(
   () => import("~/lib/pdf/FacturaPdfActions").then((m) => m.FacturaPdfActions),
@@ -15,7 +16,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",
   TRANSFER: "Transferencia",
-  CREDIT: "Crédito",
+  CREDIT: "Fiado",
 };
 
 type Props = { isOwner: boolean; business: BusinessInfoForPdf };
@@ -55,18 +56,15 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
     },
   });
 
-  const formatCOP = (v: number) =>
-    v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
   const formatTime = (d: Date) =>
-    new Date(d).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+    new Date(d).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
 
   const completed = sales.filter((s) => s.status === "COMPLETED");
   const voided = sales.filter((s) => s.status === "VOIDED");
   const totalDay = completed.reduce((sum, s) => sum + s.total, 0);
 
   if (isPending) {
-    return <p className="text-center text-sm text-slate-500 dark:text-slate-500">Cargando historial...</p>;
+    return <p className="text-center text-sm text-slate-500 dark:text-slate-400">Cargando historial...</p>;
   }
 
   return (
@@ -79,7 +77,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
           <p className="text-xs text-slate-500 dark:text-slate-400">Total del día</p>
-          <p className="mt-1 text-xl font-bold text-violet-600 dark:text-violet-400">{formatCOP(totalDay)}</p>
+          <p className="mt-1 break-words text-lg font-bold tabular-nums text-violet-600 sm:text-xl dark:text-violet-400">{formatCOP(totalDay)}</p>
         </div>
         {voided.length > 0 && (
           <div className="rounded-xl border border-red-100 bg-red-50 p-4 dark:border-red-500/20 dark:bg-red-900/10">
@@ -92,7 +90,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
       {/* Lista de ventas */}
       {sales.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center dark:border-white/10 dark:bg-white/5">
-          <p className="text-slate-500 dark:text-slate-500">No hay ventas registradas hoy.</p>
+          <p className="text-slate-500 dark:text-slate-400">No hay ventas registradas hoy.</p>
         </div>
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5">
@@ -111,7 +109,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                       className="min-w-0 flex-1 text-left"
                     >
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`text-sm font-semibold ${isVoided ? "text-slate-500 line-through dark:text-slate-500" : "text-slate-800 dark:text-slate-100"}`}>
+                        <span className={`text-sm font-semibold ${isVoided ? "text-slate-500 line-through dark:text-slate-400" : "text-slate-800 dark:text-slate-100"}`}>
                           {sale.invoiceNumber ?? "Venta rápida"}
                         </span>
                         {isVoided && (
@@ -125,7 +123,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                         {formatTime(sale.createdAt)} · {PAYMENT_LABELS[sale.paymentMethod] ?? sale.paymentMethod}
                         {sale.customer && ` · ${sale.customer.name}`}
                         {sale.user?.name && ` · ${sale.user.name}`}
@@ -137,12 +135,14 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                       )}
                     </button>
 
-                    <div className="flex shrink-0 flex-col items-end gap-1.5">
-                      <span className={`text-base font-bold ${isVoided ? "text-slate-500 line-through dark:text-slate-500" : "text-slate-800 dark:text-white"}`}>
-                        {formatCOP(sale.total)}
-                      </span>
-                      {!isVoiding && (
-                        <div className="flex items-center gap-1.5">
+                    <span className={`shrink-0 text-base font-bold tabular-nums ${isVoided ? "text-slate-500 line-through dark:text-slate-400" : "text-slate-800 dark:text-white"}`}>
+                      {formatCOP(sale.total)}
+                    </span>
+                  </div>
+
+                  {/* Acciones en su propia fila: en móvil no le quitan espacio al nombre del cliente */}
+                  {!isVoiding && (sale.saleType === "INVOICED" || sale.receiptPath != null || (isOwner && !isVoided)) && (
+                        <div className="mt-2 flex flex-wrap justify-end gap-2">
                           {sale.saleType === "INVOICED" && (
                             <button
                               onClick={() => {
@@ -150,7 +150,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                                 setExpandedId(null);
                                 setVoidingId(null);
                               }}
-                              className={`rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                              className={`rounded-lg border min-h-10 px-3 text-sm font-medium sm:min-h-8 sm:text-xs transition ${
                                 pdfSaleId === sale.id
                                   ? "border-violet-400 bg-violet-100 text-violet-700 dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300"
                                   : "border-violet-200 text-violet-600 hover:bg-violet-50 dark:border-violet-500/30 dark:text-violet-400 dark:hover:bg-violet-900/20"
@@ -163,7 +163,8 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                             <button
                               onClick={() => viewReceipt(sale.id)}
                               disabled={loadingReceiptId === sale.id}
-                              className="rounded-lg border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-500/30 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                              aria-busy={loadingReceiptId === sale.id}
+                              className="rounded-lg border border-emerald-200 min-h-10 px-3 text-sm font-medium sm:min-h-8 sm:text-xs text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-500/30 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
                             >
                               {loadingReceiptId === sale.id ? "Abriendo..." : "Comprobante"}
                             </button>
@@ -171,15 +172,13 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                           {isOwner && !isVoided && (
                             <button
                               onClick={() => { setVoidingId(sale.id); setVoidReason(""); setExpandedId(null); setPdfSaleId(null); }}
-                              className="rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-500 transition hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-900/20"
+                              className="rounded-lg border border-red-200 min-h-10 px-3 text-sm font-medium sm:min-h-8 sm:text-xs text-red-500 transition hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-900/20"
                             >
                               Anular
                             </button>
                           )}
                         </div>
-                      )}
-                    </div>
-                  </div>
+                  )}
 
                   {/* Acciones PDF — bloque expandible bajo la fila principal */}
                   {pdfSaleId === sale.id && !isVoiding && (
@@ -216,6 +215,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                         ¿Anular esta venta? Se restaurará el stock de todos los productos.
                       </p>
                       <input
+                        aria-label="Motivo de anulación"
                         autoFocus
                         type="text"
                         placeholder="Motivo de anulación *"
@@ -230,13 +230,14 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                         <button
                           onClick={() => voidSale.mutate({ saleId: sale.id, reason: voidReason })}
                           disabled={voidReason.trim().length < 3 || voidSale.isPending}
-                          className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                          aria-busy={voidSale.isPending}
+                          className="min-h-10 flex-1 rounded-lg bg-red-600 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
                         >
                           {voidSale.isPending ? "Anulando..." : "Confirmar anulación"}
                         </button>
                         <button
                           onClick={() => { setVoidingId(null); setVoidReason(""); }}
-                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
+                          className="min-h-10 rounded-lg border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
                         >
                           Cancelar
                         </button>
@@ -268,7 +269,7 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                         </div>
                       )}
                       {sale.note && (
-                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
+                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                           Nota: {sale.note}
                         </p>
                       )}

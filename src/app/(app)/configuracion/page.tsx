@@ -8,7 +8,9 @@ export const metadata = { title: "Configuración — BILLIFY" };
 export default async function ConfiguracionPage() {
   await requirePageUser({ roles: ["OWNER"] });
 
-  void api.business.getSettings.prefetch();
+  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
+  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  await api.business.getSettings.prefetch();
 
   return (
     <HydrateClient>

@@ -9,6 +9,7 @@ import { AddGuestModal } from "./AddGuestModal";
 import { AddOrderModal } from "./AddOrderModal";
 import { CheckoutModal } from "./CheckoutModal";
 import type { MesaForPdf, TableGuestForPdf, TaxLineForPdf } from "~/lib/pdf/MesaPDF";
+import { formatCOP as fmt } from "~/lib/format/money";
 
 const MesaPdfActions = dynamic(
   () => import("~/lib/pdf/MesaPdfActions").then((m) => m.MesaPdfActions),
@@ -22,8 +23,7 @@ type Order = { id: string; createdAt: Date; note: string | null; subtotal: numbe
 type Guest = { id: string; name: string; description: string | null; customerId: string | null; orders: Order[] };
 type Session = { id: string; name: string; openedAt: Date; user: { name: string | null } | null; guests: Guest[] };
 
-const fmt = (v: number) => v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-const fmtTime = (d: Date | string) => new Date(d).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+const fmtTime = (d: Date | string) => new Date(d).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
 
 type Props = {
   session: Session;
@@ -31,9 +31,11 @@ type Props = {
   expanded: boolean;
   onToggleExpanded: () => void;
   focusGuestId?: string | null;
+  /** Se llama con las ventas facturadas del cobro (el modal vive en MesasClient: la mesa puede cerrarse). */
+  onInvoices?: (saleIds: string[]) => void;
 };
 
-export function TableCard({ session, business, expanded, onToggleExpanded, focusGuestId }: Readonly<Props>) {
+export function TableCard({ session, business, expanded, onToggleExpanded, focusGuestId, onInvoices }: Readonly<Props>) {
   const [addingGuest, setAddingGuest] = useState(false);
   const [addingOrderFor, setAddingOrderFor] = useState<{ id: string; name: string } | null>(null);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -160,13 +162,17 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
           sessionName={session.name}
           guests={session.guests}
           onClose={() => setCheckingOut(false)}
-          onSuccess={(msg) => { setCheckingOut(false); toast.success(msg); }}
+          onSuccess={(msg, invoicedSaleIds) => {
+            setCheckingOut(false);
+            toast.success(msg);
+            if (invoicedSaleIds.length > 0) onInvoices?.(invoicedSaleIds);
+          }}
         />
       )}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
         {/* Header de la mesa */}
-        <div className={`flex items-center justify-between gap-3 px-5 py-4 ${expanded ? "border-b border-slate-100 dark:border-white/10" : ""}`}>
+        <div className={`flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 ${expanded ? "border-b border-slate-100 dark:border-white/10" : ""}`}>
           <button
             type="button"
             onClick={onToggleExpanded}
@@ -178,35 +184,36 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
               <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" />
             )}
             <div className="min-w-0">
-              <h2 className="font-bold text-slate-800 dark:text-white">{session.name}</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-500">
+              <h2 className="break-words font-bold text-slate-800 dark:text-white">{session.name}</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Abierta {openedTime}{session.user?.name ? ` · ${session.user.name}` : ""}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {guestsWithDebt} cliente{guestsWithDebt !== 1 ? "s" : ""} con deuda
+                {guestsWithDebt} cliente{guestsWithDebt !== 1 ? "s" : ""} por cobrar
                 {" · "}
                 <span className="font-semibold text-slate-700 dark:text-slate-200">{fmt(tableTotal)}</span>
               </p>
             </div>
           </button>
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
             {showPdf ? (
               <MesaPdfActions business={business} mesa={buildMesaForPdf()} fileName={`${session.name.replace(/\s+/g, "-")}.pdf`} onClose={() => setShowPdf(false)} />
             ) : (
-              <button onClick={() => setShowPdf(true)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:bg-transparent dark:text-slate-400">
+              <button onClick={() => setShowPdf(true)} className="min-h-11 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-500 transition hover:bg-slate-50 sm:flex-none dark:border-white/10 dark:bg-transparent dark:text-slate-400">
                 PDF
               </button>
             )}
             <button
               onClick={() => setAddingGuest(true)}
-              className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300"
+              className="min-h-11 flex-1 rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 sm:flex-none dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300"
             >
               + Cliente
             </button>
             <button
               onClick={() => setCheckingOut(true)}
               disabled={!hasAnyOrders}
-              className="rounded-xl bg-violet-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+              title={hasAnyOrders ? undefined : "Agrega un pedido para poder cobrar"}
+              className="min-h-11 flex-1 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
             >
               Cobrar
             </button>
@@ -236,7 +243,7 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
         {/* Guests */}
         <div className="divide-y divide-slate-100 dark:divide-white/5">
           {session.guests.length === 0 ? (
-            <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
+            <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
               Sin clientes aún. Agrega el primero.
             </p>
           ) : (
@@ -258,22 +265,24 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                         className="flex min-w-0 flex-1 items-center gap-1.5"
                       >
                         <input
+                          aria-label="Nuevo nombre"
                           autoFocus
                           value={renameValue}
                           onChange={(e) => setRenameValue(e.target.value)}
-                          className="min-w-0 flex-1 rounded-lg border border-violet-300 bg-white px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-violet-200 dark:border-violet-500/50 dark:bg-slate-800 dark:text-white"
+                          className="min-h-10 min-w-0 flex-1 rounded-lg border border-violet-300 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 dark:border-violet-500/50 dark:bg-slate-800 dark:text-white"
                         />
                         <button
                           type="submit"
                           disabled={renameGuest.isPending || !renameValue.trim()}
-                          className="rounded-lg bg-violet-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-50"
+                          aria-busy={renameGuest.isPending}
+                          className="min-h-10 rounded-lg bg-violet-600 px-3 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-50"
                         >
                           Guardar
                         </button>
                         <button
                           type="button"
                           onClick={() => setRenamingGuestId(null)}
-                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-50 dark:border-white/10"
+                          className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
                         >
                           Cancelar
                         </button>
@@ -292,9 +301,9 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                         <div className="min-w-0">
                           <span className="font-semibold text-slate-700 dark:text-slate-200">{guest.name}</span>
                           {guest.description && (
-                            <span className="ml-2 text-xs text-slate-500 dark:text-slate-500">· {guest.description}</span>
+                            <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">· {guest.description}</span>
                           )}
-                          <p className="text-xs text-slate-500 dark:text-slate-500">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
                             {guest.orders.length} ronda{guest.orders.length !== 1 ? "s" : ""}
                           </p>
                         </div>
@@ -306,7 +315,7 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                       <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{fmt(gTotal)}</span>
                       <button
                         onClick={() => { setRenamingGuestId(guest.id); setRenameValue(guest.name); }}
-                        className="text-slate-500 hover:text-violet-500"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-violet-50 hover:text-violet-600 dark:text-slate-400 dark:hover:bg-violet-900/20 dark:hover:text-violet-300"
                         title="Renombrar cliente"
                         aria-label={`Renombrar a ${guest.name}`}
                       >
@@ -321,13 +330,14 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                             <button
                               onClick={() => { removeGuest.mutate({ guestId: guest.id }); setConfirmRemoveGuest(null); }}
                               disabled={removeGuest.isPending}
-                              className="rounded bg-red-500 px-2 py-0.5 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
+                              aria-busy={removeGuest.isPending}
+                              className="min-h-10 rounded-lg bg-red-500 px-3 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
                             >
                               Sí, quitar
                             </button>
                             <button
                               onClick={() => setConfirmRemoveGuest(null)}
-                              className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10"
+                              className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10 dark:text-slate-300"
                             >
                               No
                             </button>
@@ -353,7 +363,7 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                   {/* Orders */}
                   <div className="space-y-2 mb-3 pl-6">
                     {guest.orders.length === 0 ? (
-                      <p className="text-xs text-slate-500 dark:text-slate-500 italic">Pagado — sin pedidos pendientes</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 italic">Pagado — sin pedidos pendientes</p>
                     ) : (
                       guest.orders.map((order, oi) => {
                         const isOrderExpanded = expandedOrders.has(order.id);
@@ -363,9 +373,10 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                           orderActions = (
                             <span className="flex flex-wrap items-center justify-end gap-1.5">
                               <select
+                                aria-label="Mover ronda a"
                                 value={moveTargetGuestId}
                                 onChange={(e) => setMoveTargetGuestId(e.target.value)}
-                                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                                className="min-h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm dark:border-white/10 dark:bg-slate-800 dark:text-white"
                               >
                                 <option value="">Mover a...</option>
                                 {session.guests.filter((g) => g.id !== guest.id).map((g) => (
@@ -375,13 +386,14 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                               <button
                                 onClick={() => moveOrder.mutate({ orderId: order.id, toGuestId: moveTargetGuestId })}
                                 disabled={!moveTargetGuestId || moveOrder.isPending}
-                                className="rounded bg-violet-600 px-2 py-0.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-50"
+                                aria-busy={moveOrder.isPending}
+                                className="min-h-10 rounded-lg bg-violet-600 px-3 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-50"
                               >
                                 Mover
                               </button>
                               <button
                                 onClick={() => { setMovingOrderId(null); setMoveTargetGuestId(""); }}
-                                className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10"
+                                className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10 dark:text-slate-300"
                               >
                                 Cancelar
                               </button>
@@ -396,13 +408,14 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                               <button
                                 onClick={() => { removeOrder.mutate({ orderId: order.id }); setConfirmDeleteOrder(null); }}
                                 disabled={removeOrder.isPending}
-                                className="rounded bg-red-500 px-2 py-0.5 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
+                                aria-busy={removeOrder.isPending}
+                                className="min-h-10 rounded-lg bg-red-500 px-3 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
                               >
                                 Sí, eliminar
                               </button>
                               <button
                                 onClick={() => setConfirmDeleteOrder(null)}
-                                className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10"
+                                className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:text-slate-600 dark:border-white/10 dark:text-slate-300"
                               >
                                 No
                               </button>
@@ -410,11 +423,11 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                           );
                         } else {
                           orderActions = (
-                            <div className="flex shrink-0 items-center gap-2">
+                            <div className="flex shrink-0 items-center gap-1">
                               {session.guests.length > 1 && (
                                 <button
                                   onClick={() => { setMovingOrderId(order.id); setMoveTargetGuestId(""); }}
-                                  className="text-slate-300 hover:text-violet-500 transition"
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-violet-50 hover:text-violet-600 dark:text-slate-400 dark:hover:bg-violet-900/20 dark:hover:text-violet-300"
                                   title="Mover a otro cliente"
                                   aria-label="Mover ronda a otro cliente"
                                 >
@@ -424,7 +437,8 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                               <button
                                 onClick={() => setConfirmDeleteOrder(order.id)}
                                 disabled={removeOrder.isPending}
-                                className="text-slate-300 hover:text-red-500 transition disabled:opacity-50"
+                                aria-busy={removeOrder.isPending}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                                 title="Eliminar ronda"
                                 aria-label="Eliminar ronda"
                               >
@@ -455,11 +469,11 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                           </div>
                           {isOrderExpanded && (
                             <div className="border-t border-slate-200 px-3 pb-3 pt-2 dark:border-white/10">
-                              <p className="mb-1.5 text-xs text-slate-500 dark:text-slate-500">
+                              <p className="mb-1.5 text-xs text-slate-500 dark:text-slate-400">
                                 {fmtTime(order.createdAt)}
                                 {order.note && <span> · {order.note}</span>}
                                 {order.user?.name && (
-                                  <span className="text-violet-500 dark:text-violet-400"> · {order.user.name}</span>
+                                  <span className="text-violet-700 dark:text-violet-300"> · {order.user.name}</span>
                                 )}
                               </p>
                               <ul className="divide-y divide-slate-100 dark:divide-white/5">
@@ -492,7 +506,7 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
 
                   <button
                     onClick={() => setAddingOrderFor({ id: guest.id, name: guest.name })}
-                    className="ml-6 text-xs font-semibold text-violet-600 hover:text-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
+                    className="ml-6 mt-1 inline-flex min-h-11 items-center rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
                   >
                     + Agregar pedido
                   </button>
@@ -514,18 +528,19 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
                 <button
                   onClick={() => { setCloseConfirm(false); closeSession.mutate({ sessionId: session.id }); }}
                   disabled={closeSession.isPending}
-                  className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-50"
+                  aria-busy={closeSession.isPending}
+                  className="min-h-10 rounded-lg bg-violet-600 px-4 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50"
                 >
                   Sí, cerrar
                 </button>
-                <button onClick={() => setCloseConfirm(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 dark:border-white/10">
+                <button onClick={() => setCloseConfirm(false)} className="min-h-10 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300">
                   No
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => setCloseConfirm(true)}
-                className="self-start rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
+                className="min-h-10 self-start rounded-lg border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
               >
                 Cerrar mesa
               </button>
@@ -539,18 +554,19 @@ export function TableCard({ session, business, expanded, onToggleExpanded, focus
               <button
                 onClick={() => { setCancelConfirm(false); cancelSession.mutate({ sessionId: session.id }); }}
                 disabled={cancelSession.isPending}
-                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                aria-busy={cancelSession.isPending}
+                className="min-h-10 rounded-lg bg-red-600 px-4 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
               >
                 Sí, cancelar
               </button>
-              <button onClick={() => setCancelConfirm(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 dark:border-white/10">
+              <button onClick={() => setCancelConfirm(false)} className="min-h-10 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300">
                 No
               </button>
             </div>
           ) : (
             <button
               onClick={() => setCancelConfirm(true)}
-              className="self-start rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-white/10 dark:text-slate-500 dark:hover:border-red-500/30 dark:hover:bg-red-900/10 dark:hover:text-red-400"
+              className="min-h-10 self-start rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-white/10 dark:text-slate-400 dark:hover:border-red-500/30 dark:hover:bg-red-900/10 dark:hover:text-red-400"
             >
               Cancelar mesa sin cobrar
             </button>

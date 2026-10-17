@@ -7,12 +7,14 @@ import Link from "next/link";
 import { AlertTriangle, CreditCard, KeyRound, Loader2, LogOut } from "lucide-react";
 import { pendingSalesBeforeSignOut, signOutAndClear } from "~/lib/clientSignOut";
 import { api } from "~/trpc/react";
+import { useDialog } from "~/app/_components/ui/useDialog";
 
 type Props = { name: string | null; role: string };
 
 export function UserMenu({ name, role }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const dialogRef = useDialog(closeModal, showModal);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -121,11 +123,12 @@ export function UserMenu({ name, role }: Readonly<Props>) {
 
         {open && (
           <>
-            <div className="fixed inset-0 z-30" aria-hidden="true" onClick={closeMenu} />
+            {/* Portal: dentro del header (backdrop-blur) el overlay solo cubriría la barra. */}
+            {createPortal(<div className="fixed inset-0 z-30" aria-hidden="true" onClick={closeMenu} />, document.body)}
             <div className="absolute right-0 top-full z-40 mt-1.5 w-64 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
               <div className="border-b border-slate-100 px-3 py-2 dark:border-white/10">
                 <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{name}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   {role === "OWNER" ? "Propietario" : "Cajero"}
                 </p>
               </div>
@@ -151,6 +154,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
                 <button
                   onClick={() => void handleSignOut()}
                   disabled={checkingPending}
+                  aria-busy={checkingPending}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 transition hover:bg-red-50 disabled:opacity-60 dark:hover:bg-red-900/20"
                 >
                   {checkingPending ? (
@@ -197,9 +201,9 @@ export function UserMenu({ name, role }: Readonly<Props>) {
 
       {/* Modal cambio de contraseña — portal para evitar el containing block del backdrop-blur del header */}
       {showModal && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-            <h2 className="mb-1 text-lg font-bold text-slate-800 dark:text-white">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="change-password-title" className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <h2 id="change-password-title" className="mb-1 text-lg font-bold text-slate-800 dark:text-white">
               Cambiar contraseña
             </h2>
             <p className="mb-5 text-sm text-slate-500 dark:text-slate-400">
@@ -215,7 +219,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
                 </div>
                 <button
                   onClick={closeModal}
-                  className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white hover:bg-violet-500"
+                  className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
                 >
                   Listo
                 </button>
@@ -273,14 +277,15 @@ export function UserMenu({ name, role }: Readonly<Props>) {
                   <button
                     type="submit"
                     disabled={mismatch || changePassword.isPending}
-                    className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+                    aria-busy={changePassword.isPending}
+                    className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
                   >
                     {changePassword.isPending ? "Actualizando..." : "Actualizar contraseña"}
                   </button>
                   <button
                     type="button"
                     onClick={closeModal}
-                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
+                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
                   >
                     Cancelar
                   </button>

@@ -6,6 +6,7 @@ import { ArrowRight, Minus, ShoppingCart, TrendingDown, TrendingUp, Wallet, Pack
 import { api, type RouterOutputs } from "~/trpc/react";
 import { SkeletonKpiCard } from "~/app/_components/Skeletons";
 import { PlanFeatureLocked, usePlanFeature } from "~/app/_components/subscription/PlanFeatureLocked";
+import { formatCOP } from "~/lib/format/money";
 
 type Period = "today" | "week" | "month";
 type DashboardData = RouterOutputs["dashboard"]["summary"];
@@ -20,14 +21,11 @@ const METHOD_LABELS: Record<string, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",
   TRANSFER: "Transferencia",
-  CREDIT: "Crédito",
+  CREDIT: "Fiado",
 };
 
-const formatCOP = (v: number) =>
-  v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
 const formatShortDate = (d: Date | string) =>
-  new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short" });
+  new Date(d).toLocaleDateString("es-CO", { timeZone: "America/Bogota", day: "numeric", month: "short" });
 
 const formatBarLabel = (dateStr: string) =>
   new Date(dateStr + "T00:00:00").toLocaleDateString("es-CO", { weekday: "short", day: "numeric" });
@@ -117,7 +115,7 @@ function PeriodSelector({
         ))}
       </div>
       {label && (
-        <p className="text-center text-xs text-slate-500 dark:text-slate-500">{label}</p>
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400">{label}</p>
       )}
     </div>
   );
@@ -143,7 +141,7 @@ function KpiCardsGrid({
         value={formatCOP(data.sales.total)}
         trend={salesTotalTrend}
         color="emerald"
-        tooltip="Total cobrado en ventas completadas (efectivo, tarjeta, transferencia y crédito) en el período."
+        tooltip="Total cobrado en ventas completadas (efectivo, tarjeta, transferencia y fiado) en el período."
       />
       <KpiCard
         label="Gastos"
@@ -164,7 +162,7 @@ function KpiCardsGrid({
         value={data.cashRegister.isOpen ? "Abierta" : "Cerrada"}
         sub={
           data.cashRegister.lastClosedAt
-            ? `Último cierre ${new Date(data.cashRegister.lastClosedAt).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}`
+            ? `Último cierre ${new Date(data.cashRegister.lastClosedAt).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" })}`
             : undefined
         }
         color={data.cashRegister.isOpen ? "emerald" : "slate"}
@@ -186,7 +184,7 @@ function QuickActionsRow({ data }: Readonly<{ data: DashboardData }>) {
     <div className="flex flex-wrap gap-2">
       <Link
         href="/ventas"
-        className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-500"
+        className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-700"
       >
         <ShoppingCart size={14} />
         Nueva venta
@@ -220,7 +218,7 @@ function TodaySummaryCard({ data }: Readonly<{ data: DashboardData }>) {
         Resumen de hoy
       </p>
       {data.sales.count === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-500">Sin ventas registradas hoy</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Sin ventas registradas hoy</p>
       ) : (
         <div className="flex items-end gap-6">
           <div>
@@ -230,7 +228,7 @@ function TodaySummaryCard({ data }: Readonly<{ data: DashboardData }>) {
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {data.sales.count} venta{data.sales.count !== 1 ? "s" : ""}
               {data.sales.count > 0 && (
-                <span className="ml-2 text-slate-500 dark:text-slate-500">
+                <span className="ml-2 text-slate-500 dark:text-slate-400">
                   · Promedio {formatCOP(data.sales.total / data.sales.count)}
                 </span>
               )}
@@ -261,7 +259,7 @@ function SalesBarChart({
         <h2 className="font-semibold text-slate-700 dark:text-slate-200">
           {period === "month" ? "Ventas por semana" : "Ventas por día"}
         </h2>
-        <span className="text-xs text-slate-500 dark:text-slate-500">
+        <span className="text-xs text-slate-500 dark:text-slate-400">
           Total: {formatCOP(totalSales)}
         </span>
       </div>
@@ -269,9 +267,9 @@ function SalesBarChart({
       <div className="flex gap-2">
         {/* Eje Y */}
         <div className="flex w-14 shrink-0 flex-col justify-between pb-5 text-right">
-          <span className="text-[9px] text-slate-500">{formatCOP(maxDayTotal)}</span>
-          <span className="text-[9px] text-slate-500">{formatCOP(maxDayTotal / 2)}</span>
-          <span className="text-[9px] text-slate-500">$0</span>
+          <span className="text-[10px] text-slate-500 sm:text-xs">{formatCOP(maxDayTotal)}</span>
+          <span className="text-[10px] text-slate-500 sm:text-xs">{formatCOP(maxDayTotal / 2)}</span>
+          <span className="text-[10px] text-slate-500 sm:text-xs">$0</span>
         </div>
 
         {/* Barras */}
@@ -291,9 +289,14 @@ function SalesBarChart({
               const minHeightPct = hasData ? 3 : 2;
               const barHeight = chartAnimated ? `${Math.max(heightPct, minHeightPct)}%` : "0%";
               return (
-                <div key={bucket.key} className="group relative flex flex-1 flex-col items-center gap-1">
+                <div
+                  key={bucket.key}
+                  tabIndex={0}
+                  aria-label={`${bucket.label}: ${formatCOP(bucket.total)}, ${bucket.count} venta${bucket.count !== 1 ? "s" : ""}`}
+                  className="group relative flex flex-1 flex-col items-center gap-1 rounded outline-none"
+                >
                   {/* Tooltip */}
-                  <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden min-w-max -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800">
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden min-w-max -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block group-focus:block dark:border-white/10 dark:bg-slate-800">
                     <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(bucket.total)}</p>
                     <p className="text-slate-500">{bucket.count} venta{bucket.count !== 1 ? "s" : ""}</p>
                   </div>
@@ -309,7 +312,7 @@ function SalesBarChart({
                     />
                   </div>
                   {/* Etiqueta */}
-                  <span className="truncate text-[9px] text-slate-500 dark:text-slate-500">
+                  <span className="truncate text-[10px] text-slate-500 sm:text-xs dark:text-slate-400">
                     {bucket.label}
                   </span>
                 </div>
@@ -329,7 +332,7 @@ function PaymentMethodBreakdown({ data }: Readonly<{ data: DashboardData }>) {
         Por método de pago
       </h2>
       {data.sales.total === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-500">Sin ventas en el período</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Sin ventas en el período</p>
       ) : (
         <div className="space-y-3">
           {Object.entries(data.sales.byMethod)
@@ -370,7 +373,7 @@ function TopProductsList({ topProducts }: Readonly<{ topProducts: DashboardData[
         Top 20 productos más vendidos
       </h2>
       {topProducts.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-500">Sin ventas en el período</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Sin ventas en el período</p>
       ) : (
         <ul className="max-h-96 space-y-2 overflow-y-auto pr-1">
           {topProducts.map((p, i) => (
@@ -382,7 +385,7 @@ function TopProductsList({ topProducts }: Readonly<{ topProducts: DashboardData[
                 <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
                   {p.name}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   {p.quantitySold} unidad{p.quantitySold !== 1 ? "es" : ""}
                 </p>
               </div>
@@ -504,7 +507,7 @@ export function DashboardClient() {
             />
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <PaymentMethodBreakdown data={data} />
             <TopProductsList topProducts={data.topProducts} />
           </div>
@@ -566,13 +569,16 @@ function KpiCard({
   };
 
   return (
-    <div className="group relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+    <div
+      tabIndex={tooltip ? 0 : undefined}
+      className="group relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5"
+    >
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
-      <p className={`mt-1 truncate text-lg font-bold ${colorMap[color]}`}>{value}</p>
+      <p className={`mt-1 break-words text-base font-bold tabular-nums sm:text-lg ${colorMap[color]}`}>{value}</p>
       {trend != null && <TrendPill value={trend} />}
-      {sub && <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-500">{sub}</p>}
+      {sub && <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{sub}</p>}
       {tooltip && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-56 max-w-[80vw] -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-56 max-w-[80vw] -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block group-focus:block dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
           {tooltip}
         </div>
       )}

@@ -20,7 +20,9 @@ export default async function TrazabilidadPage({
   const canExport = planHasFeature(plan, "exports");
 
   // Sin la función en el plan el servidor responde FORBIDDEN: no se consulta.
-  if (canAudit) void api.auditLog.list.prefetch({ limit: 100 });
+  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
+  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  if (canAudit) await api.auditLog.list.prefetch({ limit: 100 });
 
   return (
     <HydrateClient>

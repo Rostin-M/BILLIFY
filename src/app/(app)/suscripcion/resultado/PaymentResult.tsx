@@ -182,7 +182,7 @@ function ResultView({ payment, gaveUp }: Readonly<{ payment: Payment; gaveUp: bo
       </p>
       <Link
         href="/suscripcion"
-        className="mt-5 inline-block w-full rounded-xl bg-violet-600 px-6 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-violet-500"
+        className="mt-5 inline-block w-full rounded-xl bg-violet-600 px-6 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-violet-700"
       >
         Intentar de nuevo
       </Link>
@@ -217,7 +217,7 @@ function BackLinks({ approved }: Readonly<{ approved: boolean }>) {
         href="/ventas"
         className={`rounded-xl px-6 py-2.5 text-center text-sm font-semibold transition ${
           approved
-            ? "bg-violet-600 text-white hover:bg-violet-500"
+            ? "bg-violet-600 text-white hover:bg-violet-700"
             : "border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/10"
         }`}
       >

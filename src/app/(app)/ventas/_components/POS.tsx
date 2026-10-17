@@ -1,17 +1,29 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { Camera, ScanLine } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOfflineQueue } from "~/hooks/useOfflineQueue";
 import type { SyncInput } from "~/lib/offlineQueue";
 import { api } from "~/trpc/react";
 import { OfflineBanner } from "./OfflineBanner";
-import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
-import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
+import type { ScanResult } from "~/app/_components/ContinuousScanPanel";
 import { ReceiptPhotoButton } from "~/app/_components/ReceiptPhotoButton";
 import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
 import { CustomerSelector, CONSUMIDOR_FINAL } from "./CustomerSelector";
 import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
+import { matchesSearch, pickOnEnter, usePosShortcuts } from "./usePosShortcuts";
+import { formatCOP } from "~/lib/format/money";
+
+// Cámara y lector (@zxing) solo se descargan al abrir el escáner, no con la pantalla.
+const BarcodeScanner = dynamic(() => import("~/app/_components/BarcodeScanner").then((m) => m.BarcodeScanner), {
+  ssr: false,
+});
+const ContinuousScanPanel = dynamic(
+  () => import("~/app/_components/ContinuousScanPanel").then((m) => m.ContinuousScanPanel),
+  { ssr: false },
+);
 
 type PaymentMethod = "CASH" | "CARD" | "CREDIT" | "TRANSFER";
 
@@ -59,8 +71,8 @@ function loadLS<T>(key: string, fallback: T): T {
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",
-  TRANSFER: "Transf.",
-  CREDIT: "Crédito",
+  TRANSFER: "Transferencia",
+  CREDIT: "Fiado",
 };
 
 function productPriceLabel(p: Product, formatCOP: (v: number) => string): string {
@@ -72,7 +84,7 @@ function productPriceLabel(p: Product, formatCOP: (v: number) => string): string
 function stockAvailabilityLabel(p: Product, outOfStock: boolean): string {
   if (outOfStock) return "Sin stock";
   if (p.trackStock) return `${p.stock} disponibles`;
-  return "∞ disponibles";
+  return "Sin control de stock";
 }
 
 function productTileClassName(outOfStock: boolean, inCartQty: number): string {
@@ -83,25 +95,45 @@ function productTileClassName(outOfStock: boolean, inCartQty: number): string {
 
 function ProductGrid({
   isLoading,
+  hasAnyProducts,
   filteredProducts,
   cart,
   onProductTap,
   formatCOP,
 }: Readonly<{
   isLoading: boolean;
+  hasAnyProducts: boolean;
   filteredProducts: Product[];
   cart: CartItem[];
   onProductTap: (p: Product) => void;
   formatCOP: (v: number) => string;
 }>) {
   if (isLoading) {
-    return <p className="text-center text-slate-500 dark:text-slate-500">Cargando productos...</p>;
+    return <p className="text-center text-slate-500 dark:text-slate-400">Cargando productos...</p>;
   }
   if (filteredProducts.length === 0) {
-    return <p className="text-center text-slate-500 dark:text-slate-500">Sin resultados</p>;
+    if (!hasAnyProducts) {
+      return (
+        <div className="py-6 text-center">
+          <p className="font-medium text-slate-700 dark:text-slate-200">Aún no tienes productos</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Agrégalos en el catálogo para empezar a vender.</p>
+          <Link
+            href="/productos"
+            className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700"
+          >
+            Agregar productos
+          </Link>
+        </div>
+      );
+    }
+    return (
+      <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+        Ningún producto coincide con la búsqueda.
+      </p>
+    );
   }
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-2 xl:grid-cols-3">
       {filteredProducts.map((p) => {
         const inCartQty = cart.filter((i) => i.productId === p.id).reduce((s, i) => s + i.quantity, 0);
         const outOfStock = p.trackStock && p.stock === 0;
@@ -114,14 +146,14 @@ function ProductGrid({
           >
             <span className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">{p.name}</span>
             {(p.brand ?? p.presentation) && (
-              <span className="text-xs text-slate-500 dark:text-slate-500">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
                 {[p.brand, p.presentation].filter(Boolean).join(" · ")}
               </span>
             )}
             <span className="mt-1 text-base font-bold text-violet-600 dark:text-violet-400">
               {productPriceLabel(p, formatCOP)}
             </span>
-            <span className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-500"}`}>
+            <span className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-400"}`}>
               {stockAvailabilityLabel(p, outOfStock)}
             </span>
             {inCartQty > 0 && (
@@ -149,7 +181,7 @@ function CartList({
 }>) {
   if (cart.length === 0) {
     return (
-      <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-500">
+      <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">
         Toca un producto para agregar
       </p>
     );
@@ -172,7 +204,8 @@ function CartList({
               {isSpecial ? (
                 <button
                   onClick={() => onRemove(item.cartItemId)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                  aria-label={`Quitar ${item.name}`}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
                 >
                   ×
                 </button>
@@ -180,7 +213,8 @@ function CartList({
                 <>
                   <button
                     onClick={() => onUpdateQty(item.cartItemId, -1)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                    aria-label={`Quitar una unidad de ${item.name}`}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
                   >
                     −
                   </button>
@@ -189,13 +223,15 @@ function CartList({
                   </span>
                   <button
                     onClick={() => onUpdateQty(item.cartItemId, 1)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                    aria-label={`Agregar una unidad de ${item.name}`}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
                   >
                     +
                   </button>
                   <button
                     onClick={() => onRemove(item.cartItemId)}
-                    className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                    aria-label={`Quitar ${item.name}`}
+                    className="ml-1 flex h-10 w-10 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
                   >
                     ×
                   </button>
@@ -212,12 +248,16 @@ function CartList({
 function ScanControls({
   search,
   onSearchChange,
+  onSearchEnter,
+  searchRef,
   onSingleScan,
   continuousScan,
   onToggleContinuousScan,
 }: Readonly<{
   search: string;
   onSearchChange: (v: string) => void;
+  onSearchEnter: () => void;
+  searchRef: React.RefObject<HTMLInputElement | null>;
   onSingleScan: () => void;
   continuousScan: boolean;
   onToggleContinuousScan: () => void;
@@ -225,11 +265,23 @@ function ScanControls({
   return (
     <div className="flex gap-2">
       <input
+        ref={searchRef}
         type="search"
-        placeholder="Buscar producto..."
+        aria-label="Buscar producto por nombre, categoría o código"
+        aria-keyshortcuts="/ F2"
+        placeholder="Buscar producto o código..."
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            onSearchEnter();
+          } else if (e.key === "Escape" && search) {
+            e.preventDefault();
+            onSearchChange("");
+          }
+        }}
+        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-400"
       />
       <button
         type="button"
@@ -246,12 +298,76 @@ function ScanControls({
         title={continuousScan ? "Detener escaneo continuo" : "Activar escaneo continuo"}
         className={`shrink-0 rounded-xl border px-3.5 py-3 text-base font-semibold shadow-sm transition ${
           continuousScan
-            ? "border-violet-500 bg-violet-600 text-white hover:bg-violet-500"
+            ? "border-violet-500 bg-violet-600 text-white hover:bg-violet-700"
             : "border-violet-300 bg-white text-violet-700 hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
         }`}
       >
         <ScanLine className="h-5 w-5" />
       </button>
+    </div>
+  );
+}
+
+/** Billetes sugeridos para "Paga con": el total redondeado y los billetes que lo cubren. */
+function suggestedBills(total: number): number[] {
+  const roundedUp = Math.ceil(total / 1000) * 1000;
+  const bills = [2000, 5000, 10000, 20000, 50000, 100000].filter((b) => b > roundedUp);
+  return [...new Set([roundedUp, ...bills])].filter((v) => v > total).slice(0, 3);
+}
+
+/**
+ * Ayuda para el cajero con efectivo: cuánto le pagan y cuánto devolver. Solo calcula
+ * en pantalla; no se guarda ni cambia la venta. Se reinicia cuando cambia el total.
+ */
+function CashChange({ total, formatCOP }: Readonly<{ total: number; formatCOP: (v: number) => string }>) {
+  const [received, setReceived] = useState("");
+  const paid = Number.parseInt(received.replace(/\D/g, ""), 10);
+  const hasValue = !Number.isNaN(paid) && paid > 0;
+  const change = hasValue ? paid - total : 0;
+
+  return (
+    <div className="mt-3 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+      <label htmlFor="cash-received" className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
+        Paga con (opcional)
+      </label>
+      <input
+          id="cash-received"
+          inputMode="numeric"
+          value={received ? Number(received.replace(/\D/g, "") || 0).toLocaleString("es-CO") : ""}
+          onChange={(e) => setReceived(e.target.value.replace(/\D/g, ""))}
+          placeholder="$ 0"
+          className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-base tabular-nums outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 sm:text-sm dark:border-white/10 dark:bg-white/5 dark:text-white"
+        />
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setReceived(String(total))}
+          className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+        >
+          Exacto
+        </button>
+        {suggestedBills(total).map((b) => (
+          <button
+            key={b}
+            type="button"
+            onClick={() => setReceived(String(b))}
+            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium tabular-nums text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+          >
+            {formatCOP(b)}
+          </button>
+        ))}
+      </div>
+      {hasValue && (
+        <p
+          role="status"
+          className={`mt-2 flex items-baseline justify-between text-sm font-medium ${
+            change >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-400"
+          }`}
+        >
+          <span>{change >= 0 ? "Cambio a devolver" : "Faltan"}</span>
+          <span className="text-xl font-bold tabular-nums">{formatCOP(Math.abs(change))}</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -303,12 +419,13 @@ function TotalsAndPayment({
           <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
             Método de pago
           </p>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-2 xl:grid-cols-4">
             {(["CASH", "CARD", "TRANSFER", "CREDIT"] as const).map((method) => (
               <button
                 key={method}
                 onClick={() => onPaymentMethodChange(method)}
-                className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition ${
+                aria-pressed={paymentMethod === method}
+                className={`min-h-11 rounded-lg border px-2 text-sm leading-tight font-medium transition ${
                   paymentMethod === method
                     ? "border-violet-400 bg-violet-100 text-violet-700 dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300"
                     : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-transparent dark:text-slate-400 dark:hover:border-white/20"
@@ -328,6 +445,7 @@ function TotalsAndPayment({
               <ReceiptPhotoButton value={receiptPath} onChange={onReceiptPathChange} />
             </div>
           )}
+          {paymentMethod === "CASH" && <CashChange key={total} total={total} formatCOP={formatCOP} />}
         </div>
       )}
 
@@ -358,6 +476,7 @@ function TotalsAndPayment({
       {/* Mensajes */}
       {statusMessage && (
         <div
+          role={statusMessage.type === "error" ? "alert" : "status"}
           className={`rounded-xl border px-4 py-3 text-sm font-medium ${
             statusMessage.type === "success"
               ? "border-green-200 bg-green-50 text-green-700 dark:border-green-500/30 dark:bg-green-900/20 dark:text-green-300"
@@ -371,11 +490,14 @@ function TotalsAndPayment({
       {/* Botón confirmar */}
       <button
         onClick={onConfirm}
+        aria-keyshortcuts="Control+Enter F12"
+        title="Atajo: Ctrl + Enter"
         disabled={cart.length === 0 || creditRequiresCustomer || isPending}
-        className={`w-full rounded-2xl px-6 py-4 text-lg font-bold text-white shadow-lg transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
+        aria-busy={isPending}
+        className={`w-full rounded-2xl px-4 py-4 text-base font-bold xl:text-lg text-white shadow-lg transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
           !isOnline
             ? "bg-amber-500 hover:bg-amber-400"
-            : "bg-violet-600 hover:bg-violet-500"
+            : "bg-violet-600 hover:bg-violet-700"
         }`}
       >
         {confirmButtonLabel}
@@ -392,13 +514,13 @@ function TotalsAndPayment({
               <div className="flex gap-2">
                 <button
                   onClick={onClearCart}
-                  className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
+                  className="min-h-11 flex-1 rounded-lg bg-red-600 text-sm font-semibold text-white hover:bg-red-700"
                 >
                   Sí, limpiar
                 </button>
                 <button
                   onClick={() => onShowClearConfirm(false)}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10"
+                  className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
                 >
                   Cancelar
                 </button>
@@ -407,7 +529,7 @@ function TotalsAndPayment({
           ) : (
             <button
               onClick={() => onShowClearConfirm(true)}
-              className="text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+              className="min-h-11 text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400"
             >
               Limpiar carrito
             </button>
@@ -441,6 +563,19 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
   // Clave de idempotencia de la venta en curso: se genera al confirmar y se reutiliza si el
   // usuario reintenta (error de red, doble clic). Cambiar el carrito implica una venta nueva.
   const saleKeyRef = useRef<string | null>(null);
+  // Zona de carrito y cobro: la barra fija de móvil se oculta cuando ya está en pantalla.
+  const checkoutRef = useRef<HTMLDivElement>(null);
+  const [checkoutVisible, setCheckoutVisible] = useState(false);
+
+  useEffect(() => {
+    const el = checkoutRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setCheckoutVisible(entry?.isIntersecting ?? false), {
+      threshold: 0.25,
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     saleKeyRef.current = null;
@@ -524,11 +659,30 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
     setShowClearConfirm(false);
   }
 
-  const filteredProducts = products.filter((p: Product) =>
-    p.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filteredProducts = products.filter((p: Product) => matchesSearch(p, search));
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Enter en la búsqueda: código de barras exacto (lector USB) o único resultado.
+  function handleSearchEnter() {
+    const product = pickOnEnter(search, filteredProducts, products);
+    if (product) handleProductTap(product);
+    else if (search.trim()) showMessage("error", `Ningún producto coincide con "${search.trim()}".`);
+  }
+
+  /** Avisa cuando ya no hay más unidades: antes el "+" no hacía nada y no decía por qué. */
+  function stockLimitReached(product: Pick<Product, "name" | "stock" | "trackStock">, qtyInCart: number) {
+    if (!product.trackStock || qtyInCart < product.stock) return false;
+    showMessage(
+      "error",
+      product.stock === 0
+        ? `${product.name} no tiene unidades disponibles.`
+        : `Solo hay ${product.stock} ${product.stock === 1 ? "unidad" : "unidades"} de ${product.name}.`,
+    );
+    return true;
+  }
 
   function addToCart(product: Product) {
+    if (stockLimitReached(product, cart.find((i) => i.cartItemId === product.id)?.quantity ?? 0)) return;
     setCart((prev) => {
       const existing = prev.find((i) => i.cartItemId === product.id);
       if (existing) {
@@ -603,6 +757,11 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
   }
 
   function updateQty(cartItemId: string, delta: number) {
+    if (delta > 0) {
+      const line = cart.find((i) => i.cartItemId === cartItemId);
+      const product = products.find((p: Product) => p.id === line?.productId);
+      if (line && product && stockLimitReached(product, line.quantity)) return;
+    }
     setCart((prev) =>
       prev
         .map((i) => {
@@ -653,11 +812,11 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
     createSale.mutate({ ...saleData, saleType: "QUICK" });
   }
 
-  const formatCOP = (v: number) =>
-    v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
   const isPending = createSale.isPending || isSyncing;
 
+  usePosShortcuts(searchRef, () => void confirmSale());
+
+  const cartUnits = cart.reduce((n, i) => n + i.quantity, 0);
   const cartTotalSuffix = cart.length > 0 ? ` · ${formatCOP(total)}` : "";
   let confirmButtonLabel: string;
   if (isPending) {
@@ -694,81 +853,16 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
         <CustomerSelector value={selectedCustomer} onChange={setSelectedCustomer} />
       </div>
 
-      {/* ===== Móvil: todo en una columna, contenido y sin perder de vista el carrito ===== */}
-      <div className="flex flex-col gap-3 pb-4 lg:hidden">
-        <ScanControls
-          search={search}
-          onSearchChange={setSearch}
-          onSingleScan={() => setShowScanner(true)}
-          continuousScan={continuousScan}
-          onToggleContinuousScan={() => setContinuousScan((v) => !v)}
-        />
-        {showScanner && (
-          <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
-        )}
-        {continuousScan && (
-          <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
-        )}
-
-        {/* Carrito — contenido, siempre visible sin bajar hasta el fondo */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="mb-2 flex items-center gap-2">
-            <h2 className="font-semibold text-slate-700 dark:text-slate-200">Carrito</h2>
-            {cart.length > 0 && (
-              <span className="ml-auto text-xs text-slate-500 dark:text-slate-500">
-                guardado automáticamente
-              </span>
-            )}
-          </div>
-          <div className="max-h-48 overflow-y-auto">
-            <CartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
-          </div>
-        </div>
-
-        {/* Total + método de pago — fijo encima del menú inferior, siempre visible */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-          <TotalsAndPayment
-            cart={cart}
-            paymentMethod={paymentMethod}
-            onPaymentMethodChange={setPaymentMethod}
-            creditRequiresCustomer={creditRequiresCustomer}
-            receiptPath={receiptPath}
-            onReceiptPathChange={setReceiptPath}
-            subtotal={subtotal}
-            taxLines={taxLines}
-            total={total}
-            formatCOP={formatCOP}
-            statusMessage={statusMessage}
-            confirmButtonLabel={confirmButtonLabel}
-            onConfirm={confirmSale}
-            isPending={isPending}
-            isOnline={isOnline}
-            showClearConfirm={showClearConfirm}
-            onShowClearConfirm={setShowClearConfirm}
-            onClearCart={clearCart}
-          />
-        </div>
-
-        {/* Productos — contenidos en su propia caja con scroll, no se riegan por toda la pantalla */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="max-h-[42vh] overflow-y-auto">
-            <ProductGrid
-              isLoading={isLoading}
-              filteredProducts={filteredProducts}
-              cart={cart}
-              onProductTap={handleProductTap}
-              formatCOP={formatCOP}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ===== Escritorio: catálogo a la izquierda, carrito y pago a la derecha ===== */}
-      <div className="hidden gap-4 lg:flex">
-        <div className="flex flex-col gap-3 lg:w-3/5">
+      {/* Un solo árbol para todos los tamaños: el escáner (cámara) se monta una sola vez.
+          Móvil: catálogo primero y barra fija para ir a cobrar. Escritorio: catálogo a la
+          izquierda y carrito fijo a la derecha. */}
+      <div className="grid grid-cols-1 gap-3 pb-24 md:grid-cols-[minmax(0,1fr)_19rem] md:items-start md:gap-4 md:pb-0 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="flex min-w-0 flex-col gap-3">
           <ScanControls
             search={search}
             onSearchChange={setSearch}
+            onSearchEnter={handleSearchEnter}
+            searchRef={searchRef}
             onSingleScan={() => setShowScanner(true)}
             continuousScan={continuousScan}
             onToggleContinuousScan={() => setContinuousScan((v) => !v)}
@@ -776,9 +870,13 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
           {showScanner && (
             <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
           )}
-          <div className="max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+          {continuousScan && (
+            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
+          )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:max-h-[calc(100dvh-15rem)] md:overflow-y-auto dark:border-white/10 dark:bg-white/5">
             <ProductGrid
               isLoading={isLoading}
+              hasAnyProducts={products.length > 0}
               filteredProducts={filteredProducts}
               cart={cart}
               onProductTap={handleProductTap}
@@ -787,20 +885,17 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 lg:w-2/5">
-          {continuousScan && (
-            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
-          )}
+        <div ref={checkoutRef} className="flex scroll-mt-20 flex-col gap-3 md:sticky md:top-20">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Carrito</h2>
               {cart.length > 0 && (
-                <span className="ml-auto text-xs text-slate-500 dark:text-slate-500">
+                <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
                   guardado automáticamente
                 </span>
               )}
             </div>
-            <div className="max-h-64 overflow-y-auto">
+            <div className="max-h-[40dvh] overflow-y-auto md:max-h-[calc(100dvh-30rem)] md:min-h-24">
               <CartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
             </div>
             <div className="mt-3">
@@ -828,6 +923,24 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
           </div>
         </div>
       </div>
+
+      {/* Móvil/tablet: acceso fijo al cobro mientras se eligen productos (encima del menú inferior). */}
+      {cart.length > 0 && !checkoutVisible && (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 px-3 pb-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => checkoutRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl bg-violet-600 px-5 text-white shadow-xl shadow-violet-900/30 transition active:scale-[0.98]"
+          >
+            <span className="text-sm font-medium">
+              {cartUnits} {cartUnits === 1 ? "producto" : "productos"}
+            </span>
+            <span className="flex items-center gap-2 text-base font-bold">
+              {formatCOP(total)} · Cobrar
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

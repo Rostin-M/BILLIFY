@@ -44,10 +44,11 @@ export function VentasClient({
 }: Readonly<Props>) {
   const [tab, setTab] = useState<Tab>(initialTab);
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "quick", label: "Venta rápida" },
-    { id: "invoiced", label: "Factura" },
-    { id: "history", label: "Historial" },
+  // La línea pequeña explica la diferencia sin tener que probar cada pestaña.
+  const tabs: { id: Tab; label: string; hint: string }[] = [
+    { id: "quick", label: "Venta rápida", hint: "Sin datos del cliente" },
+    { id: "invoiced", label: "Factura", hint: "Con cliente, PDF y correo" },
+    { id: "history", label: "Historial", hint: "Ventas de hoy" },
   ];
 
   return (
@@ -57,13 +58,17 @@ export function VentasClient({
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition ${
+            aria-pressed={tab === t.id}
+            className={`flex min-h-11 flex-1 flex-col items-center justify-center rounded-lg px-2 py-1.5 text-sm font-medium leading-tight transition sm:px-4 ${
               tab === t.id
                 ? "bg-violet-600 text-white shadow"
                 : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             }`}
           >
             {t.label}
+            <span className={`mt-0.5 hidden text-[11px] font-normal min-[400px]:block ${tab === t.id ? "text-violet-100" : "text-slate-500 dark:text-slate-400"}`}>
+              {t.hint}
+            </span>
           </button>
         ))}
       </div>

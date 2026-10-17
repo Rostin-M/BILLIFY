@@ -88,7 +88,7 @@ function GrantPlanFlow({
       ) : (
         <div role="status" aria-label="Cargando los datos del negocio" className="animate-pulse space-y-6 motion-reduce:animate-none">
           <div className="h-16 rounded-xl bg-slate-200 dark:bg-white/10" />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-3">
             <div className="h-20 rounded-xl bg-slate-200 dark:bg-white/10" />
             <div className="h-20 rounded-xl bg-slate-200 dark:bg-white/10" />
             <div className="h-20 rounded-xl bg-slate-200 dark:bg-white/10" />

@@ -2,7 +2,9 @@ import { type ReactNode } from "react";
 
 import { auth } from "~/server/auth";
 import { loadActiveUser } from "~/server/auth/currentUser";
+import { ActivityBar } from "~/app/_components/ActivityBar";
 import { AppHeader } from "~/app/_components/AppHeader";
+import { ConnectionBanner } from "~/app/_components/ConnectionBanner";
 import { NavShell } from "~/app/_components/NavShell";
 import { BottomNav } from "~/app/_components/BottomNav";
 import { SessionExpiryGuard } from "~/app/_components/SessionExpiryGuard";
@@ -26,7 +28,15 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
   return (
     <>
+      {/* Primer elemento enfocable: con teclado se salta el menú y se va directo al contenido. */}
+      <a
+        href="#contenido"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:bg-violet-700 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Saltar al contenido
+      </a>
       <AppHeader />
+      <ActivityBar />
       <SessionExpiryGuard
         key={user.sessionExpiresAt}
         expiresAt={user.sessionExpiresAt}
@@ -36,6 +46,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
       <NavShell role={user.role}>
         {/* Aviso de prueba, vencimiento o solo lectura (propietario y cajero). */}
         {user.businessId && !user.mustChangePassword && <SubscriptionBanner />}
+        <ConnectionBanner />
         {children}
       </NavShell>
       <BottomNav role={user.role} />

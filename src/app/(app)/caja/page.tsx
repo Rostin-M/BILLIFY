@@ -18,8 +18,12 @@ export default async function CajaPage() {
     select: { name: true, document: true, logoUrl: true },
   });
 
-  void api.cashRegister.getActive.prefetch();
-  if (isOwner) void api.cashRegister.listHistory.prefetch();
+  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
+  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  await Promise.all([
+    api.cashRegister.getActive.prefetch(),
+    isOwner ? api.cashRegister.listHistory.prefetch() : null,
+  ]);
 
   const businessInfo = {
     name: business?.name ?? "",
@@ -30,7 +34,7 @@ export default async function CajaPage() {
   return (
     <HydrateClient>
       <main className="min-h-screen bg-slate-50 dark:bg-slate-950">
-        <div className="mx-auto max-w-2xl space-y-6 px-4 py-6">
+        <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 lg:max-w-6xl">
           <PageLayout title="Caja" subtitle="Apertura, cierre y movimientos de caja" />
           <CashRegisterView isOwner={isOwner} business={businessInfo} />
           {isOwner && <CashHistory business={businessInfo} />}

@@ -4,28 +4,20 @@ import { useState } from "react";
 import { api } from "~/trpc/react";
 import { CashOpenForm } from "./CashOpenForm";
 import { CashDashboard } from "./CashDashboard";
+import { CashCloseForm } from "./CashCloseForm";
 import { SkeletonCashCard } from "~/app/_components/Skeletons";
+import { formatCOP } from "~/lib/format/money";
 
 type Props = { isOwner: boolean; business: { name: string; document: string; logoUrl?: string | null } };
-
-const formatCOP = (v: number) =>
-  v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
 function OtherRegisters({ excludeRegisterId }: Readonly<{ excludeRegisterId?: string }>) {
   const { data: others = [] } = api.cashRegister.listActive.useQuery(undefined, {
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   });
-  const utils = api.useUtils();
+  // Solo el dueño ve esta lista: el arqueo por billetes y monedas sale de su configuración.
+  const { data: settings } = api.business.getSettings.useQuery(undefined, { staleTime: 60_000 });
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-
-  const closeRegister = api.cashRegister.close.useMutation({
-    onSuccess: async () => {
-      setConfirmingId(null);
-      await utils.cashRegister.listActive.invalidate();
-      await utils.cashRegister.getActive.invalidate();
-    },
-  });
 
   const filtered = others.filter((r) => r.id !== excludeRegisterId);
   if (filtered.length === 0) return null;
@@ -38,6 +30,7 @@ function OtherRegisters({ excludeRegisterId }: Readonly<{ excludeRegisterId?: st
       <ul className="mt-3 divide-y divide-slate-100 dark:divide-white/5">
         {filtered.map((r) => {
           const openedTime = new Date(r.openedAt).toLocaleTimeString("es-CO", {
+            timeZone: "America/Bogota",
             hour: "2-digit",
             minute: "2-digit",
           });
@@ -50,10 +43,10 @@ function OtherRegisters({ excludeRegisterId }: Readonly<{ excludeRegisterId?: st
                   <p className="truncate font-medium text-slate-700 dark:text-slate-200">
                     {r.user?.name ?? "Sin nombre"}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Abierta {openedTime} · Fondo inicial {formatCOP(r.openingBalance)}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Balance movimientos: {formatCOP(balance)}
                     {r.manualIncome > 0 && ` · +${formatCOP(r.manualIncome)} entradas`}
                     {r.manualExpense > 0 && ` · −${formatCOP(r.manualExpense)} salidas`}
@@ -69,31 +62,16 @@ function OtherRegisters({ excludeRegisterId }: Readonly<{ excludeRegisterId?: st
                 )}
               </div>
 
+              {/* El dueño cuenta el efectivo de esa caja; el esperado (con ventas) se ve tras contar. */}
               {isConfirming && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm dark:border-red-500/30 dark:bg-red-900/10">
-                  <p className="mb-2 font-medium text-red-700 dark:text-red-300">
-                    ¿Cerrar la caja de {r.user?.name ?? "este empleado"}? Se calcula un saldo final de{" "}
-                    {formatCOP(balance)} y ya no podrá seguir registrando ventas en ella.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => closeRegister.mutate({ registerId: r.id })}
-                      disabled={closeRegister.isPending}
-                      className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {closeRegister.isPending ? "Cerrando..." : "Sí, cerrar caja"}
-                    </button>
-                    <button
-                      onClick={() => setConfirmingId(null)}
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-white dark:border-white/10"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                  {closeRegister.error && (
-                    <p className="mt-2 text-xs text-red-600">{closeRegister.error.message}</p>
-                  )}
-                </div>
+                <CashCloseForm
+                  registerId={r.id}
+                  expected={null}
+                  byDenomination={settings?.cashCountByDenomination ?? false}
+                  ownerName={r.user?.name ?? "este empleado"}
+                  onClosed={() => setConfirmingId(null)}
+                  onCancel={() => setConfirmingId(null)}
+                />
               )}
             </li>
           );
@@ -117,7 +95,7 @@ export function CashRegisterView({ isOwner, business }: Readonly<Props>) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
         <p className="text-base font-medium text-slate-600 dark:text-slate-300">Sin acceso a caja</p>
-        <p className="text-sm text-slate-500 dark:text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           El propietario no te ha habilitado la gestión de caja. Contacta al propietario si necesitas acceso.
         </p>
       </div>

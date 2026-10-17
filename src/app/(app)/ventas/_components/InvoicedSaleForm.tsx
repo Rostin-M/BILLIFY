@@ -7,9 +7,12 @@ import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import type { BusinessInfoForPdf, SaleForPdf } from "~/lib/pdf/FacturaPDF";
 import { CustomerSelector, CONSUMIDOR_FINAL } from "./CustomerSelector";
-import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
-import { ContinuousScanPanel, type ScanResult } from "~/app/_components/ContinuousScanPanel";
+import type { ScanResult } from "~/app/_components/ContinuousScanPanel";
+import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
 import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig } from "~/lib/pricing";
+import { matchesSearch, pickOnEnter, usePosShortcuts } from "./usePosShortcuts";
+import { useDialog } from "~/app/_components/ui/useDialog";
+import { formatCOP } from "~/lib/format/money";
 
 type PaymentMethod = "CASH" | "CARD" | "CREDIT" | "TRANSFER";
 
@@ -18,16 +21,33 @@ const FacturaPdfActions = dynamic(
   { ssr: false, loading: () => <span className="text-xs text-slate-500">Generando PDF…</span> },
 );
 
+// Cámara y lector (@zxing) solo se descargan al abrir el escáner, no con la pantalla.
+const BarcodeScanner = dynamic(() => import("~/app/_components/BarcodeScanner").then((m) => m.BarcodeScanner), {
+  ssr: false,
+});
+const ContinuousScanPanel = dynamic(
+  () => import("~/app/_components/ContinuousScanPanel").then((m) => m.ContinuousScanPanel),
+  { ssr: false },
+);
+
 type SelectedCustomer = { id?: string; name: string; document?: string; email?: string | null; isGuestWithDoc?: boolean };
 
 type CartItem = {
+  /** Solo en líneas de peso o monto libre: cada una es una línea aparte del mismo producto. */
+  cartItemId?: string;
   productId: string;
   name: string;
   price: number;
   quantity: number;
   unit: string;
   taxSlots: number[];
+  weightKg?: number;
+  customAmount?: number;
 };
+
+/** Identificador de la línea (los carritos guardados antes no traen cartItemId). */
+const lineKey = (i: CartItem) => i.cartItemId ?? i.productId;
+const isSpecialLine = (i: CartItem) => i.weightKg != null || i.customAmount != null;
 
 type Product = {
   id: string;
@@ -39,13 +59,15 @@ type Product = {
   category: string | null;
   barcode: string | null;
   taxSlots: number[];
+  openPrice: boolean;
+  soldByWeight: boolean;
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",
   TRANSFER: "Transferencia",
-  CREDIT: "Crédito",
+  CREDIT: "Fiado",
 };
 
 const CART_KEY = "billify_invoice_cart";
@@ -71,18 +93,22 @@ function tileClassName(outOfStock: boolean, inCart: boolean): string {
 function stockLabel(p: Product, outOfStock: boolean): string {
   if (outOfStock) return "Sin stock";
   if (p.trackStock) return `${p.stock} disp.`;
-  return "∞ disp.";
+  return "Sin control de stock";
 }
 
 function ScanControls({
   search,
   onSearchChange,
+  onSearchEnter,
+  searchRef,
   onSingleScan,
   continuousScan,
   onToggleContinuousScan,
 }: Readonly<{
   search: string;
   onSearchChange: (v: string) => void;
+  onSearchEnter: () => void;
+  searchRef: React.RefObject<HTMLInputElement | null>;
   onSingleScan: () => void;
   continuousScan: boolean;
   onToggleContinuousScan: () => void;
@@ -90,11 +116,23 @@ function ScanControls({
   return (
     <div className="flex gap-2">
       <input
+        ref={searchRef}
         type="search"
-        placeholder="Buscar producto..."
+        aria-label="Buscar producto por nombre, categoría o código"
+        aria-keyshortcuts="/ F2"
+        placeholder="Buscar producto o código..."
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            onSearchEnter();
+          } else if (e.key === "Escape" && search) {
+            e.preventDefault();
+            onSearchChange("");
+          }
+        }}
+        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-400"
       />
       <button
         type="button"
@@ -111,7 +149,7 @@ function ScanControls({
         title={continuousScan ? "Detener escaneo continuo" : "Activar escaneo continuo"}
         className={`shrink-0 rounded-xl border px-3.5 py-3 text-base font-semibold shadow-sm transition ${
           continuousScan
-            ? "border-violet-500 bg-violet-600 text-white hover:bg-violet-500"
+            ? "border-violet-500 bg-violet-600 text-white hover:bg-violet-700"
             : "border-violet-300 bg-white text-violet-700 hover:bg-violet-50 dark:border-violet-500/40 dark:bg-white/5 dark:text-violet-300 dark:hover:bg-violet-900/20"
         }`}
       >
@@ -135,32 +173,35 @@ function InvoiceProductGrid({
   formatCOP: (v: number) => string;
 }>) {
   if (statusMessage) {
-    return <p className="text-center text-slate-500 dark:text-slate-500">{statusMessage}</p>;
+    return <p className="text-center text-slate-500 dark:text-slate-400">{statusMessage}</p>;
   }
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-2 xl:grid-cols-3">
       {filteredProducts.map((p) => {
-        const inCart = cart.find((i) => i.productId === p.id);
+        const inCartQty = cart.filter((i) => i.productId === p.id).reduce((n, i) => n + i.quantity, 0);
         const outOfStock = p.trackStock && p.stock === 0;
+        let priceLabel = formatCOP(p.price);
+        if (p.openPrice) priceLabel = "Monto libre";
+        else if (p.soldByWeight) priceLabel = `${formatCOP(p.price)}/kg`;
         return (
           <button
             key={p.id}
             onClick={() => onAdd(p)}
             disabled={outOfStock}
-            className={`flex flex-col rounded-xl border p-3 text-left transition active:scale-95 ${tileClassName(outOfStock, !!inCart)}`}
+            className={`flex flex-col rounded-xl border p-3 text-left transition active:scale-95 ${tileClassName(outOfStock, inCartQty > 0)}`}
           >
             <span className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">
               {p.name}
             </span>
             <span className="mt-1 text-base font-bold text-violet-600 dark:text-violet-400">
-              {formatCOP(p.price)}
+              {priceLabel}
             </span>
-            <span className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-500"}`}>
+            <span className={`mt-1 text-xs ${outOfStock ? "text-red-500" : "text-slate-500 dark:text-slate-400"}`}>
               {stockLabel(p, outOfStock)}
             </span>
-            {inCart && (
+            {inCartQty > 0 && (
               <span className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
-                En factura: {inCart.quantity}
+                En factura: {inCartQty}
               </span>
             )}
           </button>
@@ -177,13 +218,13 @@ function InvoiceCartList({
   formatCOP,
 }: Readonly<{
   cart: CartItem[];
-  onUpdateQty: (productId: string, delta: number) => void;
-  onRemove: (productId: string) => void;
+  onUpdateQty: (key: string, delta: number) => void;
+  onRemove: (key: string) => void;
   formatCOP: (v: number) => string;
 }>) {
   if (cart.length === 0) {
     return (
-      <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-500">
+      <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">
         Toca un producto para agregar a la factura
       </p>
     );
@@ -192,7 +233,7 @@ function InvoiceCartList({
     <ul className="flex flex-col gap-2">
       {cart.map((item) => (
         <li
-          key={item.productId}
+          key={lineKey(item)}
           className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5"
         >
           <div className="min-w-0 flex-1">
@@ -200,28 +241,35 @@ function InvoiceCartList({
               {item.name}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {formatCOP(item.price)} × {item.quantity}
+              {isSpecialLine(item) ? formatCOP(item.price) : `${formatCOP(item.price)} × ${item.quantity}`}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {!isSpecialLine(item) && (
+              <>
+                <button
+                  onClick={() => onUpdateQty(lineKey(item), -1)}
+                  aria-label={`Quitar una unidad de ${item.name}`}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                >
+                  −
+                </button>
+                <span className="w-5 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {item.quantity}
+                </span>
+                <button
+                  onClick={() => onUpdateQty(lineKey(item), 1)}
+                  aria-label={`Agregar una unidad de ${item.name}`}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                >
+                  +
+                </button>
+              </>
+            )}
             <button
-              onClick={() => onUpdateQty(item.productId, -1)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
-            >
-              −
-            </button>
-            <span className="w-5 text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {item.quantity}
-            </span>
-            <button
-              onClick={() => onUpdateQty(item.productId, 1)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-lg text-slate-700 transition hover:bg-slate-300 active:scale-95 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
-            >
-              +
-            </button>
-            <button
-              onClick={() => onRemove(item.productId)}
-              className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+              onClick={() => onRemove(lineKey(item))}
+              aria-label={`Quitar ${item.name}`}
+              className="ml-1 flex h-10 w-10 items-center justify-center rounded-lg text-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
             >
               ×
             </button>
@@ -282,7 +330,8 @@ function FactureBottom({
               <button
                 key={method}
                 onClick={() => onPaymentMethodChange(method)}
-                className={`rounded-lg border px-2 py-2 text-xs font-medium transition ${
+                aria-pressed={paymentMethod === method}
+                className={`min-h-11 rounded-lg border px-2 text-sm font-medium transition ${
                   paymentMethod === method
                     ? "border-violet-400 bg-violet-100 text-violet-700 dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300"
                     : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-transparent dark:text-slate-400 dark:hover:border-white/20"
@@ -298,10 +347,11 @@ function FactureBottom({
       {/* Nota */}
       {cart.length > 0 && (
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-            {paymentMethod === "CREDIT" ? "Nota del crédito (opcional)" : "Nota (opcional)"}
+          <label htmlFor="invoice-note" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+            {paymentMethod === "CREDIT" ? "Nota del fiado (opcional)" : "Nota (opcional)"}
           </label>
           <textarea
+            id="invoice-note"
             value={note}
             onChange={(e) => onNoteChange(e.target.value)}
             rows={2}
@@ -310,7 +360,7 @@ function FactureBottom({
                 ? "Ej: paga el viernes"
                 : "Referencia de pago, observación..."
             }
-            className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900/30"
+            className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-base outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500 sm:text-sm dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-400"
           />
         </div>
       )}
@@ -341,7 +391,7 @@ function FactureBottom({
 
       {/* Error */}
       {errorMessage && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300">
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300">
           {errorMessage}
         </div>
       )}
@@ -349,8 +399,11 @@ function FactureBottom({
       {/* Botón confirmar */}
       <button
         onClick={onConfirm}
+        aria-keyshortcuts="Control+Enter F12"
+        title="Atajo: Ctrl + Enter"
         disabled={cart.length === 0 || creditRequiresCustomer || isPending}
-        className="w-full rounded-2xl bg-violet-600 px-6 py-4 text-lg font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-busy={isPending}
+        className="w-full rounded-2xl bg-violet-600 px-4 py-4 text-base font-bold xl:text-lg text-white shadow-lg transition hover:bg-violet-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {confirmButtonLabel}
       </button>
@@ -366,13 +419,13 @@ function FactureBottom({
               <div className="flex gap-2">
                 <button
                   onClick={onClearCart}
-                  className="flex-1 rounded-lg bg-red-600 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
+                  className="min-h-11 flex-1 rounded-lg bg-red-600 text-sm font-semibold text-white hover:bg-red-700"
                 >
                   Sí, limpiar
                 </button>
                 <button
                   onClick={() => onShowClearConfirm(false)}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10"
+                  className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
                 >
                   Cancelar
                 </button>
@@ -381,7 +434,7 @@ function FactureBottom({
           ) : (
             <button
               onClick={() => onShowClearConfirm(true)}
-              className="text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+              className="min-h-11 text-center text-sm text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400"
             >
               Limpiar factura
             </button>
@@ -409,7 +462,9 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   const [hydrated, setHydrated] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [continuousScan, setContinuousScan] = useState(false);
+  const [specialPrompt, setSpecialPrompt] = useState<{ product: Product; mode: "weight" | "amount" } | null>(null);
   const [completedSale, setCompletedSale] = useState<{ saleId: string; invoiceNumber: string; total: number; customerEmail?: string | null; saleForPdf: SaleForPdf } | null>(null);
+  const doneDialogRef = useDialog(() => setCompletedSale(null), completedSale !== null);
 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(CART_KEY, []));
@@ -442,6 +497,19 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   // Clave de idempotencia de la factura en curso: se reutiliza en reintentos y se descarta
   // cuando cambia el contenido (carrito, cliente, nota o medio de pago).
   const saleKeyRef = useRef<string | null>(null);
+  // Zona de detalle y emisión: la barra fija de móvil se oculta cuando ya está en pantalla.
+  const checkoutRef = useRef<HTMLDivElement>(null);
+  const [checkoutVisible, setCheckoutVisible] = useState(false);
+  useEffect(() => {
+    const el = checkoutRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setCheckoutVisible(entry?.isIntersecting ?? false), {
+      threshold: 0.25,
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     saleKeyRef.current = null;
   }, [cart, selectedCustomer, note, paymentMethod]);
@@ -474,7 +542,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
             : null,
           user: { name: userName },
           items: cartSnapshot.map((i) => ({
-            id: i.productId,
+            id: lineKey(i),
             name: i.name,
             unit: i.unit,
             quantity: i.quantity,
@@ -499,15 +567,27 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     },
   });
 
-  const filteredProducts = products.filter((p: Product) =>
-    p.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filteredProducts = products.filter((p: Product) => matchesSearch(p, search));
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Enter en la búsqueda: código de barras exacto (lector USB) o único resultado.
+  function handleSearchEnter() {
+    const product = pickOnEnter(search, filteredProducts, products);
+    if (product) {
+      handleProductTap(product);
+      setSearch("");
+    } else if (search.trim()) {
+      toast.error(`Ningún producto coincide con "${search.trim()}".`);
+    }
+  }
 
   let catalogStatusMessage: string | null = null;
   if (isLoading) {
     catalogStatusMessage = "Cargando productos...";
+  } else if (products.length === 0) {
+    catalogStatusMessage = "Aún no tienes productos. Agrégalos en Catálogo para poder facturar.";
   } else if (filteredProducts.length === 0) {
-    catalogStatusMessage = "Sin resultados";
+    catalogStatusMessage = "Ningún producto coincide con la búsqueda.";
   }
 
   function clearCart() {
@@ -522,14 +602,25 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     setShowClearConfirm(false);
   }
 
+  /** Avisa cuando ya no hay más unidades (antes el "+" no hacía nada sin explicar). */
+  function stockLimitReached(product: Pick<Product, "name" | "stock" | "trackStock">, qtyInCart: number) {
+    if (!product.trackStock || qtyInCart < product.stock) return false;
+    toast.error(
+      product.stock === 0
+        ? `${product.name} no tiene unidades disponibles.`
+        : `Solo hay ${product.stock} ${product.stock === 1 ? "unidad" : "unidades"} de ${product.name}.`,
+    );
+    return true;
+  }
+
   function addToCart(product: Product) {
+    const inCart = cart.find((i) => i.productId === product.id && !isSpecialLine(i))?.quantity ?? 0;
+    if (stockLimitReached(product, inCart)) return;
     setCart((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
+      const existing = prev.find((i) => i.productId === product.id && !isSpecialLine(i));
       if (existing) {
         if (product.trackStock && existing.quantity >= product.stock) return prev;
-        return prev.map((i) =>
-          i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i,
-        );
+        return prev.map((i) => (i === existing ? { ...i, quantity: i.quantity + 1 } : i));
       }
       if (product.trackStock && product.stock === 0) return prev;
       return [
@@ -539,11 +630,45 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     });
   }
 
+  // Peso y monto libre: igual que en venta rápida, se piden antes de agregar la línea.
+  function addSpecialToCart(product: Product, value: number) {
+    const base = {
+      cartItemId: `${product.id}-${crypto.randomUUID()}`,
+      productId: product.id,
+      quantity: 1,
+      unit: product.unit,
+      taxSlots: product.taxSlots,
+    };
+    if (product.soldByWeight) {
+      const lineTotal = Math.ceil((product.price * value) / 100) * 100;
+      setCart((prev) => [...prev, { ...base, name: `${product.name} (${value} kg)`, price: lineTotal, weightKg: value }]);
+    } else {
+      setCart((prev) => [...prev, { ...base, name: product.name, price: value, customAmount: value }]);
+    }
+    setSpecialPrompt(null);
+  }
+
+  function handleProductTap(product: Product) {
+    if (product.openPrice) {
+      setSpecialPrompt({ product, mode: "amount" });
+      return;
+    }
+    if (product.soldByWeight) {
+      setSpecialPrompt({ product, mode: "weight" });
+      return;
+    }
+    addToCart(product);
+  }
+
   function handleBarcodeDetected(code: string) {
     setShowScanner(false);
     const product = products.find((p: Product) => p.barcode === code);
     if (!product) {
       toast.error(`Ningún producto tiene el código ${code}.`);
+      return;
+    }
+    if (product.openPrice || product.soldByWeight) {
+      handleProductTap(product);
       return;
     }
     addToCart(product);
@@ -553,18 +678,27 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   function handleContinuousScan(code: string): ScanResult {
     const product = products.find((p: Product) => p.barcode === code);
     if (!product) return { ok: false, code };
+    if (product.openPrice || product.soldByWeight) {
+      handleProductTap(product);
+      return { ok: true, name: `${product.name} — confirma el monto/peso` };
+    }
     addToCart(product);
     return { ok: true, name: product.name };
   }
 
-  function updateQty(productId: string, delta: number) {
+  function updateQty(key: string, delta: number) {
+    if (delta > 0) {
+      const line = cart.find((i) => lineKey(i) === key);
+      const product = products.find((p: Product) => p.id === line?.productId);
+      if (line && product && stockLimitReached(product, line.quantity)) return;
+    }
     setCart((prev) =>
       prev
         .map((i) => {
-          if (i.productId !== productId) return i;
+          if (lineKey(i) !== key) return i;
           const newQty = i.quantity + delta;
           if (delta > 0) {
-            const product = products.find((p: Product) => p.id === productId);
+            const product = products.find((p: Product) => p.id === i.productId);
             if (product?.trackStock && newQty > product.stock) return i;
           }
           return { ...i, quantity: newQty };
@@ -573,8 +707,8 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     );
   }
 
-  function removeFromCart(productId: string) {
-    setCart((prev) => prev.filter((i) => i.productId !== productId));
+  function removeFromCart(key: string) {
+    setCart((prev) => prev.filter((i) => lineKey(i) !== key));
   }
 
   const { subtotal, taxLines, total } = computeSaleTotals(cart, taxes, autoTax);
@@ -585,7 +719,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     if (cart.length === 0 || creditRequiresCustomer || createSale.isPending) return;
     saleKeyRef.current ??= crypto.randomUUID();
     createSale.mutate({
-      items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity, weightKg: i.weightKg, customAmount: i.customAmount })),
       saleType: "INVOICED",
       paymentMethod,
       customerId: selectedCustomer?.id,
@@ -594,9 +728,8 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     });
   }
 
-  const formatCOP = (v: number) =>
-    v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
+  const cartUnits = cart.reduce((n, i) => n + i.quantity, 0);
+  usePosShortcuts(searchRef, confirmSale);
   let confirmButtonLabel: string;
   if (createSale.isPending) {
     confirmButtonLabel = "Generando factura...";
@@ -610,12 +743,18 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     <>
       {/* Modal post-emisión */}
       {completedSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
+          <div
+            ref={doneDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invoice-done-title"
+            className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+          >
             <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
               <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <h2 className="mt-3 text-lg font-bold text-slate-800 dark:text-white">
+            <h2 id="invoice-done-title" className="mt-3 text-lg font-bold text-slate-800 dark:text-white">
               Factura emitida
             </h2>
             <p className="mt-1 text-sm font-semibold text-violet-600 dark:text-violet-400">
@@ -627,7 +766,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
 
             <div className="mt-5">
               <p className="mb-3 text-sm font-medium text-slate-600 dark:text-slate-300">
-                ¿Deseas imprimir o descargar la factura?
+                ¿Qué quieres hacer con la factura?
               </p>
               <FacturaPdfActions
                 saleId={completedSale.saleId}
@@ -636,14 +775,15 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
                 fileName={`${completedSale.invoiceNumber}.pdf`}
                 onClose={() => setCompletedSale(null)}
                 defaultEmail={completedSale.customerEmail}
+                hideClose
               />
             </div>
 
             <button
               onClick={() => setCompletedSale(null)}
-              className="mt-4 w-full rounded-xl border border-slate-200 py-2 text-center text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
+              className="mt-4 min-h-11 w-full rounded-xl border border-slate-200 text-center text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
             >
-              Cerrar
+              Listo, nueva venta
             </button>
           </div>
         </div>
@@ -667,78 +807,23 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
         )}
       </div>
 
-      {/* ===== Móvil ===== */}
-      <div className="flex flex-col gap-3 pb-4 lg:hidden">
-        <ScanControls
-          search={search}
-          onSearchChange={setSearch}
-          onSingleScan={() => setShowScanner(true)}
-          continuousScan={continuousScan}
-          onToggleContinuousScan={() => setContinuousScan((v) => !v)}
+      {specialPrompt && (
+        <SpecialItemPrompt
+          product={specialPrompt.product}
+          mode={specialPrompt.mode}
+          onConfirm={(value) => addSpecialToCart(specialPrompt.product, value)}
+          onCancel={() => setSpecialPrompt(null)}
         />
-        {showScanner && (
-          <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
-        )}
-        {continuousScan && (
-          <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
-        )}
+      )}
 
-        {/* Detalle contenido */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
-              FACTURA
-            </span>
-            <h2 className="font-semibold text-slate-700 dark:text-slate-200">Detalle</h2>
-          </div>
-          <div className="max-h-48 overflow-y-auto">
-            <InvoiceCartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
-          </div>
-        </div>
-
-        {/* Total + pago */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-          <FactureBottom
-            cart={cart}
-            paymentMethod={paymentMethod}
-            onPaymentMethodChange={setPaymentMethod}
-            note={note}
-            onNoteChange={setNote}
-            subtotal={subtotal}
-            taxLines={taxLines}
-            total={total}
-            formatCOP={formatCOP}
-            errorMessage={createSale.error?.message}
-            confirmButtonLabel={confirmButtonLabel}
-            onConfirm={confirmSale}
-            isPending={createSale.isPending}
-            creditRequiresCustomer={creditRequiresCustomer}
-            showClearConfirm={showClearConfirm}
-            onShowClearConfirm={setShowClearConfirm}
-            onClearCart={clearCart}
-          />
-        </div>
-
-        {/* Productos contenidos */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="max-h-[42vh] overflow-y-auto">
-            <InvoiceProductGrid
-              statusMessage={catalogStatusMessage}
-              filteredProducts={filteredProducts}
-              cart={cart}
-              onAdd={addToCart}
-              formatCOP={formatCOP}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ===== Escritorio ===== */}
-      <div className="hidden gap-4 lg:flex">
-        <div className="flex flex-col gap-3 lg:w-3/5">
+      {/* Un solo árbol para todos los tamaños: el escáner (cámara) se monta una sola vez. */}
+      <div className="grid grid-cols-1 gap-3 pb-24 md:grid-cols-[minmax(0,1fr)_19rem] md:items-start md:gap-4 md:pb-0 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="flex min-w-0 flex-col gap-3">
           <ScanControls
             search={search}
             onSearchChange={setSearch}
+            onSearchEnter={handleSearchEnter}
+            searchRef={searchRef}
             onSingleScan={() => setShowScanner(true)}
             continuousScan={continuousScan}
             onToggleContinuousScan={() => setContinuousScan((v) => !v)}
@@ -746,21 +831,21 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
           {showScanner && (
             <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
           )}
-          <div className="max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+          {continuousScan && (
+            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
+          )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:max-h-[calc(100dvh-17rem)] md:overflow-y-auto dark:border-white/10 dark:bg-white/5">
             <InvoiceProductGrid
               statusMessage={catalogStatusMessage}
               filteredProducts={filteredProducts}
               cart={cart}
-              onAdd={addToCart}
+              onAdd={handleProductTap}
               formatCOP={formatCOP}
             />
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 lg:w-2/5">
-          {continuousScan && (
-            <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
-          )}
+        <div ref={checkoutRef} className="flex scroll-mt-20 flex-col gap-3 md:sticky md:top-20">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
             <div className="mb-3 flex items-center gap-2">
               <span className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
@@ -768,7 +853,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
               </span>
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Detalle</h2>
             </div>
-            <div className="max-h-64 overflow-y-auto">
+            <div className="max-h-[40dvh] overflow-y-auto md:max-h-[calc(100dvh-34rem)] md:min-h-24">
               <InvoiceCartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
             </div>
             <div className="mt-3">
@@ -795,6 +880,22 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
           </div>
         </div>
       </div>
+
+      {/* Móvil/tablet: acceso fijo a la emisión mientras se eligen productos. */}
+      {cart.length > 0 && !checkoutVisible && (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 px-3 pb-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => checkoutRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl bg-violet-600 px-5 text-white shadow-xl shadow-violet-900/30 transition active:scale-[0.98]"
+          >
+            <span className="text-sm font-medium">
+              {cartUnits} {cartUnits === 1 ? "producto" : "productos"}
+            </span>
+            <span className="text-base font-bold">{formatCOP(total)} · Facturar</span>
+          </button>
+        </div>
+      )}
     </>
   );
 }

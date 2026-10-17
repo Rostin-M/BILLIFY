@@ -3,6 +3,8 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { api } from "~/trpc/react";
+import { formatCOP } from "~/lib/format/money";
+import { cashDifference } from "~/lib/cash/denominations";
 
 const CashHistoryPdfButton = dynamic(
   () => import("~/lib/pdf/CashHistoryPdfButton").then((m) => m.CashHistoryPdfButton),
@@ -18,15 +20,29 @@ function duration(openedAt: Date, closedAt: Date | null) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
+/** Resultado del cuadre: contado vs. esperado. Los cierres anteriores al cuadre no tienen conteo. */
+function CountBadge({ counted, expected }: Readonly<{ counted: number | null; expected: number | null }>) {
+  if (counted === null || expected === null) {
+    return <span className="text-xs text-slate-500 dark:text-slate-400">Sin conteo</span>;
+  }
+  const diff = cashDifference(counted, expected);
+  if (diff === 0) {
+    return <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Cuadró</span>;
+  }
+  return (
+    <span className="text-xs font-semibold text-red-600 dark:text-red-400">
+      {diff < 0 ? "Faltan" : "Sobran"} {formatCOP(Math.abs(diff))}
+    </span>
+  );
+}
+
 export function CashHistory({ business }: Readonly<Props>) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const { data: history = [], isPending } = api.cashRegister.listHistory.useQuery();
 
-  const formatCOP = (v: number) =>
-    v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
   const formatDate = (d: Date) =>
     new Date(d).toLocaleDateString("es-CO", {
+      timeZone: "America/Bogota",
       weekday: "short",
       day: "2-digit",
       month: "short",
@@ -34,24 +50,24 @@ export function CashHistory({ business }: Readonly<Props>) {
     });
 
   const formatTime = (d: Date) =>
-    new Date(d).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+    new Date(d).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5">
       <div className="flex items-center justify-between px-5 py-4">
         <h2 className="font-semibold text-slate-700 dark:text-slate-200">Historial de cierres</h2>
         {!isPending && (
-          <span className="text-xs text-slate-500 dark:text-slate-500">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
             {history.length} {history.length === 1 ? "jornada" : "jornadas"}
           </span>
         )}
       </div>
 
       {isPending && (
-        <p className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-500">Cargando historial...</p>
+        <p className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-400">Cargando historial...</p>
       )}
       {!isPending && history.length === 0 && (
-        <p className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-500">
+        <p className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-400">
           Aún no hay cierres registrados.
         </p>
       )}
@@ -71,7 +87,7 @@ export function CashHistory({ business }: Readonly<Props>) {
                     <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                       {formatDate(entry.openedAt)}
                     </p>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                       {formatTime(entry.openedAt)} → {entry.closedAt ? formatTime(entry.closedAt) : "—"}
                       {" · "}
                       {duration(entry.openedAt, entry.closedAt)}
@@ -82,9 +98,7 @@ export function CashHistory({ business }: Readonly<Props>) {
                     <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
                       {formatCOP(entry.closingBalance ?? 0)}
                     </p>
-                    <p className={`text-xs font-medium ${net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
-                      {net >= 0 ? "+" : ""}{formatCOP(net)}
-                    </p>
+                    <CountBadge counted={entry.countedCash} expected={entry.closingBalance} />
                   </div>
                 </button>
 
@@ -99,25 +113,35 @@ export function CashHistory({ business }: Readonly<Props>) {
                     </div>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                       <div>
-                        <p className="text-xs text-slate-500 dark:text-slate-500">Fondo inicial</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Fondo inicial</p>
                         <p className="font-semibold text-slate-700 dark:text-slate-200">
                           {formatCOP(entry.openingBalance)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 dark:text-slate-500">Saldo al cierre</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Esperado al cierre</p>
                         <p className="font-semibold text-slate-700 dark:text-slate-200">
                           {formatCOP(entry.closingBalance ?? 0)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 dark:text-slate-500">Movimientos</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Efectivo contado</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">
+                          {entry.countedCash === null ? "—" : formatCOP(entry.countedCash)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Cuadre</p>
+                        <CountBadge counted={entry.countedCash} expected={entry.closingBalance} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Movimientos</p>
                         <p className="font-semibold text-slate-700 dark:text-slate-200">
                           {entry._count.movements}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 dark:text-slate-500">Diferencia neta</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Neto de la jornada</p>
                         <p className={`font-bold ${net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                           {net >= 0 ? "+" : ""}{formatCOP(net)}
                         </p>
@@ -125,7 +149,7 @@ export function CashHistory({ business }: Readonly<Props>) {
                     </div>
                     {entry.closingNote && (
                       <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/5">
-                        <p className="text-xs text-slate-500 dark:text-slate-500">Nota de cierre</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Nota de cierre</p>
                         <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-200">
                           {entry.closingNote}
                         </p>

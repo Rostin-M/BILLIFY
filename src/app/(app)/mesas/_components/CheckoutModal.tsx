@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "~/trpc/react";
 import { useSession } from "next-auth/react";
 import { ReceiptPhotoButton } from "~/app/_components/ReceiptPhotoButton";
+import { useDialog } from "~/app/_components/ui/useDialog";
+import { formatCOP as fmt } from "~/lib/format/money";
 
 type Order = { subtotal: number; taxAmount: number; taxLines: unknown; total: number };
 type Guest = { id: string; name: string; description: string | null; orders: Order[] };
@@ -14,10 +16,8 @@ const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",
   TRANSFER: "Transferencia",
-  CREDIT: "Crédito",
+  CREDIT: "Fiado",
 };
-
-const fmt = (v: number) => v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
 type PayGroup = { id: string; guestIds: string[]; paymentMethod: PaymentMethod; invoice: boolean; receiptPath: string | null };
 
@@ -26,7 +26,8 @@ type Props = {
   sessionName: string;
   guests: Guest[];
   onClose: () => void;
-  onSuccess: (msg: string) => void;
+  /** invoicedSaleIds: ventas del cobro que salieron con factura, para mostrarlas al terminar. */
+  onSuccess: (msg: string, invoicedSaleIds: string[]) => void;
 };
 
 function guestTotal(guest: Guest) {
@@ -34,6 +35,7 @@ function guestTotal(guest: Guest) {
 }
 
 export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSuccess }: Readonly<Props>) {
+  const dialogRef = useDialog(onClose);
   const { data: session } = useSession();
   const cashierName = session?.user?.name ?? "Cajero";
 
@@ -60,7 +62,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
     onSuccess: async (data) => {
       await utils.tableSession.listActive.invalidate();
       await utils.sale.list.invalidate();
-      onSuccess(data.message);
+      onSuccess(data.message, data.sales.filter((s) => s.invoiceNumber).map((s) => s.id));
     },
     onError: (e) => setError(e.message),
   });
@@ -180,13 +182,13 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Cobrar ${sessionName}`} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-white/10">
           <div>
             <h2 className="font-semibold text-slate-800 dark:text-white">Cobrar mesa</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {sessionName}
-              <span className="ml-2 text-xs text-violet-500 dark:text-violet-400">· cobra: {cashierName}</span>
+              <span className="ml-2 text-xs text-violet-700 dark:text-violet-300">· cobra: {cashierName}</span>
             </p>
           </div>
           <button
@@ -250,6 +252,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                     {grp && (
                       <div className="ml-7 flex w-full flex-wrap items-center gap-2 sm:ml-0 sm:w-auto">
                         <select
+                          aria-label="Método de pago"
                           value={grp.paymentMethod}
                           onChange={(e) => setMethod(grp.id, e.target.value as PaymentMethod)}
                           className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white"
@@ -302,6 +305,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
                       <p className="text-xs text-slate-500">{fmt(groupTotalAmount(grp))}</p>
                     </div>
                     <select
+                      aria-label="Método de pago"
                       value={grp.paymentMethod}
                       onChange={(e) => setMethod(grp.id, e.target.value as PaymentMethod)}
                       className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800 dark:text-white"
@@ -339,7 +343,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
           {/* Deferred guests */}
           {excludedGuests.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-500">Cobrar más tarde</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Cobrar más tarde</p>
               {excludedGuests.map((guest) => (
                 <div key={guest.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 opacity-60 dark:border-white/5 dark:bg-white/5">
                   <input
@@ -379,7 +383,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
               <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 Mantener clientes en mesa
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Los clientes quedan registrados en la mesa sin pedidos, listos para seguir pidiendo. Podrás cerrar la mesa cuando quieras.
               </p>
             </div>
@@ -393,17 +397,18 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
 
           {error && <p className="text-sm text-red-500">{error}</p>}
 
-          <div className="flex gap-2">
+          <div className="sticky bottom-0 -mx-5 -mb-5 flex gap-2 rounded-b-2xl border-t border-slate-100 bg-white px-5 py-3 dark:border-white/10 dark:bg-slate-900">
             <button
               onClick={confirm}
               disabled={noOrders || checkout.isPending || activeGroups.length === 0}
-              className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-busy={checkout.isPending}
+              className="min-h-12 flex-1 rounded-xl bg-violet-600 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {confirmLabel}
             </button>
             <button
               onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400"
+              className="min-h-12 rounded-xl border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
             >
               Cancelar
             </button>

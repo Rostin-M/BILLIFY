@@ -117,7 +117,7 @@ describe("sale.create", () => {
     const items = [{ productId: product.id, quantity: 1 }];
 
     await expect(caller.sale.create({ items, paymentMethod: "CREDIT" })).rejects.toThrow(
-      "Las ventas a crédito requieren seleccionar un cliente registrado.",
+      "Para fiar una venta, selecciona un cliente registrado.",
     );
     await expect(caller.sale.create({ items, customerId: foreignCustomer.id })).rejects.toMatchObject({
       code: "NOT_FOUND",

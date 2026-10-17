@@ -22,7 +22,7 @@ const TONE_CLASSES: Record<Tone, string> = {
 
 const CTA_CLASSES: Record<Tone, string> = {
   quiet: "text-violet-700 underline underline-offset-2 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100",
-  notice: "rounded-lg bg-violet-600 px-3 py-1 text-white hover:bg-violet-500",
+  notice: "rounded-lg bg-violet-600 px-3 py-1 text-white hover:bg-violet-700",
   warning: "rounded-lg bg-amber-600 px-3 py-1 text-white hover:bg-amber-500",
   danger: "rounded-lg bg-red-600 px-3 py-1 text-white hover:bg-red-500",
 };
@@ -46,7 +46,7 @@ export function bannerFor(status: Status): Banner | null {
         tone: "warning",
         icon: AlertTriangle,
         text: owner
-          ? `Tu plan venció. Te quedan ${days(status.graceDaysLeft)} de gracia.`
+          ? `Tu plan venció. Te quedan ${days(status.graceDaysLeft)} de gracia; después no podrás vender.`
           : `El plan venció. Quedan ${days(status.graceDaysLeft)} de gracia: avísale al propietario.`,
         cta: owner ? "Renovar" : null,
       };

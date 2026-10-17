@@ -63,7 +63,7 @@ export function PlanCards({ plans }: Readonly<{ plans: DisplayPlan[] }>) {
         <p className="text-sm text-slate-600 dark:text-slate-300">Anual: pagas 10 meses y recibes 12.</p>
       </div>
 
-      <ul className="mx-auto mt-10 grid max-w-xl gap-6 lg:max-w-none lg:grid-cols-3 lg:items-stretch">
+      <ul className="mx-auto mt-10 grid max-w-xl gap-6 md:max-w-none md:grid-cols-3 md:items-stretch md:gap-4 lg:gap-6">
         {plans.map((plan) => (
           <li
             key={plan.id}

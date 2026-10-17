@@ -63,12 +63,12 @@ export function PlanFeatureLocked({
       {isOwner ? (
         <Link
           href="/suscripcion"
-          className="mt-5 inline-block rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500"
+          className="mt-5 inline-block rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
         >
           {upgrade ? `Ver el plan ${upgrade.name}` : "Ver planes"}
         </Link>
       ) : (
-        <p className="mt-4 text-xs text-slate-500 dark:text-slate-500">Pídele al propietario que cambie de plan.</p>
+        <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">Pídele al propietario que cambie de plan.</p>
       )}
     </div>
   );

@@ -47,7 +47,7 @@ export function PlanSection() {
           </ul>
           <Link
             href="/suscripcion"
-            className="mt-4 inline-block rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500"
+            className="mt-4 inline-block rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
           >
             Ver planes y pagos
           </Link>

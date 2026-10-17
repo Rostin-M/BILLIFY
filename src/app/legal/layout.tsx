@@ -36,7 +36,7 @@ export default function LegalLayout({ children }: Readonly<{ children: React.Rea
           {children}
         </article>
 
-        <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-500">
+        <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
           <Link href="/" className="underline underline-offset-4 hover:text-slate-600 dark:hover:text-slate-300">
             Volver al inicio
           </Link>

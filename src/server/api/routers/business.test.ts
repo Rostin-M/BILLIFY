@@ -56,6 +56,26 @@ describe("business settings", () => {
     });
   });
 
+  it("guarda el modo de cierre de caja y lo conserva si el cliente no lo envía", async () => {
+    const { owner, business } = await createShop();
+    await setSubscription(business.id, { plan: "PRO" });
+    const caller = callerFor(owner);
+
+    // Por defecto: cierre ciego y sin arqueo por billetes y monedas.
+    await expect(caller.business.getSettings()).resolves.toMatchObject({
+      cashBlindClose: true,
+      cashCountByDenomination: false,
+    });
+
+    await caller.business.updateSettings({ ...settings, cashBlindClose: false, cashCountByDenomination: true });
+    await caller.business.updateSettings(settings);
+
+    await expect(caller.business.getSettings()).resolves.toMatchObject({
+      cashBlindClose: false,
+      cashCountByDenomination: true,
+    });
+  });
+
   it("exige los datos de contacto que se mostrarán en la factura", async () => {
     const { owner } = await createShop();
     const caller = callerFor(owner);

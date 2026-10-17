@@ -1,5 +1,6 @@
 import { BrevoClient } from "@getbrevo/brevo";
 import { env } from "~/env";
+import { escapeHtml, renderEmail, type EmailSpec } from "./emailLayout";
 
 const brevo = new BrevoClient({ apiKey: env.BREVO_API_KEY });
 
@@ -7,19 +8,16 @@ const FROM = { name: "BILLIFY", email: env.SMTP_FROM };
 
 // ─── Saneamiento ────────────────────────────────────────────────────────────
 
-/** Escapa un valor para interpolarlo de forma segura dentro de HTML. */
-export function escapeHtml(value: string | number | null | undefined): string {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+export { escapeHtml };
 
 /** Limpia el asunto: sin saltos de línea (inyección de cabeceras) y máximo 120 caracteres. */
 function safeSubject(value: string): string {
   return value.replace(/[\r\n]+/g, " ").trim().slice(0, 120);
+}
+
+/** Nombre visible del remitente: sin saltos de línea ni comillas y máximo 70 caracteres (límite de Brevo). */
+function safeSenderName(value: string): string {
+  return value.replace(/[\r\n"<>]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 70);
 }
 
 /** Quita las "/" finales sin regex (evita backtracking con entradas largas). */
@@ -37,30 +35,115 @@ export function appBaseUrl(): string | null {
   return vercel ? `https://${vercel}` : null;
 }
 
-export async function sendVerificationCode(to: string, code: string, name: string) {
+/** "Hola Ana," o, si no hay nombre, "Hola,". */
+function greet(name: string | null | undefined): string {
+  const clean = name?.trim();
+  return clean ? `Hola ${clean},` : "Hola,";
+}
+
+/** Pie común de los correos de cuenta: ayuda y por qué llega el correo. */
+function accountFooter(reason: string): string[] {
+  return [`¿Necesitas ayuda? Escríbenos a ${env.SMTP_FROM}.`, reason];
+}
+
+async function send(
+  message: { to: string; subject: string; spec: EmailSpec } & {
+    sender?: { name: string; email: string };
+    replyTo?: { email: string; name?: string };
+    attachment?: { name: string; content: string }[];
+  },
+) {
+  const { html, text } = renderEmail(message.spec);
   await brevo.transactionalEmails.sendTransacEmail({
-    sender: FROM,
-    to: [{ email: to }],
-    subject: safeSubject(`${code} — Código de verificación BILLIFY`),
-    htmlContent: verificationHtml(code, name),
+    sender: message.sender ?? FROM,
+    to: [{ email: message.to }],
+    ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+    subject: safeSubject(message.subject),
+    htmlContent: html,
+    textContent: text,
+    ...(message.attachment ? { attachment: message.attachment } : {}),
+  });
+}
+
+// ─── Cuenta ─────────────────────────────────────────────────────────────────
+
+export async function sendVerificationCode(to: string, code: string, name: string) {
+  await send({
+    to,
+    subject: `${code} — Código de verificación BILLIFY`,
+    spec: {
+      preheader: `Tu código es ${code}. Vence en 15 minutos.`,
+      brand: "BILLIFY",
+      eyebrow: "Verificación de cuenta",
+      title: "Verifica tu correo",
+      greeting: greet(name),
+      blocks: [
+        { kind: "paragraph", content: ["Usa este código para activar tu cuenta de BILLIFY. Vence en ", { strong: "15 minutos" }, "."] },
+        { kind: "code", label: "Tu código de verificación", value: code },
+      ],
+      note: "Si no creaste una cuenta en BILLIFY, ignora este correo: sin este código nadie puede activarla.",
+      footer: accountFooter("Recibes este correo porque se registró una cuenta con esta dirección."),
+    },
   });
 }
 
 export async function sendPasswordReset(to: string, token: string, name: string) {
-  await brevo.transactionalEmails.sendTransacEmail({
-    sender: FROM,
-    to: [{ email: to }],
+  await send({
+    to,
     subject: "Restablecer contraseña — BILLIFY",
-    htmlContent: passwordResetHtml(token, name),
+    spec: {
+      preheader: `Tu código para crear una contraseña nueva es ${token}. Vence en 15 minutos.`,
+      brand: "BILLIFY",
+      eyebrow: "Seguridad de la cuenta",
+      title: "Restablece tu contraseña",
+      greeting: greet(name),
+      blocks: [
+        {
+          kind: "paragraph",
+          content: ["Usa este código para crear una contraseña nueva. Vence en ", { strong: "15 minutos" }, "."],
+        },
+        { kind: "code", label: "Tu código de recuperación", value: token },
+      ],
+      note: "Si no pediste cambiar tu contraseña, ignora este correo: tu contraseña actual sigue funcionando.",
+      footer: accountFooter("Recibes este correo porque alguien pidió restablecer la contraseña de esta cuenta."),
+    },
   });
 }
 
 export async function sendWelcomeEmail(to: string, ownerName: string, businessName: string) {
-  await brevo.transactionalEmails.sendTransacEmail({
-    sender: FROM,
-    to: [{ email: to }],
-    subject: safeSubject(`¡Bienvenido a BILLIFY, ${ownerName}!`),
-    htmlContent: welcomeHtml(ownerName, businessName),
+  const baseUrl = appBaseUrl();
+  await send({
+    to,
+    subject: `Te damos la bienvenida a BILLIFY, ${ownerName}`,
+    spec: {
+      preheader: `${businessName} ya está en BILLIFY. Tres pasos para hacer tu primera venta.`,
+      brand: "BILLIFY",
+      eyebrow: "Tu cuenta está lista",
+      title: `Te damos la bienvenida, ${ownerName}`,
+      greeting: null,
+      blocks: [
+        {
+          kind: "paragraph",
+          content: ["Tu negocio ", { strong: businessName }, " ya está registrado. Para hacer tu primera venta:"],
+        },
+        {
+          kind: "steps",
+          items: [
+            { title: "Agrega tus productos", detail: "Con nombre y precio basta; el resto puedes completarlo después." },
+            { title: "Abre la caja", detail: "Indica con cuánto efectivo empiezas el día." },
+            { title: "Vende", detail: "Desde Punto de venta, toca los productos y confirma la venta." },
+          ],
+        },
+        {
+          kind: "paragraph",
+          content: [
+            "Cuando lo necesites, también puedes emitir facturas en PDF, llevar los fiados de tus clientes y darle acceso a tus cajeros.",
+          ],
+        },
+      ],
+      cta: baseUrl ? { label: "Entrar a BILLIFY", url: `${baseUrl}/auth/login` } : null,
+      footer: accountFooter("Recibes este correo porque acabas de crear una cuenta en BILLIFY."),
+    },
   });
 }
 
@@ -75,32 +158,121 @@ export async function sendEmployeeWelcomeEmail(
   businessName: string,
   loginEmail: string,
 ) {
-  await brevo.transactionalEmails.sendTransacEmail({
-    sender: FROM,
-    to: [{ email: to }],
-    subject: safeSubject(`${ownerName} te ha registrado en ${businessName} — BILLIFY`),
-    htmlContent: employeeWelcomeHtml(employeeName, ownerName, businessName, loginEmail),
+  const baseUrl = appBaseUrl();
+  await send({
+    to,
+    subject: `${ownerName} te ha registrado en ${businessName} — BILLIFY`,
+    spec: {
+      preheader: `Ya tienes acceso a BILLIFY como cajero de ${businessName}.`,
+      brand: "BILLIFY",
+      eyebrow: `Acceso a ${businessName}`,
+      title: "Ya tienes acceso a BILLIFY",
+      greeting: greet(employeeName),
+      blocks: [
+        {
+          kind: "paragraph",
+          content: [{ strong: ownerName }, " te registró como cajero en ", { strong: businessName }, "."],
+        },
+        { kind: "facts", rows: [{ label: "Correo de acceso", value: loginEmail }] },
+        {
+          kind: "callout",
+          content: [
+            ownerName,
+            " te entregará tu contraseña temporal en persona. Al entrar por primera vez tendrás que cambiarla por una tuya.",
+          ],
+        },
+      ],
+      cta: baseUrl ? { label: "Iniciar sesión", url: `${baseUrl}/auth/login` } : null,
+      note: "Si no reconoces este registro, ignora este correo.",
+      footer: accountFooter(`Recibes este correo porque ${ownerName} creó una cuenta de cajero con esta dirección.`),
+    },
   });
 }
+
+// ─── Factura al cliente final ───────────────────────────────────────────────
+
+/** Datos de la venta y del negocio para el cuerpo del correo de factura (todos opcionales). */
+export type InvoiceEmailDetails = {
+  total?: number;
+  issuedAt?: Date;
+  customerName?: string | null;
+  business?: { address?: string | null; phone?: string | null; email?: string | null };
+};
+
+const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+const ISSUED_AT = new Intl.DateTimeFormat("es-CO", {
+  timeZone: "America/Bogota",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+/** Correo simple válido para usarlo como "responder a" (evita cabeceras rotas). */
+const looksLikeEmail = (v: string | null | undefined): v is string =>
+  !!v && v.length <= 254 && /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(v);
 
 export async function sendInvoiceEmail(
   to: string,
   invoiceNumber: string,
   businessName: string,
   pdfBuffer: Buffer,
+  details: InvoiceEmailDetails = {},
 ) {
   // El número de factura también va en el nombre del adjunto: solo caracteres seguros
   const fileNumber = invoiceNumber.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || "factura";
-  await brevo.transactionalEmails.sendTransacEmail({
-    sender: FROM,
-    to: [{ email: to }],
-    subject: safeSubject(`Factura ${invoiceNumber} — ${businessName}`),
-    htmlContent: invoiceHtml(invoiceNumber, businessName),
-    attachment: [
-      { name: `factura-${fileNumber}.pdf`, content: pdfBuffer.toString("base64") },
-    ],
+  const fileName = `Factura-${fileNumber}.pdf`;
+  const customer = details.customerName?.trim();
+  const isNamedCustomer = !!customer && customer.toLowerCase() !== "consumidor final";
+  const contact = details.business ?? {};
+  const replyEmail = contact.email?.trim();
+
+  const facts: { label: string; value: string; emphasis?: boolean }[] = [{ label: "Factura", value: invoiceNumber }];
+  if (details.issuedAt) facts.push({ label: "Fecha", value: ISSUED_AT.format(details.issuedAt) });
+  if (isNamedCustomer) facts.push({ label: "Cliente", value: customer });
+  if (details.total != null) facts.push({ label: "Total", value: COP.format(details.total), emphasis: true });
+
+  const contactLines = [
+    contact.address?.trim(),
+    contact.phone?.trim() ? `Tel. ${contact.phone.trim()}` : null,
+    looksLikeEmail(replyEmail) ? replyEmail : null,
+  ].filter((l): l is string => !!l);
+
+  await send({
+    to,
+    // El cliente reconoce al negocio, no a BILLIFY: el remitente lleva su nombre
+    // y las respuestas le llegan al negocio si tiene correo configurado.
+    sender: { name: safeSenderName(`${businessName} vía BILLIFY`), email: env.SMTP_FROM },
+    replyTo: looksLikeEmail(replyEmail) ? { email: replyEmail, name: safeSenderName(businessName) } : undefined,
+    subject: `Factura ${invoiceNumber} — ${businessName}`,
+    spec: {
+      preheader:
+        details.total != null
+          ? `Factura ${invoiceNumber} por ${COP.format(details.total)}. El PDF va adjunto.`
+          : `Factura ${invoiceNumber}. El PDF va adjunto.`,
+      brand: businessName,
+      eyebrow: "Factura de venta",
+      title: `Tu factura ${invoiceNumber}`,
+      greeting: greet(isNamedCustomer ? customer : null),
+      blocks: [
+        { kind: "paragraph", content: ["Gracias por tu compra en ", { strong: businessName }, ". Este es el resumen:"] },
+        { kind: "facts", rows: facts },
+        { kind: "paragraph", content: ["La factura completa va adjunta en PDF: ", { strong: fileName }, "."] },
+      ],
+      note: replyEmail && looksLikeEmail(replyEmail)
+        ? "¿Tienes alguna pregunta sobre esta compra? Responde a este correo y le llegará al negocio."
+        : undefined,
+      footer: [
+        businessName,
+        ...contactLines,
+        "Factura operativa: no tiene validez tributaria ante la DIAN.",
+        "Enviada con BILLIFY, software de punto de venta.",
+      ],
+    },
+    attachment: [{ name: fileName, content: pdfBuffer.toString("base64") }],
   });
 }
+
+// ─── Suscripción ────────────────────────────────────────────────────────────
 
 /** Aviso de suscripción (recordatorio, vencimiento, pago recibido). Texto plano: se escapa todo. */
 export type SubscriptionEmail = {
@@ -112,261 +284,22 @@ export type SubscriptionEmail = {
 };
 
 export async function sendSubscriptionEmail(to: string, name: string | null, email: SubscriptionEmail) {
-  await brevo.transactionalEmails.sendTransacEmail({
-    sender: FROM,
-    to: [{ email: to }],
-    subject: safeSubject(`${email.subject} — BILLIFY`),
-    htmlContent: subscriptionHtml(name, email),
+  const baseUrl = appBaseUrl();
+  const blocks: EmailSpec["blocks"] = email.paragraphs.map((p) => ({ kind: "paragraph", content: [p] }));
+  if (!baseUrl) blocks.push({ kind: "paragraph", content: ["Entra a BILLIFY y abre ", { strong: "Suscripción" }, "."] });
+
+  await send({
+    to,
+    subject: `${email.subject} — BILLIFY`,
+    spec: {
+      preheader: email.paragraphs[0] ?? email.title,
+      brand: "BILLIFY",
+      eyebrow: "Tu suscripción",
+      title: email.title,
+      greeting: greet(name),
+      blocks,
+      cta: baseUrl ? { label: email.ctaLabel, url: `${baseUrl}/suscripcion` } : null,
+      footer: accountFooter("Recibes este aviso porque administras una cuenta de BILLIFY."),
+    },
   });
-}
-
-// ─── Templates ──────────────────────────────────────────────────────────────
-// Todo valor interpolado pasa por escapeHtml().
-
-function subscriptionHtml(name: string | null, email: SubscriptionEmail) {
-  const baseUrl = appBaseUrl();
-  const cta = baseUrl
-    ? `<a href="${escapeHtml(`${baseUrl}/suscripcion`)}" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px">${escapeHtml(email.ctaLabel)}</a>`
-    : `<p style="margin:0;font-size:14px;color:#e2e8f0">Entra a BILLIFY → Suscripción.</p>`;
-  const body = email.paragraphs
-    .map((p) => `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#94a3b8">${escapeHtml(p)}</p>`)
-    .join("");
-  return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
-    <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden">
-        <tr><td style="background:#7c3aed;padding:24px 32px">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.15em">BILLIFY</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#ddd6fe">Tu suscripción</p>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <p style="margin:0 0 8px;font-size:20px;font-weight:600;color:#f1f5f9">${escapeHtml(email.title)}</p>
-          <p style="margin:0 0 16px;font-size:14px;color:#94a3b8">Hola${name ? ` ${escapeHtml(name)}` : ""},</p>
-          ${body}
-          <div style="margin:24px 0 0">${cta}</div>
-        </td></tr>
-        <tr><td style="padding:16px 32px;border-top:1px solid #334155">
-          <p style="margin:0;font-size:11px;color:#475569;text-align:center">© 2026 BILLIFY · Todos los derechos reservados</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
-
-function verificationHtml(code: string, name: string) {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
-    <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden">
-        <tr><td style="background:#7c3aed;padding:24px 32px">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.15em">BILLIFY</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#ddd6fe">Software de punto de venta</p>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <p style="margin:0 0 8px;font-size:20px;font-weight:600;color:#f1f5f9">Verifica tu correo</p>
-          <p style="margin:0 0 24px;font-size:14px;color:#94a3b8">Hola ${escapeHtml(name)}, usa el código de abajo para activar tu cuenta BILLIFY. Expira en <strong style="color:#e2e8f0">15 minutos</strong>.</p>
-          <div style="background:#0f172a;border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
-            <p style="margin:0;font-size:42px;font-weight:700;color:#7c3aed;letter-spacing:0.3em">${escapeHtml(code)}</p>
-          </div>
-          <p style="margin:0;font-size:12px;color:#64748b">Si no solicitaste este código, ignora este correo.</p>
-        </td></tr>
-        <tr><td style="padding:16px 32px;border-top:1px solid #334155">
-          <p style="margin:0;font-size:11px;color:#475569;text-align:center">© 2026 BILLIFY · Todos los derechos reservados</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
-
-function passwordResetHtml(token: string, name: string) {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
-    <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden">
-        <tr><td style="background:#7c3aed;padding:24px 32px">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.15em">BILLIFY</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#ddd6fe">Software de punto de venta</p>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <p style="margin:0 0 8px;font-size:20px;font-weight:600;color:#f1f5f9">Restablecer contraseña</p>
-          <p style="margin:0 0 24px;font-size:14px;color:#94a3b8">Hola ${escapeHtml(name)}, usa el código de abajo para crear una nueva contraseña. Expira en <strong style="color:#e2e8f0">15 minutos</strong>.</p>
-          <div style="background:#0f172a;border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
-            <p style="margin:0;font-size:42px;font-weight:700;color:#7c3aed;letter-spacing:0.3em">${escapeHtml(token)}</p>
-          </div>
-          <p style="margin:0;font-size:12px;color:#64748b">Si no solicitaste restablecer tu contraseña, ignora este correo.</p>
-        </td></tr>
-        <tr><td style="padding:16px 32px;border-top:1px solid #334155">
-          <p style="margin:0;font-size:11px;color:#475569;text-align:center">© 2026 BILLIFY · Todos los derechos reservados</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
-
-function welcomeHtml(ownerName: string, businessName: string) {
-  const features = [
-    { icon: "⚡", title: "Venta rápida", desc: "Registra ventas cotidianas en segundos, sin datos del cliente ni factura numerada." },
-    { icon: "🧾", title: "Facturación", desc: "Emite facturas numeradas (F-YYYY-NNNNN) con cliente, impuestos y nota. Descarga o imprime el PDF al instante." },
-    { icon: "📋", title: "Historial de ventas", desc: "Consulta todas las ventas del día, descarga facturas en PDF, envíalas por correo y anula ventas con motivo." },
-    { icon: "📦", title: "Productos", desc: "Gestiona tu catálogo con nombre, precio, unidad, categoría y control de stock." },
-    { icon: "👥", title: "Clientes", desc: "Guarda un directorio de clientes con nombre, documento y correo para usar en tus facturas." },
-    { icon: "👤", title: "Empleados", desc: "Registra cajeros con su propio acceso. Actívalos o desactívalos cuando quieras y controla permisos de caja." },
-    { icon: "💰", title: "Caja", desc: "Abre y cierra la caja cada día. Registra entradas y salidas de efectivo con su descripción." },
-    { icon: "📊", title: "Dashboard", desc: "Consulta métricas de ventas, ingresos del período y rendimiento de tu negocio en tiempo real." },
-  ];
-
-  const featureRows = features
-    .map(
-      (f) => `
-    <tr>
-      <td style="padding:12px 0;border-bottom:1px solid #1e293b">
-        <table cellpadding="0" cellspacing="0" width="100%">
-          <tr>
-            <td width="36" valign="top" style="padding-top:2px;font-size:20px">${escapeHtml(f.icon)}</td>
-            <td>
-              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9">${escapeHtml(f.title)}</p>
-              <p style="margin:2px 0 0;font-size:13px;color:#94a3b8">${escapeHtml(f.desc)}</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>`,
-    )
-    .join("");
-
-  return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
-    <tr><td align="center">
-      <table width="520" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden">
-        <tr><td style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:32px">
-          <p style="margin:0;font-size:26px;font-weight:700;color:#fff;letter-spacing:0.15em">BILLIFY</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#ddd6fe">Software de punto de venta</p>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#f1f5f9">¡Bienvenido, ${escapeHtml(ownerName)}!</p>
-          <p style="margin:0 0 24px;font-size:14px;color:#94a3b8">
-            Tu negocio <strong style="color:#e2e8f0">${escapeHtml(businessName)}</strong> ya está registrado en BILLIFY.
-            Aquí tienes un resumen de todo lo que puedes hacer:
-          </p>
-
-          <table width="100%" cellpadding="0" cellspacing="0">
-            ${featureRows}
-          </table>
-
-          <div style="margin-top:28px;background:#0f172a;border-radius:12px;padding:20px;text-align:center">
-            <p style="margin:0 0 4px;font-size:13px;color:#64748b">¿Necesitas ayuda?</p>
-            <p style="margin:0;font-size:13px;color:#94a3b8">Escríbenos a <a href="mailto:${escapeHtml(env.SMTP_FROM)}" style="color:#7c3aed;text-decoration:none">${escapeHtml(env.SMTP_FROM)}</a></p>
-          </div>
-        </td></tr>
-        <tr><td style="padding:16px 32px;border-top:1px solid #334155">
-          <p style="margin:0;font-size:11px;color:#475569;text-align:center">© 2026 BILLIFY · Todos los derechos reservados</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
-
-function employeeWelcomeHtml(
-  employeeName: string,
-  ownerName: string,
-  businessName: string,
-  loginEmail: string,
-) {
-  const baseUrl = appBaseUrl();
-  const loginButton = baseUrl
-    ? `<div style="text-align:center;margin:0 0 20px">
-            <a href="${escapeHtml(`${baseUrl}/auth/login`)}" style="display:inline-block;background:#7c3aed;color:#fff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 24px;border-radius:10px">Iniciar sesión en BILLIFY</a>
-          </div>`
-    : "";
-
-  return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
-    <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden">
-        <tr><td style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:24px 32px">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.15em">BILLIFY</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#ddd6fe">Software de punto de venta</p>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <p style="margin:0 0 8px;font-size:20px;font-weight:600;color:#f1f5f9">Hola, ${escapeHtml(employeeName)}</p>
-          <p style="margin:0 0 24px;font-size:14px;color:#94a3b8">
-            <strong style="color:#e2e8f0">${escapeHtml(ownerName)}</strong> te ha registrado como cajero en
-            <strong style="color:#e2e8f0">${escapeHtml(businessName)}</strong> en BILLIFY.
-          </p>
-
-          <div style="background:#0f172a;border-radius:12px;padding:20px;margin:0 0 20px">
-            <p style="margin:0;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Correo de acceso</p>
-            <p style="margin:4px 0 0;font-size:15px;color:#e2e8f0">${escapeHtml(loginEmail)}</p>
-          </div>
-
-          <div style="background:#1a3a2a;border:1px solid #166534;border-radius:10px;padding:14px 16px;margin:0 0 20px">
-            <p style="margin:0;font-size:13px;color:#86efac">
-              🔒 El propietario te dará tu contraseña temporal. Por seguridad, deberás cambiarla al ingresar por primera vez.
-            </p>
-          </div>
-
-          ${loginButton}
-
-          <p style="margin:0;font-size:12px;color:#64748b">Si no reconoces este registro, ignora este correo.</p>
-        </td></tr>
-        <tr><td style="padding:16px 32px;border-top:1px solid #334155">
-          <p style="margin:0;font-size:11px;color:#475569;text-align:center">© 2026 BILLIFY · Todos los derechos reservados</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
-
-function invoiceHtml(invoiceNumber: string, businessName: string) {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
-    <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden">
-        <tr><td style="background:#7c3aed;padding:24px 32px">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.15em">BILLIFY</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#ddd6fe">Software de punto de venta</p>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <p style="margin:0 0 8px;font-size:20px;font-weight:600;color:#f1f5f9">Tu factura está lista</p>
-          <p style="margin:0 0 24px;font-size:14px;color:#94a3b8">
-            Adjunto encontrarás la factura <strong style="color:#e2e8f0">${escapeHtml(invoiceNumber)}</strong> de <strong style="color:#e2e8f0">${escapeHtml(businessName)}</strong>.
-          </p>
-          <p style="margin:0;font-size:12px;color:#64748b">Este documento es una factura operativa · No tiene validez tributaria ante la DIAN.</p>
-        </td></tr>
-        <tr><td style="padding:16px 32px;border-top:1px solid #334155">
-          <p style="margin:0;font-size:11px;color:#475569;text-align:center">© 2026 BILLIFY · Todos los derechos reservados</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
 }

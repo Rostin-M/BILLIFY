@@ -89,6 +89,7 @@ export function InventarioView() {
       {/* Barra de búsqueda y filtros */}
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
+          aria-label="Buscar producto"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -97,6 +98,7 @@ export function InventarioView() {
         />
         {categories.length > 0 && (
           <select
+            aria-label="Filtrar por categoría"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
@@ -258,7 +260,7 @@ export function InventarioView() {
       </section>
 
       {filtered.length > 0 && (
-        <p className="text-right text-xs text-slate-500 dark:text-slate-500">
+        <p className="text-right text-xs text-slate-500 dark:text-slate-400">
           {filtered.length} producto{filtered.length !== 1 ? "s" : ""} mostrado
           {filtered.length !== 1 ? "s" : ""}
         </p>

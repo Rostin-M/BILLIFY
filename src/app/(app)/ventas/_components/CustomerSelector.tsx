@@ -68,7 +68,7 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
             {value.name}
           </span>
           {value.document && (
-            <span className="ml-2 text-xs text-violet-500 dark:text-violet-400">
+            <span className="ml-2 text-xs text-violet-700 dark:text-violet-300">
               Doc: {value.document}
             </span>
           )}
@@ -91,6 +91,7 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
   return (
     <div ref={containerRef} className="relative">
       <input
+        aria-label="Buscar cliente"
         type="text"
         placeholder="Buscar por nombre o documento..."
         value={query}
@@ -101,7 +102,7 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
           setShowGuestDoc(false);
         }}
         onFocus={() => setOpen(true)}
-        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900/30"
+        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-400"
       />
 
       {open && !showCreate && !showGuestDoc && (
@@ -140,7 +141,7 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
                       {c.alias && <span className="ml-1 font-normal text-slate-500">&quot;{c.alias}&quot;</span>}
                     </span>
                     {(c.document ?? c.phone) && (
-                      <span className="text-xs text-slate-500 dark:text-slate-500">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
                         {[c.document, c.phone].filter(Boolean).join(" · ")}
                       </span>
                     )}
@@ -149,7 +150,7 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
               ))}
             </ul>
           ) : (
-            <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-500">
+            <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
               {noResultsMessage}
             </p>
           )}
@@ -178,12 +179,13 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
             Documento sin registrar
           </p>
           <input
+            aria-label="Número de documento"
             autoFocus
             type="text"
             placeholder="Ej: 1020304050"
             value={guestDoc}
             onChange={(e) => setGuestDoc(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white"
           />
           <div className="mt-2 flex gap-2">
             <button
@@ -217,12 +219,13 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
             Nuevo cliente
           </p>
           <input
+            aria-label="Nombre completo del cliente"
             autoFocus
             type="text"
             placeholder="Nombre completo *"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500"
           />
           {createCustomer.error && (
             <p className="mt-1 text-xs text-red-500">{createCustomer.error.message}</p>
@@ -231,7 +234,8 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
             <button
               onClick={() => createCustomer.mutate({ name: newName })}
               disabled={newName.trim().length < 2 || createCustomer.isPending}
-              className="flex-1 rounded-lg bg-violet-600 py-1.5 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+              aria-busy={createCustomer.isPending}
+              className="flex-1 rounded-lg bg-violet-600 py-1.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
             >
               {createCustomer.isPending ? "Guardando..." : "Guardar"}
             </button>

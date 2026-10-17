@@ -72,7 +72,7 @@ export function PlanPicker({ status }: Readonly<{ status: Status }>) {
         </fieldset>
       </div>
 
-      <ul className="mt-5 grid gap-4 md:grid-cols-3">
+      <ul className="mt-5 grid gap-4 lg:grid-cols-3">
         {PLAN_CODES.map((code) => (
           <PlanCard key={code} code={code} cycle={cycle} status={status} />
         ))}
@@ -140,7 +140,7 @@ function PlanCard({ code, cycle, status }: Readonly<{ code: PlanCode; cycle: Bil
           {cycle === "MONTHLY" ? "/mes" : "/año"}
         </span>
       </p>
-      <p className="mt-0.5 h-4 text-xs text-slate-500 dark:text-slate-500">
+      <p className="mt-0.5 min-h-4 text-xs text-slate-500 dark:text-slate-400">
         {cycle === "ANNUAL" ? `Equivale a ${formatCop(Math.round(price / 12))} al mes` : ""}
       </p>
 
@@ -170,7 +170,7 @@ function PlanCard({ code, cycle, status }: Readonly<{ code: PlanCode; cycle: Bil
               onClick={() => checkout.mutate({ plan: code, cycle })}
               className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 action.enabled && action.emphasis === "primary"
-                  ? "bg-violet-600 text-white hover:bg-violet-500"
+                  ? "bg-violet-600 text-white hover:bg-violet-700"
                   : "border border-slate-300 text-slate-800 hover:bg-slate-50 dark:border-white/15 dark:text-slate-100 dark:hover:bg-white/10"
               }`}
             >

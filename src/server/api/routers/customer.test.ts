@@ -87,7 +87,7 @@ describe("customer.search y list", () => {
     const debtor = await createCustomer(business.id, { name: "Deudor" });
     await createCustomer(business.id, { name: "Al día" });
     await creditSale(owner, product.id, debtor.id, 3);
-    await callerFor(owner).customer.addPayment({ customerId: debtor.id, amount: 5000 });
+    await callerFor(owner).customer.addPayment({ customerId: debtor.id, amount: 5000, paymentMethod: "TRANSFER" });
 
     const list = await callerFor(owner).customer.list();
 
@@ -100,6 +100,7 @@ describe("customer.search y list", () => {
 describe("customer.addPayment, listDebtors e history", () => {
   it("registra abonos hasta saldar la deuda", async () => {
     const { cashier, business } = await createShop();
+    await callerFor(cashier).cashRegister.open({ openingBalance: 0 });
     const product = await createProduct(business.id, { price: 10000, stock: 100 });
     const customer = await createCustomer(business.id, { name: "Rosa" });
     await creditSale(cashier, product.id, customer.id, 2);
@@ -130,6 +131,7 @@ describe("customer.addPayment, listDebtors e history", () => {
 
   it("es idempotente con la misma clave", async () => {
     const { cashier, business } = await createShop();
+    await callerFor(cashier).cashRegister.open({ openingBalance: 0 });
     const product = await createProduct(business.id, { price: 10000 });
     const customer = await createCustomer(business.id, { name: "Luis" });
     await creditSale(cashier, product.id, customer.id);
@@ -141,6 +143,36 @@ describe("customer.addPayment, listDebtors e history", () => {
       message: "Abono registrado. Deuda restante: 6000.",
     });
     await expect(db.customerPayment.count()).resolves.toBe(1);
+  });
+
+  it("el abono en efectivo exige caja abierta; transferencia o tarjeta no", async () => {
+    const { cashier, business } = await createShop();
+    const product = await createProduct(business.id, { price: 10000, stock: 10 });
+    const customer = await createCustomer(business.id, { name: "Rosa" });
+    await creditSale(cashier, product.id, customer.id, 2);
+    const caller = callerFor(cashier);
+
+    await expect(caller.customer.addPayment({ customerId: customer.id, amount: 3000 })).rejects.toThrow(
+      "Abre la caja para recibir abonos en efectivo.",
+    );
+    await expect(
+      caller.customer.addPayment({ customerId: customer.id, amount: 3000, paymentMethod: "TRANSFER" }),
+    ).resolves.toMatchObject({ remainingDebt: 17000 });
+    await expect(db.customerPayment.findFirst()).resolves.toMatchObject({ paymentMethod: "TRANSFER", cashRegisterId: null });
+  });
+
+  it("el abono entra a la caja de quien lo recibe y queda en la auditoría", async () => {
+    const { cashier, business } = await createShop();
+    const { id: registerId } = await callerFor(cashier).cashRegister.open({ openingBalance: 0 });
+    const product = await createProduct(business.id, { price: 10000, stock: 10 });
+    const customer = await createCustomer(business.id, { name: "Rosa" });
+    await creditSale(cashier, product.id, customer.id, 1);
+
+    await callerFor(cashier).customer.addPayment({ customerId: customer.id, amount: 4000, paymentMethod: "CARD" });
+
+    await expect(db.customerPayment.findFirst()).resolves.toMatchObject({ paymentMethod: "CARD", cashRegisterId: registerId });
+    const audit = await db.auditLog.findFirst({ where: { action: "CREATE_CUSTOMER_PAYMENT" } });
+    expect(audit?.detail).toMatchObject({ paymentMethod: "CARD", cashRegisterId: registerId });
   });
 
   it("no opera sobre clientes de otro negocio", async () => {

@@ -73,13 +73,13 @@ async function assertValidCreditGroups(
     if (customerIds.size === 0) {
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message: "Las ventas a crédito requieren un cliente registrado. Identifica al cliente en la mesa antes de cobrar a crédito.",
+        message: "Para fiar, el grupo necesita un cliente registrado. Identifica al cliente en la mesa antes de cobrar.",
       });
     }
     if (customerIds.size > 1 || guestCustomerIds.some((id) => !id)) {
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message: "Todos los clientes del grupo a crédito deben ser el mismo cliente registrado.",
+        message: "Todos los de un grupo fiado deben ser el mismo cliente registrado.",
       });
     }
     const [customerId] = customerIds;

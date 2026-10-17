@@ -137,7 +137,7 @@ export function SessionExpiryGuard({ expiresAt, serverNow, initialHasOpenRegiste
   return (
     <div
       role="alert"
-      className="sticky top-14 z-30 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/90 dark:text-amber-100"
+      className="z-30 flex flex-wrap md:sticky md:top-14 items-center justify-center gap-x-3 gap-y-1.5 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/90 dark:text-amber-100"
     >
       <span className="flex items-center gap-2">
         <AlertTriangle size={16} className="shrink-0 text-amber-600 dark:text-amber-400" />
@@ -148,7 +148,7 @@ export function SessionExpiryGuard({ expiresAt, serverNow, initialHasOpenRegiste
       </span>
       <Link
         href="/caja"
-        className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-500"
+        className="inline-flex min-h-9 items-center rounded-lg bg-amber-600 px-3 text-xs font-semibold text-white transition hover:bg-amber-500"
       >
         Ir a caja
       </Link>

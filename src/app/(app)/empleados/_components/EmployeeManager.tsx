@@ -90,7 +90,7 @@ export function EmployeeManager() {
               setShowForm((v) => !v);
               createEmployee.reset();
             }}
-            className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-500"
+            className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-700"
           >
             {showForm ? "Cancelar" : "+ Nuevo empleado"}
           </button>
@@ -178,7 +178,7 @@ export function EmployeeManager() {
 
             <label className="block space-y-1 text-sm">
               <span className="text-slate-700 dark:text-slate-300">
-                Contraseña temporal <span className="text-slate-400">(opcional)</span>
+                Contraseña temporal <span className="text-slate-500 dark:text-slate-400">(opcional)</span>
               </span>
               <input
                 type="password"
@@ -205,7 +205,8 @@ export function EmployeeManager() {
             <button
               type="submit"
               disabled={createEmployee.isPending}
-              className="w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-busy={createEmployee.isPending}
+              className="w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {createEmployee.isPending ? "Creando..." : "Crear cajero"}
             </button>
@@ -226,13 +227,13 @@ export function EmployeeManager() {
             {employees?.map((emp) => (
               <li
                 key={emp.id}
-                className="flex items-center justify-between gap-3 py-3"
+                className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{emp.name}</p>
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">{emp.email}</p>
                 </div>
-                <div className="flex shrink-0 flex-wrap justify-end items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
                   <button
                     onClick={() => {
                       if (
@@ -244,8 +245,9 @@ export function EmployeeManager() {
                       }
                     }}
                     disabled={resetPassword.isPending}
+                    aria-busy={resetPassword.isPending && resetPassword.variables?.employeeId === emp.id}
                     title="Generar una contraseña temporal nueva"
-                    className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-amber-100 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300"
+                    className="min-h-10 rounded-full bg-slate-100 px-4 text-xs font-medium text-slate-600 transition hover:bg-amber-100 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300"
                   >
                     {emp.mustChangePassword ? "Clave temporal" : "Restablecer clave"}
                   </button>
@@ -257,8 +259,10 @@ export function EmployeeManager() {
                       })
                     }
                     disabled={setCashManagement.isPending}
+                    aria-label={emp.canManageCash ? "Puede abrir y cerrar caja. Toca para quitar el permiso." : "Sin permiso de caja. Toca para darlo."}
+                    aria-busy={setCashManagement.isPending && setCashManagement.variables?.employeeId === emp.id}
                     title={emp.canManageCash ? "Puede gestionar caja — clic para revocar" : "Sin acceso a caja — clic para permitir"}
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`inline-flex min-h-10 items-center gap-1 rounded-full px-4 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       emp.canManageCash
                         ? "bg-violet-100 text-violet-700 hover:bg-slate-100 hover:text-slate-600 dark:bg-violet-500/20 dark:text-violet-300 dark:hover:bg-white/10 dark:hover:text-slate-300"
                         : "bg-slate-100 text-slate-500 hover:bg-violet-100 hover:text-violet-700 dark:bg-white/10 dark:text-slate-400 dark:hover:bg-violet-500/20 dark:hover:text-violet-300"
@@ -273,14 +277,21 @@ export function EmployeeManager() {
                     )}
                   </button>
                   <button
-                    onClick={() =>
-                      setActive.mutate({
-                        employeeId: emp.id,
-                        isActive: !emp.isActive,
-                      })
-                    }
+                    onClick={() => {
+                      // Desactivar saca al cajero de inmediato: se confirma. Activar no.
+                      if (
+                        emp.isActive &&
+                        !window.confirm(`¿Desactivar a ${emp.name ?? "este empleado"}? No podrá entrar hasta que lo actives de nuevo.`)
+                      ) {
+                        return;
+                      }
+                      setActive.mutate({ employeeId: emp.id, isActive: !emp.isActive });
+                    }}
+                    aria-label={`Cuenta ${emp.isActive ? "activa" : "inactiva"}. Toca para ${emp.isActive ? "desactivarla" : "activarla"}.`}
+                    title={emp.isActive ? "Cuenta activa — toca para desactivar" : "Cuenta inactiva — toca para activar"}
                     disabled={setActive.isPending}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                    aria-busy={setActive.isPending && setActive.variables?.employeeId === emp.id}
+                    className={`min-h-10 rounded-full px-4 text-xs font-medium transition ${
                       emp.isActive
                         ? "bg-emerald-100 text-emerald-700 hover:bg-red-100 hover:text-red-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-red-500/20 dark:hover:text-red-300"
                         : "bg-red-100 text-red-700 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300"

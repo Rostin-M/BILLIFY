@@ -1,1020 +1,32 @@
 "use client";
 
-import { Camera } from "lucide-react";
-import { type ChangeEvent, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
-import { api, type RouterOutputs } from "~/trpc/react";
+import { api } from "~/trpc/react";
 import { parseZodError } from "~/lib/parseZodError";
-import { BarcodeScanner } from "~/app/_components/BarcodeScanner";
-import { PlanFeatureLocked, usePlanFeature } from "~/app/_components/subscription/PlanFeatureLocked";
 
-type ProductForm = {
-  name: string;
-  price: string;
-  cost: string;
-  unit: string;
-  taxSlots: number[];
-  stock: string;
-  trackStock: boolean;
-  category: string;
-  lotNumber: string;
-  expiresAt: string;
-  barcode: string;
-  brand: string;
-  presentation: string;
-  openPrice: boolean;
-  soldByWeight: boolean;
-};
-
-type AdjustForm = { quantity: string; note: string };
-
-const emptyForm: ProductForm = {
-  name: "",
-  price: "",
-  cost: "",
-  unit: "und",
-  taxSlots: [],
-  stock: "0",
-  trackStock: true,
-  category: "",
-  lotNumber: "",
-  expiresAt: "",
-  barcode: "",
-  brand: "",
-  presentation: "",
-  openPrice: false,
-  soldByWeight: false,
-};
-
-const emptyAdjust: AdjustForm = { quantity: "", note: "" };
-
-const UNITS = [
-  { value: "und", label: "Unidad (und)" },
-  { value: "kg", label: "Kilogramo (kg)" },
-  { value: "gr", label: "Gramo (gr)" },
-  { value: "litro", label: "Litro" },
-  { value: "ml", label: "Mililitro (ml)" },
-  { value: "shot", label: "Shot" },
-  { value: "paquete", label: "Paquete" },
-  { value: "caja", label: "Caja" },
-  { value: "bolsa", label: "Bolsa" },
-  { value: "docena", label: "Docena" },
-  { value: "porcion", label: "Porción" },
-];
-
-type BusinessTax = { name: string; rate: number; enabled: boolean };
-
-function formatCOP(value: number): string {
-  return value.toLocaleString("es-CO", {
-    style: "currency",
-    currency: "COP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-}
-
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString("es-CO", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function toDateInput(date: Date | null | undefined): string {
-  if (!date) return "";
-  return new Date(date).toISOString().split("T")[0] ?? "";
-}
-
-function todayISOString(): string {
-  const now = new Date();
-  now.setDate(now.getDate() + 1);
-  return now.toISOString().split("T")[0] ?? "";
-}
-
-function parseForm(form: ProductForm) {
-  return {
-    name: form.name,
-    price: Number.parseFloat(form.price),
-    cost: form.cost ? Number.parseFloat(form.cost) : undefined,
-    unit: form.unit,
-    taxSlots: form.taxSlots,
-    stock: Number.parseInt(form.stock, 10) || 0,
-    trackStock: form.trackStock,
-    category: form.category.trim() || undefined,
-    lotNumber: form.lotNumber.trim() || undefined,
-    barcode: form.barcode.trim() || undefined,
-    brand: form.brand.trim() || undefined,
-    presentation: form.presentation.trim() || undefined,
-    openPrice: form.openPrice,
-    soldByWeight: form.soldByWeight,
-    expiresAt: form.expiresAt ? new Date(form.expiresAt) : undefined,
-  };
-}
-
-const REASON_LABELS: Record<string, string> = {
-  MANUAL_ADJUSTMENT: "Ajuste manual",
-  SALE: "Venta",
-  RETURN: "Devolución",
-  CORRECTION: "Corrección",
-};
-
-const INPUT =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900";
-
-const INPUT_ERROR =
-  "w-full rounded-lg border border-red-400 bg-white px-3 py-2 text-sm outline-none ring-red-400 transition focus:ring-2 dark:border-red-500/60 dark:bg-slate-900";
-
-function FieldError({ msg }: Readonly<{ msg?: string }>) {
-  if (!msg) return null;
-  return <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{msg}</p>;
-}
-
-type EnabledTax = { slot: number; name: string; rate: number };
-
-function PriceCalculator({
-  businessTaxes,
-  onApply,
-}: Readonly<{
-  businessTaxes: EnabledTax[];
-  onApply: (price: number, cost: number, taxSlots: number[]) => void;
-}>) {
-  const [cost, setCost] = useState("");
-  const [margin, setMargin] = useState("20");
-  const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
-  const [result, setResult] = useState<{ base: number; taxAmount: number; total: number } | null>(null);
-
-  function toggleSlot(slot: number) {
-    setSelectedSlots((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
-    setResult(null);
-  }
-
-  function calculate() {
-    const costNum = Number.parseFloat(cost);
-    const marginNum = Number.parseFloat(margin);
-    if (Number.isNaN(costNum) || costNum <= 0) return;
-    const base = costNum * (1 + (Number.isNaN(marginNum) ? 0 : marginNum) / 100);
-    const totalRate = businessTaxes
-      .filter((t) => selectedSlots.includes(t.slot))
-      .reduce((sum, t) => sum + t.rate, 0);
-    const taxAmount = base * (totalRate / 100);
-    // Aproxima por encima a la centena más cercana
-    const total = Math.ceil((base + taxAmount) / 100) * 100;
-    setResult({ base, taxAmount, total });
-  }
-
-  function apply() {
-    const costNum = Number.parseFloat(cost);
-    if (Number.isNaN(costNum) || result === null) return;
-    onApply(result.total, costNum, selectedSlots);
-    setCost("");
-    setResult(null);
-  }
-
-  return (
-    <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 dark:border-violet-500/30 dark:bg-violet-900/10">
-      <p className="mb-2 text-xs font-semibold text-violet-700 dark:text-violet-300">
-        Calculadora de precio
-      </p>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="space-y-1 text-xs">
-          <span className="text-slate-600 dark:text-slate-400">Costo (COP)</span>
-          <input
-            type="number"
-            min="0"
-            step="100"
-            value={cost}
-            onChange={(e) => { setCost(e.target.value); setResult(null); }}
-            placeholder="2000"
-            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-violet-400 dark:border-white/15 dark:bg-slate-900"
-          />
-        </label>
-        <label className="space-y-1 text-xs">
-          <span className="text-slate-600 dark:text-slate-400">Margen de ganancia (%)</span>
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={margin}
-            onChange={(e) => { setMargin(e.target.value); setResult(null); }}
-            placeholder="20"
-            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-violet-400 dark:border-white/15 dark:bg-slate-900"
-          />
-        </label>
-      </div>
-
-      <div className="mt-2 space-y-1 text-xs">
-        <span className="text-slate-600 dark:text-slate-400">Impuestos que aplican a este producto</span>
-        {businessTaxes.length === 0 ? (
-          <p className="text-slate-500 dark:text-slate-500">
-            Tu negocio no tiene impuestos configurados en Ajustes.
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {businessTaxes.map((t) => (
-              <button
-                type="button"
-                key={t.slot}
-                onClick={() => toggleSlot(t.slot)}
-                className={`rounded-full border px-2.5 py-1 font-medium transition ${
-                  selectedSlots.includes(t.slot)
-                    ? "border-violet-400 bg-violet-600 text-white"
-                    : "border-violet-200 bg-white text-violet-700 hover:bg-violet-100 dark:border-violet-500/30 dark:bg-transparent dark:text-violet-300"
-                }`}
-              >
-                {t.name} {t.rate}%
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-2 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={calculate}
-          className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/40 dark:bg-transparent dark:text-violet-300 dark:hover:bg-violet-900/20"
-        >
-          Calcular
-        </button>
-        {result !== null && (
-          <button
-            type="button"
-            onClick={apply}
-            className="ml-auto rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-violet-500"
-          >
-            Aplicar al precio
-          </button>
-        )}
-      </div>
-
-      {result !== null && (
-        <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">
-          Base {formatCOP(result.base)}
-          {result.taxAmount > 0 && <> + impuestos {formatCOP(result.taxAmount)}</>}
-          {" "}→ precio de venta{" "}
-          <span className="font-bold">{formatCOP(result.total)}</span>
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ProductFormFields({
-  form,
-  onChange,
-  onCheckChange,
-  onSelectChange,
-  onToggleTaxSlot,
-  onBarcodeScanned,
-  onExclusiveCheckChange,
-  fieldErrors,
-  onApplyCalculator,
-  categories,
-  businessTaxes,
-  produceModuleEnabled,
-}: Readonly<{
-  form: ProductForm;
-  onChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) => void;
-  onCheckChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) => void;
-  onSelectChange: (field: keyof ProductForm) => (e: ChangeEvent<HTMLSelectElement>) => void;
-  onToggleTaxSlot: (slot: number) => void;
-  onBarcodeScanned: (code: string) => void;
-  onExclusiveCheckChange: (field: "openPrice" | "soldByWeight") => (e: ChangeEvent<HTMLInputElement>) => void;
-  fieldErrors: Record<string, string>;
-  onApplyCalculator: (price: number, cost: number, taxSlots: number[]) => void;
-  categories: string[];
-  businessTaxes: EnabledTax[];
-  produceModuleEnabled: boolean;
-}>) {
-  const [showCalc, setShowCalc] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
-  // Lote y vencimiento dependen del plan; sin la función, el servidor los ignora.
-  const hasLots = usePlanFeature("lots");
-
-  return (
-    <div className="space-y-3">
-      {/* Nombre + categoría + unidad */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <label className="space-y-1 text-sm sm:col-span-1">
-          <span className="text-slate-700 dark:text-slate-300">Nombre</span>
-          <input
-            required
-            value={form.name}
-            onChange={onChange("name")}
-            className={fieldErrors.name ? INPUT_ERROR : INPUT}
-            placeholder="Ej: Café americano"
-          />
-          <FieldError msg={fieldErrors.name} />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">
-            Categoría <span className="text-slate-500">(opc.)</span>
-          </span>
-          <input
-            list="category-options"
-            value={form.category}
-            onChange={onChange("category")}
-            className={INPUT}
-            placeholder="Ej: Bebidas calientes"
-          />
-          <datalist id="category-options">
-            {categories.map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">Unidad de venta</span>
-          <select
-            value={form.unit}
-            onChange={onSelectChange("unit")}
-            className={INPUT}
-          >
-            {UNITS.map((u) => (
-              <option key={u.value} value={u.value}>{u.label}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {/* Marca + presentación — ayuda a distinguir el mismo producto en distintas marcas/tamaños */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">
-            Marca <span className="text-slate-500">(opc.)</span>
-          </span>
-          <input
-            value={form.brand}
-            onChange={onChange("brand")}
-            className={INPUT}
-            placeholder="Ej: Diana"
-          />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">
-            Presentación <span className="text-slate-500">(opc.)</span>
-          </span>
-          <input
-            value={form.presentation}
-            onChange={onChange("presentation")}
-            className={INPUT}
-            placeholder="Ej: Libra, Paca x24"
-          />
-        </label>
-      </div>
-
-      {/* Precio + costo */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">
-            {form.soldByWeight ? "Precio por kg (COP)" : "Precio de venta (COP)"} <span className="text-red-500">*</span>
-          </span>
-          <input
-            required
-            type="number"
-            min="1"
-            step="1"
-            value={form.price}
-            onChange={onChange("price")}
-            className={fieldErrors.price ? INPUT_ERROR : INPUT}
-            placeholder="2500"
-          />
-          <FieldError msg={fieldErrors.price} />
-          {form.openPrice && (
-            <p className="text-xs text-slate-500 dark:text-slate-500">
-              Este precio no se usa — en cada venta se pedirá el monto.
-            </p>
-          )}
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-700 dark:text-slate-300">
-            Precio de costo <span className="text-slate-500">(opc.)</span>
-          </span>
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={form.cost}
-            onChange={onChange("cost")}
-            className={INPUT}
-            placeholder="1500"
-          />
-        </label>
-      </div>
-
-      {/* Impuestos del producto — solo los que el negocio tiene configurados */}
-      <div className="space-y-1 text-sm">
-        <span className="text-slate-700 dark:text-slate-300">
-          Impuestos aplicables <span className="text-slate-500">(opc.)</span>
-        </span>
-        {businessTaxes.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500 dark:border-white/15 dark:text-slate-500">
-            Tu negocio no tiene impuestos configurados. Configúralos en Ajustes para poder asignarlos a este producto.
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {businessTaxes.map((t) => (
-              <button
-                type="button"
-                key={t.slot}
-                onClick={() => onToggleTaxSlot(t.slot)}
-                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
-                  form.taxSlots.includes(t.slot)
-                    ? "border-violet-400 bg-violet-600 text-white"
-                    : "border-slate-300 bg-white text-slate-600 hover:border-violet-300 hover:text-violet-700 dark:border-white/15 dark:bg-slate-900 dark:text-slate-300"
-                }`}
-              >
-                {t.name} {t.rate}%
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Calculadora de precio */}
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowCalc((v) => !v)}
-          className="text-xs text-violet-600 underline underline-offset-2 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-200"
-        >
-          {showCalc ? "Ocultar calculadora" : "Calcular precio desde costo + margen + impuestos"}
-        </button>
-        {showCalc && (
-          <div className="mt-2">
-            <PriceCalculator businessTaxes={businessTaxes} onApply={onApplyCalculator} />
-          </div>
-        )}
-      </div>
-
-      {/* Venta especial: monto libre o por peso */}
-      <div className="space-y-2 rounded-xl border border-slate-200 p-3 text-sm dark:border-white/10">
-        <span className="text-slate-700 dark:text-slate-300">Venta especial (opc.)</span>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={form.openPrice}
-            onChange={onExclusiveCheckChange("openPrice")}
-            className="h-4 w-4 rounded accent-violet-600"
-          />
-          <span className="text-slate-700 dark:text-slate-300">
-            Monto libre <span className="text-slate-500">(ej. confites — se pide el monto en cada venta)</span>
-          </span>
-        </label>
-        {produceModuleEnabled && (
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.soldByWeight}
-              onChange={onExclusiveCheckChange("soldByWeight")}
-              className="h-4 w-4 rounded accent-violet-600"
-            />
-            <span className="text-slate-700 dark:text-slate-300">
-              Se vende por peso (kg) <span className="text-slate-500">(ej. frutas y verduras)</span>
-            </span>
-          </label>
-        )}
-      </div>
-
-      {/* Stock */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-2 text-sm">
-          {form.openPrice || form.soldByWeight ? (
-            <p className="text-xs text-slate-500 dark:text-slate-500">
-              Sin control de stock (venta especial)
-            </p>
-          ) : (
-            <>
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={form.trackStock}
-                  onChange={onCheckChange("trackStock")}
-                  className="h-4 w-4 rounded accent-violet-600"
-                />
-                <span className="text-slate-700 dark:text-slate-300">
-                  Controlar stock
-                </span>
-              </label>
-              {form.trackStock && (
-                <div>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={form.stock}
-                    onChange={onChange("stock")}
-                    className={fieldErrors.stock ? INPUT_ERROR : INPUT}
-                    placeholder="0"
-                  />
-                  <FieldError msg={fieldErrors.stock} />
-                </div>
-              )}
-              {!form.trackStock && (
-                <p className="text-xs text-slate-500 dark:text-slate-500">
-                  Sin límite de stock (ej. productos de servicio)
-                </p>
-              )}
-            </>
-          )}
-        </div>
-        {hasLots === false ? (
-          <div className="self-end sm:col-span-2">
-            <PlanFeatureLocked compact feature="lots" title="Lote y fecha de vencimiento" />
-          </div>
-        ) : (
-          <>
-            <label className="space-y-1 text-sm">
-              <span className="text-slate-700 dark:text-slate-300">
-                Lote <span className="text-slate-500">(opc.)</span>
-              </span>
-              <input
-                value={form.lotNumber}
-                onChange={onChange("lotNumber")}
-                className={INPUT}
-                placeholder="Ej: L-2024-001"
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="text-slate-700 dark:text-slate-300">
-                Vencimiento <span className="text-slate-500">(opc.)</span>
-              </span>
-              <input
-                type="date"
-                min={todayISOString()}
-                value={form.expiresAt}
-                onChange={onChange("expiresAt")}
-                className={fieldErrors.expiresAt ? INPUT_ERROR : INPUT}
-              />
-              <FieldError msg={fieldErrors.expiresAt} />
-            </label>
-          </>
-        )}
-      </div>
-
-      {/* Código de barras */}
-      <label className="block space-y-1 text-sm">
-        <span className="text-slate-700 dark:text-slate-300">
-          Código de barras <span className="text-slate-500">(opc.)</span>
-        </span>
-        <div className="flex gap-2">
-          <input
-            value={form.barcode}
-            onChange={onChange("barcode")}
-            className={fieldErrors.barcode ? INPUT_ERROR : INPUT}
-            placeholder="Ej: 7702001234567"
-          />
-          <button
-            type="button"
-            onClick={() => setShowScanner(true)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-50 dark:border-violet-500/40 dark:bg-transparent dark:text-violet-300 dark:hover:bg-violet-900/20"
-          >
-            <Camera className="h-3.5 w-3.5" /> Escanear
-          </button>
-        </div>
-        <FieldError msg={fieldErrors.barcode} />
-      </label>
-
-      {showScanner && (
-        <BarcodeScanner
-          onDetected={(code) => {
-            setShowScanner(false);
-            onBarcodeScanned(code);
-          }}
-          onClose={() => setShowScanner(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-function ProductEditPanel({
-  formProps,
-  formError,
-  isPending,
-  onSubmit,
-  onCancel,
-}: Readonly<{
-  formProps: Parameters<typeof ProductFormFields>[0];
-  formError?: string | null;
-  isPending: boolean;
-  onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void;
-  onCancel: () => void;
-}>) {
-  return (
-    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
-      <form onSubmit={onSubmit} className="space-y-3">
-        <ProductFormFields {...formProps} />
-        {formError && (
-          <p className="text-xs text-red-600 dark:text-red-400">{formError}</p>
-        )}
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="submit"
-            disabled={isPending}
-            className="min-h-11 rounded-lg bg-violet-600 px-3 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
-          >
-            {isPending ? "Guardando..." : "Guardar"}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-          >
-            Cancelar
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function ProductPricePanel({
-  currentPrice,
-  priceForm,
-  onPriceChange,
-  onSubmit,
-  isPending,
-  errorMessage,
-  onCancel,
-}: Readonly<{
-  currentPrice: number;
-  priceForm: string;
-  onPriceChange: (value: string) => void;
-  onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void;
-  isPending: boolean;
-  errorMessage?: string;
-  onCancel: () => void;
-}>) {
-  return (
-    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
-      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-        El cambio quedará registrado con tu nombre y la hora exacta.
-      </p>
-      <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <label className="flex-1 space-y-1 text-sm sm:min-w-40">
-          <span className="text-slate-700 dark:text-slate-300">
-            Nuevo precio (COP)
-          </span>
-          <input
-            required
-            type="number"
-            min="1"
-            step="1"
-            value={priceForm}
-            onChange={(e) => onPriceChange(e.target.value)}
-            className={INPUT}
-            placeholder={String(currentPrice)}
-          />
-        </label>
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={isPending}
-            className="min-h-11 flex-1 rounded-lg bg-violet-600 px-3 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-60 sm:flex-none"
-          >
-            {isPending ? "Guardando..." : "Guardar precio"}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-          >
-            Cancelar
-          </button>
-        </div>
-      </form>
-      {errorMessage && (
-        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
-      )}
-    </div>
-  );
-}
-
-function ProductAdjustPanel({
-  adjustForm,
-  onQuantityChange,
-  onNoteChange,
-  onSubmit,
-  isPending,
-  errorMessage,
-  onCancel,
-}: Readonly<{
-  adjustForm: AdjustForm;
-  onQuantityChange: (value: string) => void;
-  onNoteChange: (value: string) => void;
-  onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void;
-  isPending: boolean;
-  errorMessage?: string;
-  onCancel: () => void;
-}>) {
-  return (
-    <div className="border-t border-slate-100 pb-4 pt-3 dark:border-white/5">
-      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-        Usa número positivo para agregar stock, negativo para reducirlo.
-        Este movimiento queda registrado con tu nombre en el historial.
-      </p>
-      <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <label className="flex-1 space-y-1 text-sm sm:min-w-32">
-          <span className="text-slate-700 dark:text-slate-300">
-            Cantidad (+/-)
-          </span>
-          <input
-            required
-            type="number"
-            value={adjustForm.quantity}
-            onChange={(e) => onQuantityChange(e.target.value)}
-            className={INPUT}
-            placeholder="Ej: 10 o -3"
-          />
-        </label>
-        <label className="space-y-1 text-sm sm:min-w-48 sm:flex-[2]">
-          <span className="text-slate-700 dark:text-slate-300">
-            Motivo <span className="text-slate-500">(opc.)</span>
-          </span>
-          <input
-            value={adjustForm.note}
-            onChange={(e) => onNoteChange(e.target.value)}
-            className={INPUT}
-            placeholder="Ej: Recepción de pedido"
-          />
-        </label>
-        <div className="flex gap-2 sm:items-end">
-          <button
-            type="submit"
-            disabled={isPending}
-            className="min-h-11 flex-1 rounded-lg bg-amber-500 px-3 text-sm font-medium text-white transition hover:bg-amber-400 disabled:opacity-60 sm:flex-none"
-          >
-            {isPending ? "Ajustando..." : "Aplicar ajuste"}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-          >
-            Cancelar
-          </button>
-        </div>
-      </form>
-      {errorMessage && (
-        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
-      )}
-    </div>
-  );
-}
-
-type ProductListItem = NonNullable<RouterOutputs["product"]["list"]>[number];
-
-function ProductBadges({ product }: Readonly<{ product: ProductListItem }>) {
-  return (
-    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-      <span
-        className={`inline-block rounded-full px-1.5 py-0.5 text-xs font-medium ${
-          product.isActive
-            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
-            : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-        }`}
-      >
-        {product.isActive ? "Activo" : "Inactivo"}
-      </span>
-      {!product.trackStock && (
-        <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">
-          Sin control stock
-        </span>
-      )}
-      {product.openPrice && (
-        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
-          Monto libre
-        </span>
-      )}
-      {product.soldByWeight && (
-        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
-          Por peso
-        </span>
-      )}
-      {product.category && (
-        <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-xs text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
-          {product.category}
-        </span>
-      )}
-      <span className="text-xs text-slate-500 dark:text-slate-500">
-        {product.unit}
-      </span>
-    </div>
-  );
-}
-
-function ProductRowActions({
-  product,
-  userRole,
-  canEditPrices,
-  activeRow,
-  openRow,
-  setActive,
-}: Readonly<{
-  product: ProductListItem;
-  userRole: "OWNER" | "CASHIER";
-  canEditPrices: boolean;
-  activeRow: { id: string; mode: RowMode } | null;
-  openRow: (id: string, mode: RowMode, product?: ProductListItem) => void;
-  setActive: { mutate: (input: { productId: string; isActive: boolean }) => void; isPending: boolean };
-}>) {
-  const isRowMode = (mode: RowMode) => activeRow?.id === product.id && activeRow.mode === mode;
-  return (
-    <div className="col-span-12 flex flex-wrap gap-1.5 pt-1 sm:col-span-5 sm:justify-end sm:pt-0.5">
-      {/* OWNER: edición completa */}
-      {userRole === "OWNER" && (
-        <button
-          type="button"
-          onClick={() => openRow(product.id, "edit", product)}
-          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-            isRowMode("edit")
-              ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300"
-              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-          }`}
-        >
-          Editar
-        </button>
-      )}
-
-      {/* CASHIER: solo actualizar precio, si el propietario lo habilitó */}
-      {userRole === "CASHIER" && canEditPrices && (
-        <button
-          type="button"
-          onClick={() => openRow(product.id, "price", product)}
-          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-            isRowMode("price")
-              ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300"
-              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-          }`}
-        >
-          Precio
-        </button>
-      )}
-
-      {/* Ajustar stock — ambos roles */}
-      {product.trackStock && (
-        <button
-          type="button"
-          onClick={() => openRow(product.id, "adjust")}
-          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-            isRowMode("adjust")
-              ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-              : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-          }`}
-        >
-          Ajustar
-        </button>
-      )}
-
-      {/* Historial — ambos roles */}
-      <button
-        type="button"
-        onClick={() => openRow(product.id, "history")}
-        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-          isRowMode("history")
-            ? "border-slate-400 bg-slate-100 text-slate-700 dark:border-white/30 dark:bg-white/15 dark:text-slate-200"
-            : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-        }`}
-      >
-        Historial
-      </button>
-
-      {/* Activar/Desactivar — solo OWNER */}
-      {userRole === "OWNER" && (
-        <button
-          type="button"
-          onClick={() => setActive.mutate({ productId: product.id, isActive: !product.isActive })}
-          disabled={setActive.isPending}
-          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-            product.isActive
-              ? "bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
-              : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
-          }`}
-        >
-          {product.isActive ? "Desactivar" : "Activar"}
-        </button>
-      )}
-    </div>
-  );
-}
-
-type RowMode = "view" | "edit" | "price" | "adjust" | "history";
-
-type MovementsQuery = { isLoading: boolean; isError: boolean; data: RouterOutputs["product"]["listMovements"] | undefined };
-type SalesQuery = { isLoading: boolean; isError: boolean; data: RouterOutputs["product"]["listProductSales"] | undefined };
-
-function MovementsHistory({ movementsQuery }: Readonly<{ movementsQuery: MovementsQuery }>) {
-  if (!movementsQuery.data || movementsQuery.data.length === 0) {
-    return <p className="text-xs text-slate-500 dark:text-slate-400">Sin movimientos registrados todavía.</p>;
-  }
-  return (
-    <ul className="space-y-0.5">
-      {movementsQuery.data.slice(0, 10).map((m, i) => (
-        <li
-          key={m.id}
-          className={`flex items-start justify-between gap-4 rounded px-2 py-1.5 text-xs ${
-            i % 2 === 0 ? "bg-slate-50 dark:bg-white/5" : "bg-white dark:bg-transparent"
-          }`}
-        >
-          <div className="min-w-0">
-            <span
-              className={`font-medium tabular-nums ${
-                m.quantity > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-              }`}
-            >
-              {m.quantity > 0 ? "+" : ""}
-              {m.quantity}
-            </span>
-            <span className="ml-2 text-slate-500 dark:text-slate-400">
-              {REASON_LABELS[m.reason] ?? m.reason}
-            </span>
-            {m.note && (
-              <span className="ml-1 text-slate-500 dark:text-slate-500">
-                — {m.note}
-              </span>
-            )}
-            <span className="ml-2 text-slate-500 dark:text-slate-500">
-              por {m.user.name ?? "sistema"}
-            </span>
-          </div>
-          <div className="shrink-0 text-right text-slate-500 dark:text-slate-500">
-            <p>Stock: {m.stockAfter}</p>
-            <p>{new Date(m.createdAt).toLocaleDateString("es-CO")}</p>
-            <p>
-              {new Date(m.createdAt).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
-            </p>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function SalesHistoryList({ salesQuery }: Readonly<{ salesQuery: SalesQuery }>) {
-  if (!salesQuery.data || salesQuery.data.length === 0) {
-    return <p className="text-xs text-slate-500 dark:text-slate-400">Sin ventas registradas todavía.</p>;
-  }
-  return (
-    <ul className="space-y-0.5">
-      {salesQuery.data.slice(0, 10).map((item, i) => (
-        <li
-          key={item.id}
-          className={`flex items-start justify-between gap-4 rounded px-2 py-1.5 text-xs ${
-            i % 2 === 0 ? "bg-slate-50 dark:bg-white/5" : "bg-white dark:bg-transparent"
-          }`}
-        >
-          <div className="min-w-0">
-            <span className="font-medium tabular-nums text-red-600 dark:text-red-400">
-              -{item.quantity}
-            </span>
-            <span className="ml-2 text-slate-500 dark:text-slate-400">
-              Venta
-            </span>
-            {item.sale.invoiceNumber && (
-              <span className="ml-1 text-slate-500 dark:text-slate-500">
-                — {item.sale.invoiceNumber}
-              </span>
-            )}
-            <span className="ml-2 text-slate-500 dark:text-slate-500">
-              por {item.sale.user.name ?? "sistema"}
-            </span>
-          </div>
-          <div className="shrink-0 text-right text-slate-500 dark:text-slate-500">
-            <p>${item.price.toLocaleString("es-CO")}</p>
-            <p>{new Date(item.sale.createdAt).toLocaleDateString("es-CO")}</p>
-            <p>
-              {new Date(item.sale.createdAt).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
-            </p>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-// Reemplaza la cadena de 5 ternarios anidados que había aquí (cargando / error / con-stock / sin-stock,
-// cada uno con su propio "vacío o lista") por una serie de retornos tempranos, mucho más legible.
-function ProductHistoryPanel({
-  trackStock,
-  movementsQuery,
-  salesQuery,
-}: Readonly<{ trackStock: boolean; movementsQuery: MovementsQuery; salesQuery: SalesQuery }>) {
-  const query = trackStock ? movementsQuery : salesQuery;
-
-  if (query.isLoading) {
-    return <p className="text-xs text-slate-500 dark:text-slate-400">Cargando historial...</p>;
-  }
-  if (query.isError) {
-    return <p className="text-xs text-red-500 dark:text-red-400">No se pudo cargar el historial. Intenta de nuevo.</p>;
-  }
-  if (trackStock) {
-    return <MovementsHistory movementsQuery={movementsQuery} />;
-  }
-  return <SalesHistoryList salesQuery={salesQuery} />;
-}
+import { ProductHistoryPanel } from "./ProductHistory";
+import { ProductFormFields } from "./ProductFormFields";
+import { ProductAdjustPanel, ProductEditPanel, ProductPricePanel } from "./ProductPanels";
+import { ProductBadges, ProductRowActions, type RowMode } from "./ProductRow";
+import {
+  type AdjustForm,
+  type BusinessTax,
+  type EnabledTax,
+  emptyAdjust,
+  emptyForm,
+  formatCOP,
+  formatDate,
+  makeChangeHandler,
+  makeCheckHandler,
+  makeExclusiveCheckHandler,
+  makeSelectHandler,
+  makeToggleTaxSlotHandler,
+  type ProductForm,
+  parseForm,
+  toDateInput,
+} from "./productForm";
 
 export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CASHIER" }>) {
   const utils = api.useUtils();
@@ -1096,8 +108,10 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onError: (err, __, ctx) => {
+      // Se revierte el cambio optimista y se avisa: antes volvía al valor anterior sin decir nada.
       utils.product.list.setData(undefined, ctx?.prev);
+      toast.error(`No se guardó el cambio: ${err.message}`);
     },
     onSuccess: async (data) => {
       toast.success(data.message);
@@ -1115,8 +129,10 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onError: (err, __, ctx) => {
+      // Se revierte el cambio optimista y se avisa: antes volvía al valor anterior sin decir nada.
       utils.product.list.setData(undefined, ctx?.prev);
+      toast.error(`No se guardó el cambio: ${err.message}`);
     },
     onSuccess: async (data) => {
       toast.success(data.message);
@@ -1137,8 +153,10 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onError: (err, __, ctx) => {
+      // Se revierte el cambio optimista y se avisa: antes volvía al valor anterior sin decir nada.
       utils.product.list.setData(undefined, ctx?.prev);
+      toast.error(`No se guardó el cambio: ${err.message}`);
     },
     onSuccess: async (data) => {
       toast.success(data.message);
@@ -1157,51 +175,15 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       );
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onError: (err, __, ctx) => {
+      // Se revierte el cambio optimista y se avisa: antes volvía al valor anterior sin decir nada.
       utils.product.list.setData(undefined, ctx?.prev);
+      toast.error(`No se guardó el cambio: ${err.message}`);
     },
     onSuccess: async () => {
       await utils.product.list.invalidate();
     },
   });
-
-  function makeChangeHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
-    return (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) =>
-      setter((prev) => ({ ...prev, [field]: e.target.value }));
-  }
-
-  function makeCheckHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
-    return (field: keyof ProductForm) => (e: ChangeEvent<HTMLInputElement>) =>
-      setter((prev) => ({ ...prev, [field]: e.target.checked }));
-  }
-
-  function makeSelectHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
-    return (field: keyof ProductForm) => (e: ChangeEvent<HTMLSelectElement>) =>
-      setter((prev) => ({ ...prev, [field]: e.target.value }));
-  }
-
-  // "Monto libre" y "Se vende por peso" son mutuamente excluyentes — activar uno desactiva el otro.
-  function makeExclusiveCheckHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
-    return (field: "openPrice" | "soldByWeight") => (e: ChangeEvent<HTMLInputElement>) => {
-      const checked = e.target.checked;
-      setter((prev) => {
-        if (field === "openPrice") {
-          return { ...prev, openPrice: checked, soldByWeight: checked ? false : prev.soldByWeight };
-        }
-        return { ...prev, soldByWeight: checked, openPrice: checked ? false : prev.openPrice };
-      });
-    };
-  }
-
-  function makeToggleTaxSlotHandler(setter: React.Dispatch<React.SetStateAction<ProductForm>>) {
-    return (slot: number) =>
-      setter((prev) => ({
-        ...prev,
-        taxSlots: prev.taxSlots.includes(slot)
-          ? prev.taxSlots.filter((s) => s !== slot)
-          : [...prev.taxSlots, slot],
-      }));
-  }
 
   const openRow = (
     id: string,
@@ -1300,9 +282,9 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
 
   let listStatusMessage: string | null = null;
   if (loadingList) {
-    listStatusMessage = "Cargando productos...";
+    listStatusMessage = "Cargando productos…";
   } else if (products?.length === 0) {
-    listStatusMessage = "No hay productos registrados todavía.";
+    listStatusMessage = "Aún no tienes productos. Crea el primero con el formulario de arriba.";
   } else if (filteredProducts?.length === 0) {
     listStatusMessage = `Ningún producto coincide con "${search}".`;
   }
@@ -1320,7 +302,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                 setShowCreate((v) => !v);
                 createProduct.reset();
               }}
-              className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-500"
+              className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-700"
             >
               {showCreate ? "Cancelar" : "+ Nuevo producto"}
             </button>
@@ -1331,11 +313,12 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
         {products && products.length > 0 && (
           <div className="mb-4">
             <input
+              aria-label="Buscar producto"
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar producto por nombre..."
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-900"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-400"
             />
           </div>
         )}
@@ -1378,7 +361,8 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
             <button
               type="submit"
               disabled={createProduct.isPending}
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-busy={createProduct.isPending}
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {createProduct.isPending ? "Creando..." : "Crear producto"}
             </button>
@@ -1387,7 +371,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
 
         {/* Lista */}
         {listStatusMessage ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">{listStatusMessage}</p>
+          <p role="status" className="text-sm text-slate-500 dark:text-slate-400">{listStatusMessage}</p>
         ) : (
           <>
             <div className="mb-1 hidden grid-cols-12 gap-2 px-1 text-xs font-medium text-slate-500 sm:grid dark:text-slate-400">
@@ -1405,7 +389,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                     <div className="col-span-12 min-w-0 sm:col-span-4">
                       <p className="truncate text-sm font-medium">{product.name}</p>
                       {(product.brand ?? product.presentation) && (
-                        <p className="truncate text-xs text-slate-500 dark:text-slate-500">
+                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                           {[product.brand, product.presentation].filter(Boolean).join(" · ")}
                         </p>
                       )}
@@ -1425,12 +409,13 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                       <p className="text-sm tabular-nums">{formatCOP(product.price)}</p>
                       {/* Costo: solo visible para OWNER */}
                       {userRole === "OWNER" && product.cost != null && (
-                        <p className="text-xs text-slate-500 dark:text-slate-500">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
                           Costo: {formatCOP(product.cost)}
                         </p>
                       )}
                     </div>
                     <p className="col-span-5 pt-0.5 text-sm tabular-nums sm:col-span-1 sm:text-right">
+                      <span className="text-xs text-slate-500 sm:hidden dark:text-slate-400">Stock: </span>
                       {product.trackStock ? product.stock : "∞"}
                     </p>
 

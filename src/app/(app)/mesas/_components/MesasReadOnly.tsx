@@ -6,6 +6,7 @@ import { useState } from "react";
 import { type PlanCode } from "~/lib/subscription/catalog";
 import { PlanExpiredScreen } from "~/app/_components/subscription/PlanExpiredScreen";
 import { api } from "~/trpc/react";
+import type { BusinessInfoForPdf } from "~/lib/pdf/FacturaPDF";
 import { MesasClient } from "./MesasClient";
 
 type Business = { name: string; document: string; logoUrl?: string | null };
@@ -16,9 +17,10 @@ type Business = { name: string; document: string; logoUrl?: string | null };
  */
 export function MesasReadOnly({
   business,
+  invoiceBusiness,
   isOwner,
   plan,
-}: Readonly<{ business: Business; isOwner: boolean; plan: PlanCode }>) {
+}: Readonly<{ business: Business; invoiceBusiness: BusinessInfoForPdf; isOwner: boolean; plan: PlanCode }>) {
   const [showOpen, setShowOpen] = useState(false);
   const { data: sessions = [] } = api.tableSession.listActive.useQuery();
   const openCount = sessions.length;
@@ -36,7 +38,7 @@ export function MesasReadOnly({
             Volver
           </button>
         </div>
-        <MesasClient business={business} />
+        <MesasClient business={business} invoiceBusiness={invoiceBusiness} />
       </div>
     );
   }

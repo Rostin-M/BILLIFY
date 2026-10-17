@@ -38,7 +38,7 @@ function MeterRow({ meter }: Readonly<{ meter: Meter }>) {
           <div className={`h-full rounded-full ${barColor(pct)}`} style={{ width: `${Math.max(pct, meter.used > 0 ? 2 : 0)}%` }} />
         )}
       </div>
-      {meter.hint && <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">{meter.hint}</p>}
+      {meter.hint && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{meter.hint}</p>}
     </li>
   );
 }

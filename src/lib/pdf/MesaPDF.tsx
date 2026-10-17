@@ -1,4 +1,5 @@
 import { Document, Image, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { formatCOP as fmt } from "~/lib/format/money";
 
 const s = StyleSheet.create({
   page: { fontSize: 10, paddingVertical: 40, paddingHorizontal: 44, fontFamily: "Helvetica", color: "#1e293b" },
@@ -37,9 +38,6 @@ const s = StyleSheet.create({
   footerLine: { fontSize: 7.5, color: "#94a3b8", marginBottom: 2, textAlign: "center" },
   footerCopy: { fontSize: 7, color: "#cbd5e1", marginTop: 2, textAlign: "center" },
 });
-
-const fmt = (v: number) =>
-  v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
 const fmtDate = (d: Date | string) =>
   new Date(d).toLocaleDateString("es-CO", {

@@ -8,6 +8,164 @@
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Design tokens de la app (claro / oscuro). Nombres por ROL, no por color:
+   bg-surface, text-fg-muted, border-line, bg-primary, ring-focus…
+   Los componentes nuevos usan estos tokens; los existentes migran poco a poco
+   desde las clases slate-* / violet-* equivalentes (mismos valores).
+
+   Breakpoints (los de Tailwind, con un uso fijo):
+     sm  640  → solo densidad y espaciado
+     md  768  → cambia el shell (barra inferior ↔ menú lateral)
+     lg 1024  → layouts de 2 columnas (POS, factura) y menú lateral expandido
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --canvas: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --fg: #0f172a;
+  --fg-muted: #475569;
+  --fg-subtle: #64748b; /* mínimo para texto pequeño sobre blanco (4.8:1) */
+  --primary: #7c3aed;
+  --primary-hover: #6d28d9; /* hover más oscuro: el texto blanco no pierde contraste */
+  --primary-soft: #f5f3ff;
+  --primary-text: #6d28d9;
+  --success: #059669;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --focus: #6d28d9;
+}
+.dark {
+  --canvas: #020617;
+  --surface: rgb(255 255 255 / 0.05);
+  --surface-2: rgb(255 255 255 / 0.1);
+  --line: rgb(255 255 255 / 0.1);
+  --line-strong: rgb(255 255 255 / 0.15);
+  --fg: #ffffff;
+  --fg-muted: #cbd5e1;
+  --fg-subtle: #94a3b8; /* en oscuro nunca más tenue que slate-400 (7:1) */
+  --primary: #7c3aed;
+  --primary-hover: #6d28d9;
+  --primary-soft: rgb(139 92 246 / 0.15);
+  --primary-text: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --focus: #a78bfa;
+}
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-text: var(--primary-text);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-focus: var(--focus);
+}
+@theme {
+  --radius-control: 0.5rem; /* inputs y botones compactos */
+  --radius-touch: 0.75rem; /* botones táctiles */
+  --radius-card: 1rem; /* tarjetas y modales */
+}
+
+/* Foco visible para teclado en toda la app (admin y landing tienen el suyo, más específico).
+   :where() no suma especificidad, así que cualquier estilo de foco propio lo reemplaza. */
+:where(a, button, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ── Estado "trabajando": todo botón con aria-busy="true" muestra que la acción está en
+   curso (además de quedar deshabilitado). Así nadie se queda adivinando si su toque
+   llegó. Si el botón ya trae su propio spinner, no se agrega otro. ── */
+@keyframes busy-spin {
+  to { transform: rotate(360deg); }
+}
+:where(button, a)[aria-busy="true"] {
+  cursor: progress;
+}
+:where(button, a)[aria-busy="true"]:not(:has(.animate-spin))::after {
+  content: "";
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.95em;
+  height: 0.95em;
+  margin-left: 0.5em;
+  vertical-align: -0.15em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 9999px;
+  animation: busy-spin 0.7s linear infinite;
+}
+/* El botón deshabilitado se ve pálido; mientras trabaja se mantiene legible. */
+:where(button)[aria-busy="true"]:disabled {
+  opacity: 0.85 !important;
+}
+
+/* Franja de "guardando" bajo el header (ver ActivityBar). */
+@keyframes activity-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(260%); }
+}
+.activity-bar {
+  position: fixed;
+  inset-inline: 0;
+  top: calc(3.5rem + env(safe-area-inset-top));
+  z-index: 45;
+  height: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+.activity-bar::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  width: 40%;
+  background: var(--primary-text);
+  animation: activity-slide 1.1s ease-in-out infinite;
+}
+
+/* Quien pide menos movimiento no ve animaciones en bucle ni entradas animadas. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Excepción: el indicador de "trabajando" es información, no decoración; gira lento. */
+  :where(button, a)[aria-busy="true"]::after,
+  .activity-bar::before {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* iOS hace zoom al enfocar campos con letra menor a 16px: en pantallas táctiles se
+   fuerzan 16px sin tocar las clases de cada formulario (en escritorio siguen igual). */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* ── Loading: punto de luz orbitando contorno del águila ── */
 @keyframes orbit-along {
   from { offset-distance: 0%; }

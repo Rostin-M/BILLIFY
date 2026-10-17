@@ -22,6 +22,8 @@ export type SettingsForm = {
   categories: string[];
   produceModuleEnabled: boolean;
   cashiersCanEditPrices: boolean;
+  cashBlindClose: boolean;
+  cashCountByDenomination: boolean;
 };
 
 export type BusinessData = {
@@ -44,6 +46,8 @@ export type BusinessData = {
   categories: string[];
   produceModuleEnabled: boolean;
   cashiersCanEditPrices: boolean;
+  cashBlindClose: boolean;
+  cashCountByDenomination: boolean;
 };
 
 // Props comunes de cada sección editable
@@ -109,9 +113,9 @@ export const SECTIONS: readonly SectionMeta[] = [
   {
     id: "caja",
     label: "Caja",
-    description: "Cajas registradoras simultáneas.",
+    description: "Cajas simultáneas y cómo se cuenta el efectivo al cerrar.",
     icon: Wallet,
-    fields: ["maxCashRegisters"],
+    fields: ["maxCashRegisters", "cashBlindClose", "cashCountByDenomination"],
   },
   {
     id: "plan",
@@ -161,6 +165,8 @@ export function formFromData(data: BusinessData): SettingsForm {
     categories: data.categories,
     produceModuleEnabled: data.produceModuleEnabled,
     cashiersCanEditPrices: data.cashiersCanEditPrices,
+    cashBlindClose: data.cashBlindClose,
+    cashCountByDenomination: data.cashCountByDenomination,
   };
 }
 

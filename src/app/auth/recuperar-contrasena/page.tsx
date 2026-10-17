@@ -111,6 +111,7 @@ export default function RecuperarContrasenaPage() {
               <button
                 type="submit"
                 disabled={forgotPassword.isPending}
+                aria-busy={forgotPassword.isPending}
                 className="w-full rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {forgotPassword.isPending ? "Verificando..." : "Continuar"}
@@ -127,6 +128,26 @@ export default function RecuperarContrasenaPage() {
                 Si los datos son correctos, enviamos un código a{" "}
                 <span className="font-semibold text-slate-200">{email}</span>. Ingrésalo junto con tu
                 nueva contraseña.
+              </p>
+              {/* Si el correo no llega, no hay que empezar de cero. */}
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-sm text-slate-400">
+                <span>¿No llegó?</span>
+                <button
+                  type="button"
+                  onClick={() => forgotPassword.mutate({ email, document })}
+                  disabled={forgotPassword.isPending}
+                  aria-busy={forgotPassword.isPending}
+                  className="min-h-10 font-medium text-blue-300 underline underline-offset-4 hover:text-blue-200 disabled:opacity-60"
+                >
+                  {forgotPassword.isSuccess && !forgotPassword.isPending ? "Código reenviado" : "Reenviar código"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep("form")}
+                  className="min-h-10 font-medium text-blue-300 underline underline-offset-4 hover:text-blue-200"
+                >
+                  Cambiar correo o cédula
+                </button>
               </p>
             </header>
 
@@ -148,6 +169,9 @@ export default function RecuperarContrasenaPage() {
                   required
                   maxLength={6}
                   minLength={6}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   className="w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-3 text-center text-2xl font-bold tracking-[0.4em] text-white outline-none ring-blue-500 transition focus:ring-2"
@@ -194,6 +218,7 @@ export default function RecuperarContrasenaPage() {
               <button
                 type="submit"
                 disabled={resetPassword.isPending || code.length !== 6}
+                aria-busy={resetPassword.isPending}
                 className="w-full rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {resetPassword.isPending ? "Actualizando..." : "Actualizar contraseña"}

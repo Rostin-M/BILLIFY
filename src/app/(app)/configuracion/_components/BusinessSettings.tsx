@@ -48,6 +48,8 @@ function toInput(form: SettingsForm, maxCashRegisters: number) {
     categories: form.categories,
     produceModuleEnabled: form.produceModuleEnabled,
     cashiersCanEditPrices: form.cashiersCanEditPrices,
+    cashBlindClose: form.cashBlindClose,
+    cashCountByDenomination: form.cashCountByDenomination,
   };
 }
 
@@ -63,9 +65,9 @@ function SettingsNav({
   return (
     <nav
       aria-label="Secciones de configuración"
-      className="-mx-4 overflow-x-auto px-4 md:sticky md:top-6 md:mx-0 md:self-start md:overflow-visible md:px-0"
+      className="-mx-4 overflow-x-auto px-4 lg:sticky lg:top-20 lg:mx-0 lg:self-start lg:overflow-visible lg:px-0"
     >
-      <ul className="flex gap-2 pb-1 md:flex-col md:gap-1 md:pb-0">
+      <ul className="flex gap-2 pb-1 lg:flex-col lg:gap-1 lg:pb-0">
         {SECTIONS.map((s) => {
           const Icon = s.icon;
           const isActive = s.id === active;
@@ -76,14 +78,14 @@ function SettingsNav({
                 type="button"
                 onClick={() => onSelect(s.id)}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex w-full items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-medium transition md:border-transparent ${
+                className={`flex w-full items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-medium transition lg:border-transparent ${
                   isActive
-                    ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 md:border-violet-200 md:dark:border-violet-500/30"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 md:bg-transparent md:dark:bg-transparent"
+                    ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300 lg:border-violet-200 lg:dark:border-violet-500/30"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 lg:bg-transparent lg:dark:bg-transparent"
                 }`}
               >
                 <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="md:flex-1 md:text-left">{s.label}</span>
+                <span className="lg:flex-1 lg:text-left">{s.label}</span>
                 {isDirty && (
                   <span
                     className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
@@ -191,7 +193,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-[15rem_minmax(0,1fr)]">
+    <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
       <SettingsNav active={active} dirtyIds={dirtyIds} onSelect={selectSection} />
 
       <div className="min-w-0 space-y-6">

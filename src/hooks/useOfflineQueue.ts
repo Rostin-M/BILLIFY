@@ -29,8 +29,10 @@ export type LegacySaleSummary = {
  * Las de otros usuarios del equipo se conservan (hasta 72 h) sin tocarlas.
  */
 export function useOfflineQueue(syncFn: SyncFn, owner: QueueOwner) {
+  // En el servidor se asume conexión: Node ≥ 21 define un `navigator` global sin `onLine`,
+  // y tomarlo como "sin conexión" pintaba el aviso offline en el HTML (error de hidratación).
   const [isOnline, setIsOnline] = useState(() =>
-    typeof navigator !== "undefined" ? navigator.onLine : true,
+    typeof window !== "undefined" ? navigator.onLine : true,
   );
   const [pendingCount, setPendingCount] = useState(0);
   const [legacySales, setLegacySales] = useState<LegacySaleSummary[]>([]);

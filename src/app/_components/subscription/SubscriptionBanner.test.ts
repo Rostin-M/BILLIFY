@@ -35,7 +35,7 @@ describe("bannerFor", () => {
   it("gracia: ámbar con los días que quedan", () => {
     const b = bannerFor(status({ phase: "PAST_DUE", graceDaysLeft: 2 }));
     expect(b?.tone).toBe("warning");
-    expect(b?.text).toBe("Tu plan venció. Te quedan 2 días de gracia.");
+    expect(b?.text).toBe("Tu plan venció. Te quedan 2 días de gracia; después no podrás vender.");
   });
 
   it("prueba: discreto, y más visible los últimos 2 días", () => {

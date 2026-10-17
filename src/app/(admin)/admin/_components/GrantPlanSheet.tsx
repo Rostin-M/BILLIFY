@@ -242,7 +242,7 @@ export function GrantPlanSheet({
         </div>
 
         <Group legend="Plan">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-3">
             {PLAN_CODES.map((code) => {
               const option = getPlan(code);
               const on = code === plan;

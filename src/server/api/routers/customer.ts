@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
+import { assertCashRegisterNotStale, resolveSaleCashRegisterId } from "~/server/lib/cashRegisterGuard";
 import { idempotencyKeySchema, runIdempotent } from "~/server/lib/idempotency";
 
 const customerSchema = z.object({
@@ -282,7 +283,7 @@ export const customerRouter = createTRPCRouter({
         }),
         ctx.db.customerPayment.findMany({
           where: { businessId, customerId: input.customerId },
-          select: { id: true, amount: true, note: true, createdAt: true, user: { select: { name: true } } },
+          select: { id: true, amount: true, note: true, paymentMethod: true, createdAt: true, user: { select: { name: true } } },
           orderBy: { createdAt: "desc" },
           take: 20,
         }),
@@ -309,14 +310,19 @@ export const customerRouter = createTRPCRouter({
           .positive("El monto debe ser mayor a cero")
           .max(1e9, "Monto demasiado grande"),
         note: z.string().trim().max(500).optional(),
+        // Un abono nunca es "fiado". Solo el efectivo suma al saldo de la caja.
+        paymentMethod: z.enum(["CASH", "CARD", "TRANSFER"]).default("CASH"),
         idempotencyKey: idempotencyKeySchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
 
-      const registerPayment = () =>
-        ctx.db.$transaction(async (tx) => {
+      const registerPayment = async () => {
+        // Igual que una venta: no se recibe dinero en una caja abierta desde un día anterior.
+        await assertCashRegisterNotStale(ctx.db, businessId, userId);
+
+        return ctx.db.$transaction(async (tx) => {
           // Bloquear al cliente: dos abonos simultáneos se procesan uno tras otro y el segundo
           // ya ve la deuda descontada por el primero (no se puede abonar más de lo que se debe).
           const locked = await tx.$queryRaw<{ id: string; name: string }[]>`
@@ -341,6 +347,17 @@ export const customerRouter = createTRPCRouter({
             });
           }
 
+          // Caja en la que entra el abono (la de quien lo recibe o la única abierta). El efectivo
+          // tiene que entrar a una caja para que quede en el cuadre del cierre.
+          const cashRegisterId = await resolveSaleCashRegisterId(tx, businessId, userId);
+          if (input.paymentMethod === "CASH" && !cashRegisterId) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Abre la caja para recibir abonos en efectivo. Si te pagaron por transferencia o tarjeta, elige esa forma de pago.",
+            });
+          }
+
           const payment = await tx.customerPayment.create({
             data: {
               businessId,
@@ -348,6 +365,8 @@ export const customerRouter = createTRPCRouter({
               userId,
               amount: input.amount,
               note: input.note ?? null,
+              paymentMethod: input.paymentMethod,
+              cashRegisterId,
               idempotencyKey: input.idempotencyKey ?? null,
             },
             select: { id: true },
@@ -360,13 +379,20 @@ export const customerRouter = createTRPCRouter({
               action: "CREATE_CUSTOMER_PAYMENT",
               entityType: "CustomerPayment",
               entityId: payment.id,
-              detail: { customerName: customer.name, amount: input.amount, debtBefore: currentDebt },
+              detail: {
+                customerName: customer.name,
+                amount: input.amount,
+                debtBefore: currentDebt,
+                paymentMethod: input.paymentMethod,
+                cashRegisterId,
+              },
             },
           });
 
           const remainingDebt = currentDebt - input.amount;
           return { remainingDebt, message: paymentMessage(customer.name, remainingDebt) };
         });
+      };
 
       // Doble clic / reintento con la misma clave → no registrar el abono dos veces.
       return runIdempotent({

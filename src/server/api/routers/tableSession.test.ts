@@ -257,7 +257,7 @@ describe("cobro de mesa", () => {
       ]),
     ).rejects.toThrow("Un cliente aparece en múltiples grupos de pago.");
     await expect(checkout([{ guestIds: [ana.id], paymentMethod: "CREDIT" }])).rejects.toThrow(
-      /requieren un cliente registrado/,
+      /el grupo necesita un cliente registrado/,
     );
     await expect(checkout([{ guestIds: [ana.id], paymentMethod: "TRANSFER", receiptPath: "otro/x.png" }])).rejects.toThrow(
       "El comprobante adjunto no es válido.",
@@ -266,7 +266,7 @@ describe("cobro de mesa", () => {
     const customer = await createCustomer(shop.business.id);
     await db.tableGuest.update({ where: { id: ana.id }, data: { customerId: customer.id } });
     await expect(checkout([{ guestIds: [ana.id, beto.id], paymentMethod: "CREDIT" }])).rejects.toThrow(
-      "Todos los clientes del grupo a crédito deben ser el mismo cliente registrado.",
+      "Todos los de un grupo fiado deben ser el mismo cliente registrado.",
     );
     await expect(checkout([{ guestIds: [ana.id], paymentMethod: "CREDIT" }])).resolves.toMatchObject({
       sales: [expect.objectContaining({ total: 32400 })],

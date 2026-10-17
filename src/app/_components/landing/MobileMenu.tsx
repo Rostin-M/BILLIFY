@@ -37,7 +37,7 @@ export function MobileMenu() {
       <div
         id={panelId}
         hidden={!open}
-        className="bg-ala-mist dark:bg-ala-night absolute inset-x-0 top-full border-b border-slate-200 px-4 pt-2 pb-5 shadow-lg dark:border-white/10"
+        className="bg-ala-mist dark:bg-ala-night absolute inset-x-0 top-full max-h-[calc(100dvh-4.5rem)] overflow-y-auto overscroll-contain border-b border-slate-200 px-4 pt-2 pb-5 shadow-lg dark:border-white/10"
       >
         <nav aria-label="Secciones">
           <ul className="flex flex-col">

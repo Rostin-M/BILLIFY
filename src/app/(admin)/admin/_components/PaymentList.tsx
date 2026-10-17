@@ -115,7 +115,7 @@ export function PaymentList({
                 <button
                   type="button"
                   onClick={() => onRevoke(p)}
-                  className="inline-flex min-h-9 items-center rounded-lg px-2 text-sm font-semibold text-red-700 underline-offset-2 hover:underline dark:text-red-300"
+                  className="inline-flex min-h-11 sm:min-h-9 items-center rounded-lg px-2 text-sm font-semibold text-red-700 underline-offset-2 hover:underline dark:text-red-300"
                 >
                   Revocar
                   <span className="sr-only"> la activación de {days(grant.days)}</span>

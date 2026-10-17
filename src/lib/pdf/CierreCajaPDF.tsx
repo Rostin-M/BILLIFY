@@ -1,4 +1,5 @@
 import { Document, Image, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { formatCOP } from "~/lib/format/money";
 
 const s = StyleSheet.create({
   page: { fontSize: 10, paddingVertical: 40, paddingHorizontal: 44, fontFamily: "Helvetica", color: "#1e293b" },
@@ -44,9 +45,6 @@ const s = StyleSheet.create({
   footerCopy: { fontSize: 7, color: "#cbd5e1", marginTop: 2, textAlign: "center" },
 });
 
-const formatCOP = (v: number) =>
-  v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
 const formatDate = (d: Date | string) =>
   new Date(d).toLocaleDateString("es-CO", {
     timeZone: "America/Bogota",
@@ -64,7 +62,7 @@ const MOV_LABELS: Record<string, string> = {
 
 const PAYMENT_LABELS: Record<string, string> = {
   CARD: "Tarjeta",
-  CREDIT: "Crédito",
+  CREDIT: "Fiado",
   TRANSFER: "Transferencia",
 };
 
@@ -72,6 +70,9 @@ export type RegisterForPdf = {
   openingBalance: number;
   closingBalance: number | null;
   closingNote: string | null;
+  /** Efectivo contado al cerrar y su arqueo por denominación (null en cierres sin conteo). */
+  countedCash?: number | null;
+  countedBreakdown?: unknown;
   openedAt: Date | string;
   closedAt: Date | string | null;
   cashSalesTotal: number;
@@ -106,14 +107,64 @@ export type RegisterForPdf = {
     customer: { name: string } | null;
     user: { name: string | null } | null;
   }[];
+  /** Abonos de fiado en efectivo que entraron a esta caja (suman al total). */
+  cashPaymentsTotal?: number;
+  cashPaymentsCount?: number;
   payments?: {
     id: string;
     amount: number;
+    paymentMethod?: string;
     createdAt: Date | string;
     customer: { name: string } | null;
     user: { name: string | null } | null;
   }[];
 };
+
+function CashCountSection({
+  counted,
+  expected,
+  breakdown,
+}: Readonly<{ counted: number; expected: number; breakdown: unknown }>) {
+  const diff = Math.round(counted - expected);
+  // { "<denominación>": cantidad }, de mayor a menor
+  const lines =
+    breakdown && typeof breakdown === "object"
+      ? Object.entries(breakdown as Record<string, number>)
+          .filter(([, n]) => n > 0)
+          .sort(([a], [b]) => Number(b) - Number(a))
+      : [];
+  let diffLabel = "Cuadró exacto";
+  if (diff < 0) diffLabel = `Faltante ${formatCOP(-diff)}`;
+  else if (diff > 0) diffLabel = `Sobrante ${formatCOP(diff)}`;
+
+  return (
+    <>
+      <View style={[s.divider, { marginTop: 16 }]} />
+      <Text style={s.sectionTitle}>Cuadre de caja</Text>
+      <View style={s.row}>
+        <Text style={s.label}>Efectivo contado</Text>
+        <Text style={s.value}>{formatCOP(counted)}</Text>
+      </View>
+      <View style={s.row}>
+        <Text style={s.label}>Resultado</Text>
+        <Text style={diff === 0 ? s.valueGreen : s.valueRed}>{diffLabel}</Text>
+      </View>
+      {lines.length > 0 ? (
+        <>
+          <Text style={[s.label, { marginTop: 6 }]}>Conteo por billetes y monedas</Text>
+          {lines.map(([denomination, count]) => (
+            <View key={denomination} style={s.row}>
+              <Text style={s.label}>
+                {formatCOP(Number(denomination))} × {count}
+              </Text>
+              <Text style={s.value}>{formatCOP(Number(denomination) * count)}</Text>
+            </View>
+          ))}
+        </>
+      ) : null}
+    </>
+  );
+}
 
 export function CierreCajaPDF({
   business,
@@ -167,6 +218,15 @@ export function CierreCajaPDF({
           </Text>
           <Text style={s.valueGreen}>+{formatCOP(register.cashSalesTotal)}</Text>
         </View>
+        {(register.cashPaymentsCount ?? 0) > 0 ? (
+          <View style={s.row}>
+            <Text style={s.label}>
+              Abonos de fiado en efectivo ({register.cashPaymentsCount}{" "}
+              {register.cashPaymentsCount === 1 ? "abono" : "abonos"})
+            </Text>
+            <Text style={s.valueGreen}>+{formatCOP(register.cashPaymentsTotal ?? 0)}</Text>
+          </View>
+        ) : null}
         {register.manualIncome > 0 ? (
           <View style={s.row}>
             <Text style={s.label}>Entradas manuales</Text>
@@ -181,9 +241,18 @@ export function CierreCajaPDF({
         ) : null}
 
         <View style={s.grandRow}>
-          <Text style={s.grandLabel}>Total en caja</Text>
+          <Text style={s.grandLabel}>{register.countedCash == null ? "Total en caja" : "Esperado en caja"}</Text>
           <Text style={s.grandValue}>{formatCOP(register.totalBalance)}</Text>
         </View>
+
+        {/* Cuadre: lo que se contó contra lo esperado */}
+        {register.countedCash == null ? null : (
+          <CashCountSection
+            counted={register.countedCash}
+            expected={register.closingBalance ?? register.totalBalance}
+            breakdown={register.countedBreakdown}
+          />
+        )}
 
         {/* Otros medios de pago */}
         {register.nonCashSales.length > 0 ? (
@@ -254,11 +323,11 @@ export function CierreCajaPDF({
           </>
         ) : null}
 
-        {/* Ventas a crédito (fiado) */}
+        {/* Ventas fiadas */}
         {(register.creditSales?.length ?? 0) > 0 ? (
           <>
             <View style={[s.divider, { marginTop: 20 }]} />
-            <Text style={s.sectionTitle}>Ventas a crédito (fiado)</Text>
+            <Text style={s.sectionTitle}>Ventas fiadas</Text>
             <View style={s.movHeader}>
               <Text style={[s.movTime, s.movThText]}>Hora</Text>
               <Text style={[s.movDesc, s.movThText]}>Detalle</Text>
@@ -293,6 +362,9 @@ export function CierreCajaPDF({
                 <Text style={s.movTime}>{formatTime(p.createdAt)}</Text>
                 <Text style={s.movDesc}>
                   {p.customer?.name ? `Cliente: ${p.customer.name}` : "Cliente"}
+                  {p.paymentMethod && p.paymentMethod !== "CASH"
+                    ? ` · ${PAYMENT_LABELS[p.paymentMethod] ?? p.paymentMethod}`
+                    : ""}
                   {p.user?.name ? ` · Registró: ${p.user.name}` : ""}
                 </Text>
                 <Text style={[s.movAmount, { color: "#059669" }]}>+{formatCOP(p.amount)}</Text>

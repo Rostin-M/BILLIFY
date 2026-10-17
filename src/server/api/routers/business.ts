@@ -61,6 +61,9 @@ const updateSettingsSchema = z
     produceModuleEnabled: z.boolean().default(false),
     // Opcional: si un cliente viejo no lo envía, se conserva el valor guardado
     cashiersCanEditPrices: z.boolean().optional(),
+    // Cierre de caja (opcionales por la misma razón)
+    cashBlindClose: z.boolean().optional(),
+    cashCountByDenomination: z.boolean().optional(),
   })
   .refine((data) => data.invoicePhoneSource !== "BUSINESS" || !!data.phone, {
     message: "Ingresa el teléfono del negocio para poder mostrarlo en la factura.",
@@ -98,6 +101,8 @@ export const businessRouter = createTRPCRouter({
           categories: true,
           produceModuleEnabled: true,
           cashiersCanEditPrices: true,
+          cashBlindClose: true,
+          cashCountByDenomination: true,
         },
       }),
       ctx.db.user.findUnique({
@@ -154,6 +159,10 @@ export const businessRouter = createTRPCRouter({
             ...(input.cashiersCanEditPrices !== undefined && {
               cashiersCanEditPrices: input.cashiersCanEditPrices,
             }),
+            ...(input.cashBlindClose !== undefined && { cashBlindClose: input.cashBlindClose }),
+            ...(input.cashCountByDenomination !== undefined && {
+              cashCountByDenomination: input.cashCountByDenomination,
+            }),
           },
           select: { id: true, name: true },
         }),
@@ -178,6 +187,8 @@ export const businessRouter = createTRPCRouter({
             categories: input.categories,
             produceModuleEnabled: input.produceModuleEnabled,
             cashiersCanEditPrices: input.cashiersCanEditPrices,
+            cashBlindClose: input.cashBlindClose,
+            cashCountByDenomination: input.cashCountByDenomination,
           },
         },
       });

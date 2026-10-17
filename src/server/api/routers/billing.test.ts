@@ -86,7 +86,7 @@ describe("vencimiento y bloqueo", () => {
 
     await expect(callerFor(owner).cashRegister.addMovement({ type: "INCOME", amount: 1000, description: "Base extra" }))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(callerFor(owner).cashRegister.close({})).resolves.toBeTruthy();
+    await expect(callerFor(owner).cashRegister.close({ countedCash: 50_000 })).resolves.toBeTruthy();
   });
 });
 

@@ -3,11 +3,13 @@
 import { X } from "lucide-react";
 import { useState } from "react";
 import { api } from "~/trpc/react";
+import { useDialog } from "~/app/_components/ui/useDialog";
 
 type CustomerResult = { id: string; name: string; document: string | null; phone: string | null };
 type Props = { sessionId: string; onClose: () => void; onSuccess: () => void };
 
 export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>) {
+  const dialogRef = useDialog(onClose);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerResult | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -52,8 +54,8 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Agregar cliente a la mesa" className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold text-slate-800 dark:text-white">Agregar cliente a la mesa</h2>
           <button
@@ -76,7 +78,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
                 <div className="min-w-0 flex-1">
                   <span className="text-sm font-medium text-violet-700 dark:text-violet-300">{selectedCustomer.name}</span>
                   {selectedCustomer.document && (
-                    <span className="ml-2 text-xs text-violet-500 dark:text-violet-400">Doc: {selectedCustomer.document}</span>
+                    <span className="ml-2 text-xs text-violet-700 dark:text-violet-300">Doc: {selectedCustomer.document}</span>
                   )}
                 </div>
                 <button
@@ -91,6 +93,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
             ) : (
               <div className="relative">
                 <input
+                  aria-label="Buscar cliente registrado"
                   type="text"
                   placeholder="Buscar por nombre o documento..."
                   value={customerQuery}
@@ -119,7 +122,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
                         ))}
                       </ul>
                     ) : (
-                      <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-500">
+                      <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
                         Sin resultados para &quot;{customerQuery}&quot;
                       </p>
                     )}
@@ -131,7 +134,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
 
           <div className="flex items-center gap-2">
             <div className="h-px flex-1 bg-slate-100 dark:bg-white/10" />
-            <span className="text-xs text-slate-500 dark:text-slate-500">datos en la mesa</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">datos en la mesa</span>
             <div className="h-px flex-1 bg-slate-100 dark:bg-white/10" />
           </div>
 
@@ -165,12 +168,14 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
             </p>
             <div className="space-y-2">
               <input
+                aria-label="Cédula o documento"
                 value={form.document}
                 onChange={(e) => setForm((p) => ({ ...p, document: e.target.value }))}
                 placeholder="Cédula / documento"
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
               />
               <input
+                aria-label="Teléfono"
                 value={form.phone}
                 type="tel"
                 onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
@@ -188,7 +193,8 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
             <button
               type="submit"
               disabled={addGuest.isPending}
-              className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-50"
+              aria-busy={addGuest.isPending}
+              className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
             >
               {addGuest.isPending ? "Agregando..." : "Agregar cliente"}
             </button>

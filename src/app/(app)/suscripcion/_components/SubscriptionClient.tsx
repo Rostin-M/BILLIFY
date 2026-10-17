@@ -9,15 +9,15 @@ import { StatusCard } from "./StatusCard";
 import { UsagePanel } from "./UsagePanel";
 
 export function SubscriptionClient() {
-  const { data: status, isPending, error } = api.billing.status.useQuery();
+  const { data: status, isPending } = api.billing.status.useQuery();
 
   if (isPending) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando tu plan...</p>;
+    return <p role="status" className="text-sm text-slate-500 dark:text-slate-400">Cargando tu plan…</p>;
   }
   if (!status) {
     return (
       <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300">
-        No pudimos cargar tu plan{error ? `: ${error.message}` : "."} Recarga la página para intentar de nuevo.
+        No pudimos cargar tu plan. Revisa tu conexión y recarga la página.
       </p>
     );
   }
@@ -43,7 +43,7 @@ export function SubscriptionClient() {
 
       <PaymentHistory mockPayments={status.mockPayments} />
 
-      <div className="space-y-1 text-xs text-slate-500 dark:text-slate-500">
+      <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
         <p>Los pagos no son factura electrónica.</p>
         <p>Si es tu primer pago, puedes pedir el reembolso dentro de los 5 días hábiles siguientes.</p>
         {status.provider === "wompi" && (

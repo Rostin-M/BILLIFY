@@ -109,7 +109,7 @@ export function StatusCard({ status }: Readonly<{ status: Status }>) {
           >
             <div className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${BAR_COLOR[status.phase]}`} style={{ width: now === null ? 0 : `${progress.pct}%` }} />
           </div>
-          <div className="mt-1.5 flex justify-between text-xs text-slate-500 dark:text-slate-500">
+          <div className="mt-1.5 flex justify-between text-xs text-slate-500 dark:text-slate-400">
             <span>{formatDate(progress.start)}</span>
             <span>{formatDate(progress.end)}</span>
           </div>

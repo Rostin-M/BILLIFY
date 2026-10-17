@@ -29,7 +29,7 @@ export function ProductosSection({ form, update }: SectionProps) {
       {/* Categorías de productos */}
       <div>
         <SubHeading>Categorías de productos</SubHeading>
-        <p className="mb-3 text-xs text-slate-500 dark:text-slate-500">
+        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
           Aparecerán como sugerencias al crear o editar un producto (máx. {MAX_CATEGORIES}).
         </p>
         <div className="flex gap-2">
@@ -59,7 +59,7 @@ export function ProductosSection({ form, update }: SectionProps) {
         </div>
 
         {form.categories.length === 0 ? (
-          <p className="mt-3 text-xs text-slate-500 dark:text-slate-500">
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             Aún no has agregado categorías.
           </p>
         ) : (

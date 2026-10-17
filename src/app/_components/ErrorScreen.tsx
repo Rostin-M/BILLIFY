@@ -42,7 +42,7 @@ const STYLES: Record<Variant, Record<"main" | "iconBox" | "title" | "description
     description: "mt-2 text-sm text-slate-500 dark:text-slate-400",
     homeLink:
       "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/5",
-    digest: "mt-6 text-xs text-slate-400 dark:text-slate-500",
+    digest: "mt-6 text-xs text-slate-500 dark:text-slate-400",
   },
 };
 
@@ -62,7 +62,7 @@ function RetryButton({ reset }: Readonly<{ reset: () => void }>) {
       type="button"
       onClick={retry}
       disabled={isRetrying}
-      className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
     >
       <RotateCcw size={16} aria-hidden="true" className={isRetrying ? "animate-spin" : undefined} />
       {isRetrying ? "Reintentando..." : "Reintentar"}

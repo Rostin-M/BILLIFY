@@ -157,6 +157,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading}
+            aria-busy={loading}
             className="w-full rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Ingresando..." : "Ingresar"}

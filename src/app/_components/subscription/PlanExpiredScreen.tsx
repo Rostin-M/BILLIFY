@@ -39,7 +39,7 @@ export function PlanExpiredScreen({
           <>
             <Link
               href="/suscripcion"
-              className="mt-6 inline-block w-full rounded-xl bg-violet-600 px-8 py-3.5 text-base font-bold text-white shadow-sm transition hover:bg-violet-500 sm:w-auto"
+              className="mt-6 inline-block w-full rounded-xl bg-violet-600 px-8 py-3.5 text-base font-bold text-white shadow-sm transition hover:bg-violet-700 sm:w-auto"
             >
               Pagar y reactivar
             </Link>

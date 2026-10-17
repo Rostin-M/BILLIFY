@@ -9,7 +9,9 @@ export default async function DashboardPage() {
   const user = await requirePageUser({ roles: ["OWNER"] });
   if (!user.businessId) redirect("/");
 
-  void api.dashboard.summary.prefetch({ period: "today" });
+  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
+  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  await api.dashboard.summary.prefetch({ period: "today" });
 
   return (
     <HydrateClient>

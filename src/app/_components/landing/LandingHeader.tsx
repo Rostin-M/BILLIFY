@@ -52,7 +52,7 @@ export function LandingHeader() {
           </Link>
           <Link
             href={REGISTER_HREF}
-            className="bg-ala-violet hidden rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-sm shadow-violet-900/20 transition-colors hover:bg-violet-600 lg:inline-block"
+            className="bg-ala-violet hidden rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-sm shadow-violet-900/20 transition-colors hover:bg-violet-600 sm:inline-block"
           >
             Prueba gratis 7 días
           </Link>

@@ -64,7 +64,7 @@ export function PaymentHistory({ mockPayments }: Readonly<{ mockPayments: boolea
                   >
                     {concept(p)}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {formatDate(p.paidAt ?? p.createdAt)}
                     {period && <span className="block sm:inline"> · Cubre {period}</span>}
                   </p>
@@ -77,7 +77,7 @@ export function PaymentHistory({ mockPayments }: Readonly<{ mockPayments: boolea
                   {p.statusMessage && p.status !== "APPROVED" && p.kind !== "MANUAL" && (
                     <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{p.statusMessage}</p>
                   )}
-                  <p className="mt-0.5 font-mono text-[11px] text-slate-400 dark:text-slate-500">{p.reference}</p>
+                  <p className="mt-0.5 font-mono text-[11px] text-slate-500 dark:text-slate-400">{p.reference}</p>
                 </div>
                 <div className="flex items-center gap-3 sm:justify-end">
                   <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">

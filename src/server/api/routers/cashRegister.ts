@@ -6,8 +6,130 @@ import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/ap
 import { assertCashRegisterNotStale } from "~/server/lib/cashRegisterGuard";
 import { idempotencyKeySchema, isUniqueViolation, runIdempotent } from "~/server/lib/idempotency";
 import { effectiveMaxCashRegisters } from "~/server/subscription/quotas";
+import { cashDifference, isDenomination, sumBreakdown } from "~/lib/cash/denominations";
 
 const MAX_MONEY = 1e9;
+
+const fmtCOP = (v: number) =>
+  v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
+
+/**
+ * Cierre ciego: el cajero no ve cuánto efectivo "debería" haber hasta después de contarlo
+ * (así no puede ajustar el conteo al número esperado). El dueño siempre lo ve.
+ */
+async function getCashCloseSettings(db: Prisma.TransactionClient, businessId: string, role: string) {
+  const business = await db.business.findUnique({
+    where: { id: businessId },
+    select: { cashBlindClose: true, cashCountByDenomination: true },
+  });
+  return {
+    blind: role !== "OWNER" && (business?.cashBlindClose ?? true),
+    byDenomination: business?.cashCountByDenomination ?? false,
+  };
+}
+
+// Arqueo por billetes y monedas: { "<denominación>": cantidad }.
+const countedBreakdownSchema = z
+  .record(z.string(), z.number().int("La cantidad debe ser un número entero").min(0).max(100_000))
+  .refine((b) => Object.keys(b).every((k) => isDenomination(Number(k))), "Denominación no válida en el conteo.");
+
+const cashCountSchema = {
+  registerId: z.string().min(1).max(64).optional(),
+  countedCash: z
+    .number({ required_error: "Escribe cuánto efectivo contaste." })
+    .finite()
+    .min(0, "El efectivo contado no puede ser negativo")
+    .max(MAX_MONEY, "Monto demasiado grande"),
+  countedBreakdown: countedBreakdownSchema.optional(),
+};
+
+/** Valida el conteo contra la configuración del negocio y devuelve el arqueo limpio (sin ceros). */
+async function resolveCount(
+  db: Prisma.TransactionClient,
+  businessId: string,
+  role: string,
+  input: { countedCash: number; countedBreakdown?: Record<string, number> },
+) {
+  const { byDenomination } = await getCashCloseSettings(db, businessId, role);
+  if (byDenomination && !input.countedBreakdown) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Cuenta los billetes y monedas para cerrar la caja." });
+  }
+  if (!input.countedBreakdown) return { countedCash: input.countedCash, breakdown: null };
+
+  const breakdown = Object.fromEntries(Object.entries(input.countedBreakdown).filter(([, n]) => n > 0));
+  if (Math.round(sumBreakdown(breakdown)) !== Math.round(input.countedCash)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "El total no coincide con los billetes y monedas contados." });
+  }
+  return { countedCash: input.countedCash, breakdown };
+}
+
+// Bloquear el cierre (y el conteo previo) si hay mesas con cuentas pendientes.
+async function assertNoPendingTables(db: Prisma.TransactionClient, businessId: string) {
+  const openTablesCount = await db.tableSession.count({
+    where: {
+      businessId,
+      status: "OPEN",
+      guests: { some: { orders: { some: {} } } },
+    },
+  });
+
+  if (openTablesCount > 0) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `Hay ${openTablesCount} mesa${openTablesCount > 1 ? "s" : ""} con cuentas pendientes. Ciérralas o cóbralas antes de cerrar la caja.`,
+    });
+  }
+}
+
+/**
+ * Caja que se va a cerrar: por id solo el dueño (caja de otro empleado); si no, la propia,
+ * y el dueño sin caja propia cierra la activa del negocio.
+ */
+async function findRegisterToClose(
+  db: Prisma.TransactionClient,
+  user: { businessId: string; id: string; role: string },
+  registerId?: string,
+) {
+  const { businessId, id: userId, role } = user;
+
+  if (registerId && role !== "OWNER") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Solo el propietario puede cerrar la caja de otro empleado.",
+    });
+  }
+
+  // El permiso de caja pudo haber sido retirado después de abrirla
+  await assertCanManageCash(db, userId, role);
+  await assertNoPendingTables(db, businessId);
+
+  let register: { id: string } | null;
+  if (registerId) {
+    register = await db.cashRegister.findFirst({
+      where: { id: registerId, businessId, status: "OPEN" },
+      select: { id: true },
+    });
+  } else {
+    register = await db.cashRegister.findFirst({
+      where: { businessId, userId, status: "OPEN" },
+      select: { id: true },
+    });
+    if (!register && role === "OWNER") {
+      register = await db.cashRegister.findFirst({
+        where: { businessId, status: "OPEN" },
+        select: { id: true },
+      });
+    }
+  }
+
+  if (!register) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "No se encontró la caja a cerrar.",
+    });
+  }
+  return register.id;
+}
 
 // Los cajeros necesitan el permiso "gestionar caja" (leído fresco de la BD, no de la sesión).
 async function assertCanManageCash(
@@ -45,7 +167,7 @@ async function lockOpenRegister(tx: Prisma.TransactionClient, registerId: string
  * cada cajero solo ve y responde por el dinero que entró a la suya.
  */
 async function getRegisterSales(db: Prisma.TransactionClient, businessId: string, registerId: string) {
-  const [cashSalesAgg, nonCashGroups] = await Promise.all([
+  const [cashSalesAgg, nonCashGroups, cashPaymentsAgg, nonCashPaymentGroups] = await Promise.all([
     db.sale.aggregate({
       where: { businessId, cashRegisterId: registerId, paymentMethod: "CASH", status: "COMPLETED" },
       _sum: { total: true },
@@ -57,6 +179,18 @@ async function getRegisterSales(db: Prisma.TransactionClient, businessId: string
       _sum: { total: true },
       _count: { _all: true },
     }),
+    // Abonos de fiado que entraron a esta caja: el efectivo suma al saldo; el resto es informativo.
+    db.customerPayment.aggregate({
+      where: { businessId, cashRegisterId: registerId, paymentMethod: "CASH" },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    db.customerPayment.groupBy({
+      by: ["paymentMethod"],
+      where: { businessId, cashRegisterId: registerId, paymentMethod: { not: "CASH" } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
   ]);
   return {
     cashSalesTotal: cashSalesAgg._sum.total ?? 0,
@@ -66,10 +200,17 @@ async function getRegisterSales(db: Prisma.TransactionClient, businessId: string
       total: g._sum.total ?? 0,
       count: g._count._all,
     })),
+    cashPaymentsTotal: cashPaymentsAgg._sum.amount ?? 0,
+    cashPaymentsCount: cashPaymentsAgg._count,
+    nonCashPayments: nonCashPaymentGroups.map((g) => ({
+      paymentMethod: g.paymentMethod,
+      total: g._sum.amount ?? 0,
+      count: g._count._all,
+    })),
   };
 }
 
-// Saldo en efectivo de una caja: fondo + ventas en efectivo de esa caja + movimientos manuales.
+// Saldo en efectivo de una caja: fondo + ventas y abonos en efectivo de esa caja + movimientos manuales.
 async function computeRegisterBalance(
   db: Prisma.TransactionClient,
   businessId: string,
@@ -82,14 +223,15 @@ async function computeRegisterBalance(
   if (!register) {
     throw new TRPCError({ code: "NOT_FOUND", message: "No se encontró la caja." });
   }
-  const { cashSalesTotal, cashSalesCount } = await getRegisterSales(db, businessId, registerId);
+  const { cashSalesTotal, cashSalesCount, cashPaymentsTotal } = await getRegisterSales(db, businessId, registerId);
   const manualBalance = register.movements.reduce((sum, m) => sum + signedMovementAmount(m), 0);
   return {
     openingBalance: register.openingBalance,
     cashSalesTotal,
     cashSalesCount,
+    cashPaymentsTotal,
     manualBalance,
-    balance: register.openingBalance + cashSalesTotal + manualBalance,
+    balance: register.openingBalance + cashSalesTotal + cashPaymentsTotal + manualBalance,
   };
 }
 
@@ -137,9 +279,12 @@ async function getRegisterActivity(
       orderBy: { createdAt: "asc" },
     }),
     db.customerPayment.findMany({
-      where: { businessId, createdAt: { gte: from, lte: to } },
+      where: {
+        businessId,
+        OR: [{ cashRegisterId: registerId }, { cashRegisterId: null, createdAt: { gte: from, lte: to } }],
+      },
       select: {
-        id: true, amount: true, createdAt: true,
+        id: true, amount: true, createdAt: true, paymentMethod: true, cashRegisterId: true,
         customer: { select: { name: true } },
         user: { select: { name: true } },
       },
@@ -217,7 +362,8 @@ export const cashRegisterRouter = createTRPCRouter({
 
     if (!register) return null;
 
-    const { cashSalesTotal, cashSalesCount, nonCashSales } = await getRegisterSales(ctx.db, businessId, register.id);
+    const { cashSalesTotal, cashSalesCount, nonCashSales, cashPaymentsTotal, cashPaymentsCount, nonCashPayments } =
+      await getRegisterSales(ctx.db, businessId, register.id);
 
     const manualIncome = register.movements
       .filter((m) => m.type === "INCOME")
@@ -226,7 +372,8 @@ export const cashRegisterRouter = createTRPCRouter({
       .filter((m) => m.type === "EXPENSE")
       .reduce((sum, m) => sum + m.amount, 0);
     const manualBalance = manualIncome - manualExpense;
-    const currentBalance = register.openingBalance + cashSalesTotal + manualBalance;
+    const currentBalance = register.openingBalance + cashSalesTotal + cashPaymentsTotal + manualBalance;
+    const closeSettings = await getCashCloseSettings(ctx.db, businessId, role);
 
     return {
       id: register.id,
@@ -234,14 +381,20 @@ export const cashRegisterRouter = createTRPCRouter({
       openedAt: register.openedAt,
       user: register.user,
       movements: register.movements,
-      cashSalesTotal,
+      // Cierre ciego: el cajero no recibe el efectivo esperado (ni las ventas en efectivo, que lo delatan).
+      cashSalesTotal: closeSettings.blind ? null : cashSalesTotal,
       cashSalesCount,
       nonCashSales,
+      // Abonos de fiado en efectivo que entraron a esta caja (también ocultos en cierre ciego).
+      cashPaymentsTotal: closeSettings.blind ? null : cashPaymentsTotal,
+      cashPaymentsCount,
+      nonCashPayments,
       manualIncome,
       manualExpense,
       manualBalance,
-      currentBalance,
+      currentBalance: closeSettings.blind ? null : currentBalance,
       isOwnRegister: register.userId === userId,
+      closeSettings,
     };
   }),
 
@@ -385,11 +538,13 @@ export const cashRegisterRouter = createTRPCRouter({
           if (input.type === "EXPENSE") {
             const { balance } = await computeRegisterBalance(tx, businessId, registerId);
             if (input.amount > balance) {
-              const fmt = (v: number) =>
-                v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
+              // En cierre ciego el cajero no debe enterarse del saldo por este mensaje.
+              const { blind } = await getCashCloseSettings(tx, businessId, role);
               throw new TRPCError({
                 code: "BAD_REQUEST",
-                message: `Saldo insuficiente (${fmt(balance)} disponible). Registra una entrada primero y luego la salida.`,
+                message: blind
+                  ? "La salida es mayor al efectivo que debería haber en caja. Registra una entrada primero y luego la salida."
+                  : `Saldo insuficiente (${fmtCOP(balance)} disponible). Registra una entrada primero y luego la salida.`,
               });
             }
           }
@@ -425,78 +580,61 @@ export const cashRegisterRouter = createTRPCRouter({
     }),
 
   // Cerrar caja — el owner puede cerrar cualquier caja; el cajero solo la propia
+  // Conteo previo del cierre ciego: el cajero ya contó; aquí se le dice cuánto esperaba el sistema
+  // y la diferencia. Cada conteo queda en la auditoría (así un "volver a contar" se puede revisar).
+  countCash: businessProcedure
+    .input(z.object(cashCountSchema))
+    .mutation(async ({ ctx, input }) => {
+      const { businessId, id: userId } = ctx.session.user;
+      const registerId = await findRegisterToClose(ctx.db, ctx.session.user, input.registerId);
+      const { countedCash, breakdown } = await resolveCount(ctx.db, businessId, ctx.session.user.role, input);
+      const { balance } = await computeRegisterBalance(ctx.db, businessId, registerId);
+      const difference = cashDifference(countedCash, balance);
+
+      await ctx.db.auditLog.create({
+        data: {
+          businessId,
+          userId,
+          action: "CASH_COUNT",
+          entityType: "CashRegister",
+          entityId: registerId,
+          detail: { countedCash, expected: balance, difference, countedBreakdown: breakdown },
+        },
+      });
+
+      return { expected: balance, countedCash, difference };
+    }),
+
+  // Cerrar caja — el owner puede cerrar cualquier caja; el cajero solo la propia.
+  // Exige el efectivo contado; si no cuadra con lo esperado, exige el motivo en la nota.
   close: businessProcedure
     .input(
       z.object({
-        registerId: z.string().min(1).max(64).optional(),
+        ...cashCountSchema,
         closingNote: z.string().trim().max(500, "La nota es demasiado larga (máx. 500 caracteres)").optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId, role } = ctx.session.user;
+      const registerId = await findRegisterToClose(ctx.db, ctx.session.user, input.registerId);
+      const { countedCash, breakdown } = await resolveCount(ctx.db, businessId, role, input);
+      // La nota ya viene recortada: una nota de solo espacios cuenta como "sin nota".
+      const closingNote = input.closingNote === "" ? null : (input.closingNote ?? null);
 
-      // Solo el owner puede cerrar la caja de otro empleado por ID
-      if (input.registerId && role !== "OWNER") {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Solo el propietario puede cerrar la caja de otro empleado.",
-        });
-      }
-
-      // El permiso de caja pudo haber sido retirado después de abrirla
-      await assertCanManageCash(ctx.db, userId, role);
-
-      // Bloquear cierre si hay mesas con cuentas pendientes
-      const openTablesCount = await ctx.db.tableSession.count({
-        where: {
-          businessId,
-          status: "OPEN",
-          guests: { some: { orders: { some: {} } } },
-        },
-      });
-
-      if (openTablesCount > 0) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: `Hay ${openTablesCount} mesa${openTablesCount > 1 ? "s" : ""} con cuentas pendientes. Ciérralas o cóbralas antes de cerrar la caja.`,
-        });
-      }
-
-      let register: { id: string } | null;
-      if (input.registerId) {
-        register = await ctx.db.cashRegister.findFirst({
-          where: { id: input.registerId, businessId, status: "OPEN" },
-          select: { id: true },
-        });
-      } else {
-        // Buscar propia caja primero; si el owner no tiene la suya, cerrar la activa del negocio
-        register = await ctx.db.cashRegister.findFirst({
-          where: { businessId, userId, status: "OPEN" },
-          select: { id: true },
-        });
-        if (!register && role === "OWNER") {
-          register = await ctx.db.cashRegister.findFirst({
-            where: { businessId, status: "OPEN" },
-            select: { id: true },
-          });
-        }
-      }
-
-      if (!register) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "No se encontró la caja a cerrar.",
-        });
-      }
-      const registerId = register.id;
-
-      const closingBalance = await ctx.db.$transaction(async (tx) => {
+      const result = await ctx.db.$transaction(async (tx) => {
         // Bloquear la caja y calcular el saldo con ella bloqueada (ningún movimiento se cuela)
         if (!(await lockOpenRegister(tx, registerId, businessId))) {
           throw new TRPCError({ code: "CONFLICT", message: "Esta caja ya fue cerrada." });
         }
 
         const totals = await computeRegisterBalance(tx, businessId, registerId);
+        const difference = cashDifference(countedCash, totals.balance);
+        if (difference !== 0 && !closingNote) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `${difference < 0 ? "Faltan" : "Sobran"} ${fmtCOP(Math.abs(difference))}. Escribe el motivo para cerrar la caja.`,
+          });
+        }
 
         // Transición condicional OPEN → CLOSED: un doble cierre no genera dos cierres
         const { count } = await tx.cashRegister.updateMany({
@@ -505,7 +643,9 @@ export const cashRegisterRouter = createTRPCRouter({
             status: "CLOSED",
             closedAt: new Date(),
             closingBalance: totals.balance,
-            closingNote: input.closingNote ?? null,
+            closingNote,
+            countedCash,
+            countedBreakdown: breakdown ?? undefined,
           },
         });
         if (count !== 1) {
@@ -524,17 +664,23 @@ export const cashRegisterRouter = createTRPCRouter({
               closingBalance: totals.balance,
               cashSalesTotal: totals.cashSalesTotal,
               cashSalesCount: totals.cashSalesCount,
+              cashPaymentsTotal: totals.cashPaymentsTotal,
               manualBalance: totals.manualBalance,
-              closingNote: input.closingNote ?? null,
+              countedCash,
+              difference,
+              countedBreakdown: breakdown,
+              closingNote,
             },
           },
         });
 
-        return totals.balance;
+        return { closingBalance: totals.balance, difference };
       });
 
       return {
-        closingBalance,
+        closingBalance: result.closingBalance,
+        countedCash,
+        difference: result.difference,
         message: "Caja cerrada correctamente.",
       };
     }),
@@ -584,6 +730,8 @@ export const cashRegisterRouter = createTRPCRouter({
           openingBalance: true,
           closingBalance: true,
           closingNote: true,
+          countedCash: true,
+          countedBreakdown: true,
           openedAt: true,
           closedAt: true,
           status: true,
@@ -602,8 +750,16 @@ export const cashRegisterRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Caja no encontrada." });
       }
 
+      // Cierre ciego: con la caja abierta el reporte revelaría el efectivo esperado.
+      if (register.status === "OPEN" && (await getCashCloseSettings(ctx.db, businessId, role)).blind) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "El reporte de la caja estará disponible después del cierre." });
+      }
+
       const periodEnd = register.closedAt ?? new Date();
-      const [{ cashSalesTotal, cashSalesCount, nonCashSales }, activity] = await Promise.all([
+      const [
+        { cashSalesTotal, cashSalesCount, nonCashSales, cashPaymentsTotal, cashPaymentsCount, nonCashPayments },
+        activity,
+      ] = await Promise.all([
         getRegisterSales(ctx.db, businessId, register.id),
         getRegisterActivity(ctx.db, businessId, register.id, register.openedAt, periodEnd),
       ]);
@@ -614,13 +770,16 @@ export const cashRegisterRouter = createTRPCRouter({
       const manualExpense = register.movements
         .filter((m) => m.type === "EXPENSE")
         .reduce((s, m) => s + m.amount, 0);
-      const totalBalance = register.openingBalance + cashSalesTotal + manualIncome - manualExpense;
+      const totalBalance = register.openingBalance + cashSalesTotal + cashPaymentsTotal + manualIncome - manualExpense;
 
       return {
         ...register,
         cashSalesTotal,
         cashSalesCount,
         nonCashSales,
+        cashPaymentsTotal,
+        cashPaymentsCount,
+        nonCashPayments,
         manualIncome,
         manualExpense,
         totalBalance,
@@ -637,6 +796,7 @@ export const cashRegisterRouter = createTRPCRouter({
         openingBalance: true,
         closingBalance: true,
         closingNote: true,
+        countedCash: true,
         openedAt: true,
         closedAt: true,
         user: { select: { name: true } },

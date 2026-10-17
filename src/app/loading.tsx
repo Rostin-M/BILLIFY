@@ -1,6 +1,8 @@
+import Image from "next/image";
+
 export default function Loading() {
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950">
+    <div role="status" aria-label="Cargando" className="fixed inset-0 z-50 bg-slate-950">
 
       {/* Gradiente de fondo sutil para profundidad */}
       <div
@@ -12,7 +14,7 @@ export default function Loading() {
       />
 
       {/* Logo + indicador — esquina inferior derecha */}
-      <div className="absolute bottom-8 right-8 flex flex-col items-end gap-2">
+      <div className="absolute bottom-[max(2rem,env(safe-area-inset-bottom))] right-8 flex flex-col items-end gap-2">
 
         {/* Contenedor del logo con órbita */}
         <div className="relative h-24 w-24">
@@ -25,9 +27,13 @@ export default function Loading() {
           <span className="orbit-dot" aria-hidden="true" />
 
           {/* Logo del águila con pulso suave */}
-          <img
+          {/* next/image sirve una versión de 96 px en vez del PNG original de 1,4 MB */}
+          <Image
             src="/logo.png"
-            alt="BILLIFY"
+            alt=""
+            width={96}
+            height={96}
+            priority
             className="animate-eagle-pulse relative z-10 h-full w-full object-contain"
           />
         </div>
@@ -37,7 +43,7 @@ export default function Loading() {
           <p className="text-[0.7rem] font-bold tracking-[0.3em] text-slate-300">
             BILLIFY
           </p>
-          <p className="animate-loading-text text-[0.58rem] tracking-[0.2em] text-slate-600">
+          <p className="animate-loading-text text-[0.7rem] tracking-[0.2em] text-slate-400">
             Cargando...
           </p>
         </div>

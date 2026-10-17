@@ -28,7 +28,7 @@ export const buttonClass = {
   danger: `${buttonBase} bg-red-600 text-white hover:bg-red-700`,
   dangerQuiet: `${buttonBase} border border-red-200 bg-white text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:bg-transparent dark:text-red-300 dark:hover:bg-red-900/20`,
   /** Acción compacta dentro de una fila. */
-  row: "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800 transition hover:bg-blue-100 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20",
+  row: "inline-flex min-h-11 sm:min-h-9 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800 transition hover:bg-blue-100 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20",
 } as const;
 
 export const inputClass =
@@ -226,7 +226,7 @@ export function LoadMore({
         </p>
       )}
       {hasMore ? (
-        <button type="button" onClick={onLoadMore} disabled={isLoadingMore} className={buttonClass.secondary}>
+        <button type="button" onClick={onLoadMore} disabled={isLoadingMore} aria-busy={isLoadingMore} className={buttonClass.secondary}>
           {isLoadingMore && <Spinner />}
           {isLoadingMore ? "Cargando..." : "Cargar más"}
         </button>
@@ -258,7 +258,7 @@ export function FilterChips<T extends string>({
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(option.value)}
-            className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm font-medium transition ${
+            className={`inline-flex min-h-11 sm:min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm font-medium transition ${
               selected
                 ? "border-blue-700 bg-blue-700 text-white dark:border-blue-500 dark:bg-blue-600"
                 : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-transparent dark:text-slate-300 dark:hover:bg-white/10"

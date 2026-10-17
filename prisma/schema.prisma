@@ -150,43 +150,46 @@ model User {
 }
 
 model Business {
-  id                    String                @id @default(cuid())
-  name                  String
-  document              String                @unique
-  address               String?
-  phone                 String?
-  email                 String?
-  invoicePhoneSource    InvoiceContactSource  @default(NONE) @map("invoice_phone_source")
-  invoiceEmailSource    InvoiceContactSource  @default(NONE) @map("invoice_email_source")
-  invoiceTaxDetail      InvoiceTaxDetail      @default(SUMMARY) @map("invoice_tax_detail")
-  taxes                 Json                  @default("[]") @map("taxes")
-  categories            String[]              @default([]) @map("categories")
+  id                      String                @id @default(cuid())
+  name                    String
+  document                String                @unique
+  address                 String?
+  phone                   String?
+  email                   String?
+  invoicePhoneSource      InvoiceContactSource  @default(NONE) @map("invoice_phone_source")
+  invoiceEmailSource      InvoiceContactSource  @default(NONE) @map("invoice_email_source")
+  invoiceTaxDetail        InvoiceTaxDetail      @default(SUMMARY) @map("invoice_tax_detail")
+  taxes                   Json                  @default("[]") @map("taxes")
+  categories              String[]              @default([]) @map("categories")
   // Obsoleto: el plan vigente está en Subscription. Se conserva por compatibilidad.
-  plan                  String                @default("MVP") @map("plan")
-  autoTax               Boolean               @default(false) @map("auto_tax")
-  maxCashRegisters      Int                   @default(1) @map("max_cash_registers")
+  plan                    String                @default("MVP") @map("plan")
+  autoTax                 Boolean               @default(false) @map("auto_tax")
+  maxCashRegisters        Int                   @default(1) @map("max_cash_registers")
   // Habilita el modo "se vende por peso" en el formulario de productos (frutas/verduras)
-  produceModuleEnabled  Boolean               @default(false) @map("produce_module_enabled")
+  produceModuleEnabled    Boolean               @default(false) @map("produce_module_enabled")
   // Permite a los cajeros cambiar el precio de venta de los productos.
-  cashiersCanEditPrices Boolean               @default(false) @map("cashiers_can_edit_prices")
-  logoUrl               String?               @map("logo_url")
-  users                 User[]
-  auditLogs             AuditLog[]
-  products              Product[]
-  inventoryMovements    InventoryMovement[]
-  sales                 Sale[]
-  customers             Customer[]
-  customerPayments      CustomerPayment[]
-  cashRegisters         CashRegister[]
-  cashMovements         CashMovement[]
-  tableSessions         TableSession[]
-  invoiceSequences      InvoiceSequence[]
-  subscription          Subscription?
-  subscriptionPayments  SubscriptionPayment[]
-  usageCounters         UsageCounter[]
-  platformAuditLogs     PlatformAuditLog[]
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  cashiersCanEditPrices   Boolean               @default(false) @map("cashiers_can_edit_prices")
+  // Cierre de caja: el cajero cuenta sin ver el saldo esperado; conteo por billetes y monedas
+  cashBlindClose          Boolean               @default(true) @map("cash_blind_close")
+  cashCountByDenomination Boolean               @default(false) @map("cash_count_by_denomination")
+  logoUrl                 String?               @map("logo_url")
+  users                   User[]
+  auditLogs               AuditLog[]
+  products                Product[]
+  inventoryMovements      InventoryMovement[]
+  sales                   Sale[]
+  customers               Customer[]
+  customerPayments        CustomerPayment[]
+  cashRegisters           CashRegister[]
+  cashMovements           CashMovement[]
+  tableSessions           TableSession[]
+  invoiceSequences        InvoiceSequence[]
+  subscription            Subscription?
+  subscriptionPayments    SubscriptionPayment[]
+  usageCounters           UsageCounter[]
+  platformAuditLogs       PlatformAuditLog[]
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
 }
 
 model Product {
@@ -316,22 +319,29 @@ model Customer {
 }
 
 model CustomerPayment {
-  id             String   @id @default(cuid())
-  businessId     String   @map("business_id")
-  customerId     String   @map("customer_id")
-  userId         String   @map("user_id")
+  id             String        @id @default(cuid())
+  businessId     String        @map("business_id")
+  customerId     String        @map("customer_id")
+  userId         String        @map("user_id")
   amount         Float
   note           String?
-  idempotencyKey String?  @map("idempotency_key")
-  createdAt      DateTime @default(now()) @map("created_at")
+  idempotencyKey String?       @map("idempotency_key")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  // Cómo pagó el abono (nunca CREDIT). Solo el efectivo suma al saldo de su caja.
+  paymentMethod  PaymentMethod @default(CASH) @map("payment_method")
+  // Caja en la que entró el abono, con la misma regla que las ventas. Null en abonos
+  // anteriores a esta columna y en los no-efectivo registrados sin caja abierta.
+  cashRegisterId String?       @map("cash_register_id")
 
-  business Business @relation(fields: [businessId], references: [id])
-  customer Customer @relation(fields: [customerId], references: [id])
-  user     User     @relation(fields: [userId], references: [id])
+  business     Business      @relation(fields: [businessId], references: [id])
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
 
   @@unique([businessId, idempotencyKey])
   @@index([businessId])
   @@index([customerId])
+  @@index([cashRegisterId])
   @@map("customer_payments")
 }
 
@@ -397,22 +407,27 @@ model SaleItem {
 }
 
 model CashRegister {
-  id             String             @id @default(cuid())
-  businessId     String             @map("business_id")
-  userId         String             @map("user_id")
-  status         CashRegisterStatus @default(OPEN)
-  openingBalance Float              @map("opening_balance")
-  openedAt       DateTime           @default(now()) @map("opened_at")
-  closedAt       DateTime?          @map("closed_at")
-  closingBalance Float?             @map("closing_balance")
-  closingNote    String?            @map("closing_note")
-  createdAt      DateTime           @default(now()) @map("created_at")
-  updatedAt      DateTime           @updatedAt @map("updated_at")
+  id               String             @id @default(cuid())
+  businessId       String             @map("business_id")
+  userId           String             @map("user_id")
+  status           CashRegisterStatus @default(OPEN)
+  openingBalance   Float              @map("opening_balance")
+  openedAt         DateTime           @default(now()) @map("opened_at")
+  closedAt         DateTime?          @map("closed_at")
+  closingBalance   Float?             @map("closing_balance")
+  closingNote      String?            @map("closing_note")
+  // Efectivo que el cajero contó al cerrar; la diferencia es countedCash - closingBalance.
+  // Null en los cierres anteriores al cuadre. countedBreakdown: { "<denominación>": cantidad }.
+  countedCash      Float?             @map("counted_cash")
+  countedBreakdown Json?              @map("counted_breakdown")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
 
-  business  Business       @relation(fields: [businessId], references: [id])
-  user      User           @relation(fields: [userId], references: [id])
-  movements CashMovement[]
-  sales     Sale[]
+  business         Business          @relation(fields: [businessId], references: [id])
+  user             User              @relation(fields: [userId], references: [id])
+  movements        CashMovement[]
+  sales            Sale[]
+  customerPayments CustomerPayment[]
 
   @@index([businessId])
   @@map("cash_registers")

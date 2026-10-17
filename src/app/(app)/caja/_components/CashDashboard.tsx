@@ -5,6 +5,8 @@ import dynamic from "next/dynamic";
 import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, CircleDot } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
+import { formatCOP } from "~/lib/format/money";
+import { CashCloseForm } from "./CashCloseForm";
 
 const CashHistoryPdfButton = dynamic(
   () => import("~/lib/pdf/CashHistoryPdfButton").then((m) => m.CashHistoryPdfButton),
@@ -26,15 +28,21 @@ type Register = {
   id: string;
   openingBalance: number;
   openedAt: Date;
-  cashSalesTotal: number;
+  /** null en cierre ciego (el cajero no ve el efectivo esperado hasta contar). */
+  cashSalesTotal: number | null;
   cashSalesCount: number;
   nonCashSales: NonCashEntry[];
+  /** Abonos de fiado en efectivo de esta caja; null en cierre ciego. */
+  cashPaymentsTotal: number | null;
+  cashPaymentsCount: number;
+  nonCashPayments: NonCashEntry[];
   manualIncome: number;
   manualExpense: number;
   manualBalance: number;
-  currentBalance: number;
+  currentBalance: number | null;
   user: { name: string | null } | null;
   movements: Movement[];
+  closeSettings: { blind: boolean; byDenomination: boolean };
 };
 
 type Props = { register: Register; canClose: boolean; business: { name: string; document: string; logoUrl?: string | null } };
@@ -47,7 +55,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 const PAYMENT_LABELS: Record<string, string> = {
   CARD: "Tarjeta",
-  CREDIT: "Crédito",
+  CREDIT: "Fiado",
   TRANSFER: "Transferencia",
 };
 
@@ -59,7 +67,7 @@ const TYPE_ACTIVE_CLASSES: Record<"INCOME" | "EXPENSE", string> = {
 export function CashDashboard({ register, canClose, business }: Readonly<Props>) {
   const [form, setForm] = useState({ type: "INCOME" as "INCOME" | "EXPENSE", amount: "", description: "" });
   const [isClosing, setIsClosing] = useState(false);
-  const [closingNote, setClosingNote] = useState("");
+  const blind = register.currentBalance === null;
 
   const utils = api.useUtils();
 
@@ -79,13 +87,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
     },
   });
 
-  const closeRegister = api.cashRegister.close.useMutation({
-    onSuccess: async () => {
-      await utils.cashRegister.getActive.invalidate();
-      await utils.cashRegister.listHistory.invalidate();
-    },
-  });
-
   function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     const amount = Number.parseFloat(form.amount);
@@ -94,13 +95,11 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
     addMovement.mutate({ type: form.type, amount, description: form.description, idempotencyKey: movementKeyRef.current });
   }
 
-  const formatCOP = (v: number) =>
-    v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
   const formatTime = (d: Date) =>
-    new Date(d).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+    new Date(d).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
 
   const openedTime = new Date(register.openedAt).toLocaleTimeString("es-CO", {
+    timeZone: "America/Bogota",
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -114,7 +113,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
   const movements = register.movements;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="space-y-4">
       {/* Aviso: caja abierta desde un día anterior */}
       {isStale && (
         <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 dark:border-red-500/30 dark:bg-red-900/10">
@@ -141,13 +140,14 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           </p>
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
-          {canClose && (
+          {/* En cierre ciego el reporte (con el esperado) solo se ve después de cerrar. */}
+          {canClose && !blind && (
             <CashHistoryPdfButton registerId={register.id} business={business} openedAt={register.openedAt} />
           )}
           {canClose && !isClosing && (
             <button
               onClick={() => setIsClosing(true)}
-              className="shrink-0 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-500/30 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-900/20"
+              className="min-h-11 shrink-0 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-500/30 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-900/20"
             >
               Cerrar caja
             </button>
@@ -155,77 +155,19 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
         </div>
       </div>
 
-      {/* Panel de confirmación de cierre */}
+      {/* Cierre con cuadre: contar el efectivo y compararlo con lo esperado */}
       {isClosing && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-500/30 dark:bg-red-900/10">
-          <h3 className="mb-1 font-semibold text-red-800 dark:text-red-300">Confirmar cierre de caja</h3>
-          <p className="mb-4 text-sm text-red-600 dark:text-red-400">
-            Saldo final calculado:{" "}
-            <span className="font-bold">{formatCOP(register.currentBalance)}</span>
-          </p>
-
-          <div className="mb-4 rounded-xl border border-red-100 bg-white p-3 text-sm dark:border-red-500/20 dark:bg-white/5">
-            <div className="flex justify-between text-slate-500 dark:text-slate-400">
-              <span>Fondo inicial</span>
-              <span>{formatCOP(register.openingBalance)}</span>
-            </div>
-            <div className="flex justify-between text-slate-500 dark:text-slate-400">
-              <span>Ventas en efectivo</span>
-              <span className="text-emerald-600 dark:text-emerald-400">+{formatCOP(register.cashSalesTotal)}</span>
-            </div>
-            {register.manualIncome > 0 && (
-              <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                <span>Entradas manuales</span>
-                <span className="text-emerald-600 dark:text-emerald-400">+{formatCOP(register.manualIncome)}</span>
-              </div>
-            )}
-            {register.manualExpense > 0 && (
-              <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                <span>Salidas manuales</span>
-                <span className="text-red-500">−{formatCOP(register.manualExpense)}</span>
-              </div>
-            )}
-            <div className="mt-2 flex justify-between border-t border-red-100 pt-2 font-bold dark:border-red-500/20">
-              <span className="text-slate-700 dark:text-slate-200">Total en caja</span>
-              <span className="text-slate-900 dark:text-white">{formatCOP(register.currentBalance)}</span>
-            </div>
-          </div>
-
-          <label className="mb-3 block space-y-1">
-            <span className="text-xs font-medium text-red-700 dark:text-red-300">
-              Nota de cierre (opcional)
-            </span>
-            <textarea
-              rows={2}
-              value={closingNote}
-              onChange={(e) => setClosingNote(e.target.value)}
-              placeholder="Ej: Todo cuadra, faltaron $5.000..."
-              className="w-full resize-none rounded-xl border border-red-200 bg-white px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-red-500/30 dark:bg-slate-900 dark:text-white"
-            />
-          </label>
-
-          {closeRegister.error && (
-            <p className="mb-3 text-sm text-red-600">{closeRegister.error.message}</p>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => closeRegister.mutate({ closingNote: closingNote.trim() || undefined })}
-              disabled={closeRegister.isPending}
-              className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
-            >
-              {closeRegister.isPending ? "Cerrando..." : "Confirmar cierre"}
-            </button>
-            <button
-              onClick={() => { setIsClosing(false); setClosingNote(""); closeRegister.reset(); }}
-              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-white dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
+        <CashCloseForm
+          expected={register.currentBalance}
+          byDenomination={register.closeSettings.byDenomination}
+          onClosed={() => setIsClosing(false)}
+          onCancel={() => setIsClosing(false)}
+        />
       )}
 
+      {/* Escritorio: saldo y registro a la izquierda; movimientos a la derecha */}
+      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
+      <div className="space-y-4">
       {/* Saldo */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
         <h2 className="mb-4 font-semibold text-slate-700 dark:text-slate-200">Saldo actual</h2>
@@ -241,10 +183,27 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
                 <span className="ml-1 text-xs">({register.cashSalesCount})</span>
               )}
             </span>
-            <span className="text-emerald-600 dark:text-emerald-400">
-              +{formatCOP(register.cashSalesTotal)}
-            </span>
+            {register.cashSalesTotal === null ? (
+              <span className="text-slate-500 dark:text-slate-400">Se ve al cerrar</span>
+            ) : (
+              <span className="text-emerald-600 dark:text-emerald-400">
+                +{formatCOP(register.cashSalesTotal)}
+              </span>
+            )}
           </div>
+          {register.cashPaymentsCount > 0 && (
+            <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+              <span>
+                Abonos de fiado
+                <span className="ml-1 text-xs">({register.cashPaymentsCount})</span>
+              </span>
+              {register.cashPaymentsTotal === null ? (
+                <span className="text-slate-500 dark:text-slate-400">Se ve al cerrar</span>
+              ) : (
+                <span className="text-emerald-600 dark:text-emerald-400">+{formatCOP(register.cashPaymentsTotal)}</span>
+              )}
+            </div>
+          )}
           {register.manualIncome > 0 && (
             <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
               <span>Entradas manuales</span>
@@ -261,12 +220,21 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
               </span>
             </div>
           )}
-          <div className="flex items-center justify-between border-t border-slate-100 pt-3 dark:border-white/10">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 border-t border-slate-100 pt-3 dark:border-white/10">
             <span className="font-bold text-slate-700 dark:text-slate-200">Total en caja</span>
-            <span className="text-2xl font-bold text-slate-900 dark:text-white">
-              {formatCOP(register.currentBalance)}
-            </span>
+            {register.currentBalance === null ? (
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Se ve al cerrar la caja</span>
+            ) : (
+              <span className="text-xl font-bold tabular-nums text-slate-900 sm:text-2xl dark:text-white">
+                {formatCOP(register.currentBalance)}
+              </span>
+            )}
           </div>
+          {blind && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Cierre ciego: al cerrar cuentas el efectivo y ahí ves si cuadra con lo registrado.
+            </p>
+          )}
         </div>
       </div>
 
@@ -334,7 +302,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
             />
           </label>
 
-          {form.type === "EXPENSE" && Number.parseFloat(form.amount) > register.currentBalance && (
+          {form.type === "EXPENSE" && register.currentBalance !== null && Number.parseFloat(form.amount) > register.currentBalance && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-900/10 dark:text-amber-300">
               Saldo insuficiente. Registra primero una entrada con el dinero que vas a usar.
             </p>
@@ -347,7 +315,8 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           <button
             type="submit"
             disabled={!form.amount || !form.description.trim() || addMovement.isPending}
-            className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-busy={addMovement.isPending}
+            className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {addMovement.isPending ? "Guardando..." : "Registrar movimiento"}
           </button>
@@ -355,6 +324,8 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
         )}
       </div>
 
+      </div>
+      <div className="space-y-4">
       {/* Movimientos del día */}
       {movements.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5">
@@ -370,7 +341,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
                     <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
                       {m.description}
                     </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       {formatTime(m.createdAt)}
                       {m.user?.name ? ` · ${m.user.name}` : ""}
                       {" · "}
@@ -386,19 +357,19 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
               );
             })}
           </ul>
-          <p className="px-5 py-3 text-xs text-slate-500 dark:text-slate-500">
-            * Las ventas en efectivo se suman al saldo pero no aparecen aquí como movimientos individuales.
+          <p className="px-5 py-3 text-xs text-slate-500 dark:text-slate-400">
+            * Las ventas y los abonos de fiado en efectivo se suman al saldo pero no aparecen aquí como movimientos individuales.
           </p>
         </div>
       )}
 
       {/* Ventas por otros medios de pago — informativo, no afectan el saldo */}
-      {register.nonCashSales.length > 0 && (
+      {(register.nonCashSales.length > 0 || register.nonCashPayments.length > 0) && (
         <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5">
           <h2 className="px-5 pt-5 font-semibold text-slate-700 dark:text-slate-200">
             Otros medios de pago
           </h2>
-          <p className="px-5 pb-2 text-xs text-slate-500 dark:text-slate-500">
+          <p className="px-5 pb-2 text-xs text-slate-500 dark:text-slate-400">
             Informativo — no se suman al saldo de caja.
           </p>
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
@@ -408,8 +379,23 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                     {PAYMENT_LABELS[entry.paymentMethod] ?? entry.paymentMethod}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {entry.count} {entry.count === 1 ? "venta" : "ventas"}
+                  </p>
+                </div>
+                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                  {formatCOP(entry.total)}
+                </span>
+              </li>
+            ))}
+            {register.nonCashPayments.map((entry) => (
+              <li key={`abono-${entry.paymentMethod}`} className="flex items-center justify-between px-5 py-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Abonos de fiado · {PAYMENT_LABELS[entry.paymentMethod] ?? entry.paymentMethod}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {entry.count} {entry.count === 1 ? "abono" : "abonos"}
                   </p>
                 </div>
                 <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
@@ -420,6 +406,8 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           </ul>
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }

@@ -63,6 +63,7 @@ export function ReceiptPhotoButton({ value, onChange }: Readonly<Props>) {
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
+        aria-busy={uploading}
         className="flex items-center gap-1.5 rounded-lg border border-dashed border-violet-300 bg-violet-50/50 px-2.5 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-50 disabled:opacity-50 dark:border-violet-500/30 dark:bg-violet-900/10 dark:text-violet-300 dark:hover:bg-violet-900/20"
       >
         <Camera className="h-3.5 w-3.5" />

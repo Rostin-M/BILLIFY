@@ -13,6 +13,8 @@ import {
   Settings,
   HandCoins,
   CreditCard,
+  CheckCircle2,
+  Circle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,6 +22,7 @@ import { db } from "~/server/db";
 import { auth } from "~/server/auth";
 import { loadActiveUser } from "~/server/auth/currentUser";
 import { Landing } from "~/app/_components/landing/Landing";
+import { LinkPending } from "~/app/_components/LinkPending";
 
 type NavItem = {
   href: string;
@@ -160,7 +163,7 @@ function NavSection({
 }>) {
   return (
     <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         {title}
       </p>
       <div className={`grid gap-3 ${gridClass}`}>
@@ -170,7 +173,9 @@ function NavSection({
             href={href}
             className={`flex items-start gap-3 rounded-xl border p-4 transition ${COLOR_MAP[color]}`}
           >
-            <Icon size={iconSize} className={`mt-0.5 shrink-0 ${ICON_COLOR_MAP[color]}`} />
+            <LinkPending>
+              <Icon size={iconSize} className={`mt-0.5 shrink-0 ${ICON_COLOR_MAP[color]}`} />
+            </LinkPending>
             <div>
               <p className="font-semibold text-slate-800 dark:text-white">{label}</p>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
@@ -184,6 +189,95 @@ function NavSection({
   );
 }
 
+type Step = { done: boolean; title: string; detail: string; href: string; cta: string; optional?: boolean };
+
+/**
+ * Guía del propietario nuevo: los pasos se marcan solos con los datos reales y la
+ * tarjeta desaparece cuando ya hay productos y una primera venta.
+ */
+function FirstSteps({ steps }: Readonly<{ steps: Step[] }>) {
+  const required = steps.filter((s) => !s.optional);
+  const doneCount = required.filter((s) => s.done).length;
+  const next = steps.find((s) => !s.done);
+  return (
+    <section
+      aria-labelledby="first-steps-title"
+      className="rounded-2xl border border-violet-200 bg-white p-5 shadow-sm dark:border-violet-500/30 dark:bg-white/5"
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id="first-steps-title" className="font-semibold text-slate-800 dark:text-white">
+          Primeros pasos
+        </h2>
+        <span className="text-sm tabular-nums text-slate-500 dark:text-slate-400">
+          {doneCount} de {required.length}
+        </span>
+      </div>
+      <div
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"
+        role="progressbar"
+        aria-label="Avance de los primeros pasos"
+        aria-valuemin={0}
+        aria-valuemax={required.length}
+        aria-valuenow={doneCount}
+      >
+        <div className="h-full rounded-full bg-violet-600" style={{ width: `${(doneCount / required.length) * 100}%` }} />
+      </div>
+      <ol className="mt-4 space-y-2">
+        {steps.map((s) => (
+          <li key={s.href} className="flex items-start gap-3">
+            {s.done ? (
+              <CheckCircle2 aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <Circle aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-slate-300 dark:text-slate-600" />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className={`text-sm font-medium ${s.done ? "text-slate-500 line-through dark:text-slate-400" : "text-slate-800 dark:text-slate-100"}`}>
+                {s.title}
+                {s.optional && <span className="ml-1 font-normal text-slate-500 dark:text-slate-400">(opcional)</span>}
+                <span className="sr-only">{s.done ? " — hecho" : " — pendiente"}</span>
+              </p>
+              {!s.done && <p className="text-xs text-slate-500 dark:text-slate-400">{s.detail}</p>}
+            </div>
+            {!s.done && s === next && (
+              <Link
+                href={s.href}
+                className="inline-flex min-h-10 shrink-0 items-center rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700"
+              >
+                {s.cta}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** Para todos: si la caja está abierta o cerrada, y el acceso directo a lo que sigue. */
+function CashStatus({ open }: Readonly<{ open: boolean }>) {
+  return (
+    <div
+      className={`flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
+        open
+          ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-900/10"
+          : "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/10"
+      }`}
+    >
+      <p className={`text-sm font-medium ${open ? "text-emerald-800 dark:text-emerald-200" : "text-amber-800 dark:text-amber-200"}`}>
+        {open ? "La caja está abierta." : "La caja está cerrada: ábrela para empezar a vender."}
+      </p>
+      <Link
+        href={open ? "/ventas" : "/caja"}
+        className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-5 text-sm font-semibold text-white ${
+          open ? "bg-violet-600 hover:bg-violet-700" : "bg-amber-600 hover:bg-amber-700"
+        }`}
+      >
+        {open ? "Vender" : "Abrir caja"}
+      </Link>
+    </div>
+  );
+}
+
 export default async function Home() {
   // Página pública: sin sesión válida se muestra la landing de marca.
   const user = await loadActiveUser(await auth());
@@ -192,12 +286,26 @@ export default async function Home() {
   // El administrador de la plataforma tiene su propio panel (el login envía a "/").
   if (user.role === "SUPERADMIN") redirect("/admin");
 
-  const business = user.businessId
-    ? await db.business.findUnique({
-        where: { id: user.businessId },
-        select: { name: true },
-      })
-    : null;
+  const businessId = user.businessId;
+  const isOwner = user.role === "OWNER";
+  // Solo lecturas: alimentan la guía de primeros pasos y el estado de la caja.
+  const [business, openRegister, productCount, firstSale, cashierCount] = businessId
+    ? await Promise.all([
+        db.business.findUnique({ where: { id: businessId }, select: { name: true } }),
+        db.cashRegister.findFirst({ where: { businessId, status: "OPEN" }, select: { id: true } }),
+        isOwner ? db.product.count({ where: { businessId, isActive: true } }) : Promise.resolve(1),
+        isOwner ? db.sale.findFirst({ where: { businessId }, select: { id: true } }) : Promise.resolve({ id: "" }),
+        isOwner ? db.user.count({ where: { businessId, role: "CASHIER" } }) : Promise.resolve(1),
+      ])
+    : [null, null, 0, null, 0];
+
+  const showFirstSteps = isOwner && (productCount === 0 || !firstSale);
+  const steps: Step[] = [
+    { done: productCount > 0, title: "Agrega tus productos", detail: "Con nombre y precio basta para empezar.", href: "/productos", cta: "Agregar" },
+    { done: !!openRegister || !!firstSale, title: "Abre la caja", detail: "Indica con cuánto efectivo empiezas el día.", href: "/caja", cta: "Abrir caja" },
+    { done: !!firstSale, title: "Haz tu primera venta", detail: "Toca los productos y confirma la venta.", href: "/ventas", cta: "Vender" },
+    { done: cashierCount > 0, title: "Invita a un cajero", detail: "Dale su propio acceso para vender.", href: "/empleados", cta: "Invitar", optional: true },
+  ];
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 to-white px-4 py-8 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-white">
@@ -210,13 +318,15 @@ export default async function Home() {
                 {business.name}
               </p>
             )}
-            <p className="text-sm font-semibold text-slate-800 dark:text-white">
+            <h1 className="text-sm font-semibold text-slate-800 dark:text-white">
               {user.name ?? user.email}
-            </p>
+            </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {user.role === "OWNER" ? "Propietario" : "Cajero"}
             </p>
           </div>
+
+          {showFirstSteps ? <FirstSteps steps={steps} /> : businessId && <CashStatus open={!!openRegister} />}
 
           {/* Operaciones comunes */}
           <NavSection title="Operaciones" items={COMMON_ITEMS} gridClass="grid-cols-1 sm:grid-cols-3" iconSize={22} />

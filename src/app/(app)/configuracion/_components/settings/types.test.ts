@@ -30,6 +30,8 @@ const data: BusinessData = {
   categories: ["Bebidas"],
   produceModuleEnabled: false,
   cashiersCanEditPrices: false,
+  cashBlindClose: true,
+  cashCountByDenomination: false,
 };
 
 const section = (id: string) => SECTIONS.find((s) => s.id === id)!;

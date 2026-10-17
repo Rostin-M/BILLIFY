@@ -50,7 +50,7 @@ describe("dashboard.summary", () => {
     const { owner, business } = await createShop();
     const product = await createProduct(business.id, { price: 1000 });
     await callerFor(owner).cashRegister.open({ openingBalance: 5000 });
-    await callerFor(owner).cashRegister.close({});
+    await callerFor(owner).cashRegister.close({ countedCash: 5000 });
     // Venta movida a la mitad del período anterior (misma duración justo antes de "hoy").
     const sale = await callerFor(owner).sale.create({ items: [{ productId: product.id, quantity: 1 }] });
     const { from, to } = getPeriodRangeBogota("today");

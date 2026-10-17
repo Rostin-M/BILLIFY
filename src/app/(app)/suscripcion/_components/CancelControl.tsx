@@ -32,7 +32,8 @@ export function CancelControl({ status }: Readonly<{ status: Status }>) {
           type="button"
           onClick={() => resume.mutate()}
           disabled={resume.isPending}
-          className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+          aria-busy={resume.isPending}
+          className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
         >
           {resume.isPending ? "Reactivando..." : "Reactivar la renovación"}
         </button>
@@ -60,6 +61,7 @@ export function CancelControl({ status }: Readonly<{ status: Status }>) {
               type="button"
               onClick={() => setConfirming(false)}
               disabled={cancel.isPending}
+              aria-busy={cancel.isPending}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/15 dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/10"
             >
               No, mantener mi plan
@@ -68,6 +70,7 @@ export function CancelControl({ status }: Readonly<{ status: Status }>) {
               type="button"
               onClick={() => cancel.mutate()}
               disabled={cancel.isPending}
+              aria-busy={cancel.isPending}
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
             >
               {cancel.isPending ? "Cancelando..." : "Sí, cancelar la renovación"}

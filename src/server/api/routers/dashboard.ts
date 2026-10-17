@@ -105,17 +105,20 @@ export const dashboardRouter = createTRPCRouter({
       if (openRegisters.length > 0) {
         // Ventas en efectivo de cada caja abierta (Sale.cashRegisterId), no de todo el negocio
         // desde la apertura: con varias cajas, cada venta cuenta una sola vez.
-        const cashSalesAgg = await ctx.db.sale.aggregate({
-          where: {
-            businessId,
-            cashRegisterId: { in: openRegisters.map((r) => r.id) },
-            paymentMethod: "CASH",
-            status: "COMPLETED",
-          },
-          _sum: { total: true },
-        });
+        const openIds = openRegisters.map((r) => r.id);
+        const [cashSalesAgg, cashPaymentsAgg] = await Promise.all([
+          ctx.db.sale.aggregate({
+            where: { businessId, cashRegisterId: { in: openIds }, paymentMethod: "CASH", status: "COMPLETED" },
+            _sum: { total: true },
+          }),
+          // Abonos de fiado en efectivo: también es dinero que entró a esas cajas.
+          ctx.db.customerPayment.aggregate({
+            where: { businessId, cashRegisterId: { in: openIds }, paymentMethod: "CASH" },
+            _sum: { amount: true },
+          }),
+        ]);
 
-        const cashSales = cashSalesAgg._sum.total ?? 0;
+        const cashSales = (cashSalesAgg._sum.total ?? 0) + (cashPaymentsAgg._sum.amount ?? 0);
         const movements = openRegisters.flatMap((r) => r.movements);
         const openingBalance = openRegisters.reduce((sum, r) => sum + r.openingBalance, 0);
         const manualIncome = movements

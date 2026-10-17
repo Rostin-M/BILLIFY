@@ -5,9 +5,7 @@ import { HandCoins } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import { EmptyState } from "~/app/_components/EmptyState";
-
-const formatCOP = (v: number) =>
-  v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
+import { formatCOP } from "~/lib/format/money";
 
 const formatDay = (d: Date) =>
   new Date(d).toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: "long", day: "2-digit", month: "long" });
@@ -22,8 +20,24 @@ type CreditSale = {
 type Payment = {
   id: string;
   amount: number;
+  paymentMethod: string;
   createdAt: Date;
   user: { name: string | null } | null;
+};
+
+type PaymentMethod = "CASH" | "TRANSFER" | "CARD";
+
+// Solo el efectivo entra al saldo de la caja; transferencia y tarjeta quedan como "otros medios".
+const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
+  { value: "CASH", label: "Efectivo" },
+  { value: "TRANSFER", label: "Transferencia" },
+  { value: "CARD", label: "Tarjeta" },
+];
+
+const METHOD_SUFFIX: Record<string, string> = {
+  CASH: " en efectivo",
+  TRANSFER: " por transferencia",
+  CARD: " con tarjeta",
 };
 type DayGroup = { key: string; date: Date; credits: CreditSale[]; payments: Payment[] };
 
@@ -47,14 +61,14 @@ function DebtorDetail({ customerId, debtTotal }: Readonly<{ customerId: string; 
   const { data, isPending } = api.customer.history.useQuery({ customerId });
 
   if (isPending) {
-    return <p className="px-1 py-2 text-xs text-slate-500 dark:text-slate-500">Cargando detalle...</p>;
+    return <p className="px-1 py-2 text-xs text-slate-500 dark:text-slate-400">Cargando detalle...</p>;
   }
 
   const creditSales = (data?.sales ?? []).filter((s) => s.paymentMethod === "CREDIT");
   const payments = data?.payments ?? [];
 
   if (creditSales.length === 0 && payments.length === 0) {
-    return <p className="px-1 py-2 text-xs text-slate-500 dark:text-slate-500">Sin fiados registrados.</p>;
+    return <p className="px-1 py-2 text-xs text-slate-500 dark:text-slate-400">Sin fiados registrados.</p>;
   }
 
   const days = groupByDay(creditSales, payments);
@@ -102,7 +116,8 @@ function DebtorDetail({ customerId, debtTotal }: Readonly<{ customerId: string; 
                     className="flex items-center justify-between rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs dark:bg-emerald-900/10"
                   >
                     <span className="text-emerald-700 dark:text-emerald-300">
-                      Abonó{p.user?.name ? ` · ${p.user.name}` : ""}
+                      Abonó{METHOD_SUFFIX[p.paymentMethod] ?? ""}
+                      {p.user?.name ? ` · ${p.user.name}` : ""}
                     </span>
                     <span className="font-medium text-emerald-700 dark:text-emerald-300">
                       − {formatCOP(p.amount)}
@@ -122,7 +137,10 @@ export function FiadosClient() {
   const utils = api.useUtils();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
+  // "Pagar deuda completa" pide un segundo toque: registra todo el saldo de una vez.
+  const [confirmFullId, setConfirmFullId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
 
   const { data: debtors = [], isPending } = api.customer.listDebtors.useQuery();
 
@@ -136,6 +154,7 @@ export function FiadosClient() {
       toast.success(data.message);
       setPayingId(null);
       setPaymentAmount("");
+      setPaymentMethod("CASH");
       await Promise.all([
         utils.customer.listDebtors.invalidate(),
         expandedId ? utils.customer.history.invalidate({ customerId: expandedId }) : Promise.resolve(),
@@ -146,11 +165,11 @@ export function FiadosClient() {
 
   function submitPayment(customerId: string, amount: number) {
     if (addPayment.isPending) return;
-    const signature = `${customerId}|${amount}`;
+    const signature = `${customerId}|${amount}|${paymentMethod}`;
     if (paymentKeyRef.current?.signature !== signature) {
       paymentKeyRef.current = { signature, key: crypto.randomUUID() };
     }
-    addPayment.mutate({ customerId, amount, idempotencyKey: paymentKeyRef.current.key });
+    addPayment.mutate({ customerId, amount, paymentMethod, idempotencyKey: paymentKeyRef.current.key });
   }
 
   const totalDebt = debtors.reduce((sum, d) => sum + d.debt, 0);
@@ -164,7 +183,7 @@ export function FiadosClient() {
       <EmptyState
         icon={HandCoins}
         title="Sin fiados pendientes"
-        description="Cuando registres una venta a crédito con un cliente identificado, aparecerá aquí."
+        description="Cuando le fíes una venta a un cliente registrado, aparecerá aquí con lo que te debe."
       />
     );
   }
@@ -202,7 +221,7 @@ export function FiadosClient() {
                   {c.alias && <span className="ml-1.5 text-xs text-slate-500">&quot;{c.alias}&quot;</span>}
                 </p>
                 {c.phone && (
-                  <p className="text-xs text-slate-500 dark:text-slate-500">{c.phone}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{c.phone}</p>
                 )}
               </div>
               <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
@@ -218,6 +237,7 @@ export function FiadosClient() {
                     onClick={() => {
                       setPayingId(payingId === c.id ? null : c.id);
                       setPaymentAmount("");
+                      setPaymentMethod("CASH");
                     }}
                     className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                       payingId === c.id
@@ -233,7 +253,33 @@ export function FiadosClient() {
                       <p className="mb-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
                         Deuda actual: {formatCOP(c.debt)}
                       </p>
+                      <fieldset className="mb-2">
+                        <legend className="mb-1 text-xs text-amber-700 dark:text-amber-300">¿Cómo pagó?</legend>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {PAYMENT_METHODS.map((m) => (
+                            <button
+                              key={m.value}
+                              type="button"
+                              onClick={() => setPaymentMethod(m.value)}
+                              aria-pressed={paymentMethod === m.value}
+                              className={`min-h-10 rounded-lg border px-2 text-xs font-semibold transition ${
+                                paymentMethod === m.value
+                                  ? "border-amber-500 bg-amber-600 text-white"
+                                  : "border-amber-200 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-transparent dark:text-amber-300"
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mt-1 text-xs text-amber-700/80 dark:text-amber-300/80">
+                          {paymentMethod === "CASH"
+                            ? "El efectivo entra a la caja abierta y se cuenta al cerrar."
+                            : "No suma al efectivo de la caja; queda en otros medios de pago."}
+                        </p>
+                      </fieldset>
                       <input
+                        aria-label="Monto a abonar"
                         type="number"
                         min="1"
                         step="1"
@@ -246,19 +292,31 @@ export function FiadosClient() {
                         <button
                           onClick={() => submitPayment(c.id, Number(paymentAmount))}
                           disabled={!paymentAmount || Number(paymentAmount) <= 0 || addPayment.isPending}
+                          aria-busy={addPayment.isPending && addPayment.variables?.amount !== c.debt}
                           className="min-h-11 flex-1 rounded-lg bg-amber-600 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
                         >
                           {addPayment.isPending ? "Guardando..." : "Abonar"}
                         </button>
                         <button
-                          onClick={() => submitPayment(c.id, c.debt)}
+                          onClick={() => {
+                            if (confirmFullId !== c.id) {
+                              setConfirmFullId(c.id);
+                              return;
+                            }
+                            setConfirmFullId(null);
+                            submitPayment(c.id, c.debt);
+                          }}
                           disabled={addPayment.isPending}
-                          className="min-h-11 flex-1 rounded-lg bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                          aria-busy={addPayment.isPending && addPayment.variables?.amount === c.debt}
+                          className="min-h-11 flex-1 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                         >
-                          Pagar deuda completa
+                          {confirmFullId === c.id ? `Sí, registrar pago de ${formatCOP(c.debt)}` : "Pagar deuda completa"}
                         </button>
                         <button
-                          onClick={() => setPayingId(null)}
+                          onClick={() => {
+                            setPayingId(null);
+                            setConfirmFullId(null);
+                          }}
                           className="min-h-11 rounded-lg border border-amber-200 px-3 text-sm text-amber-700 hover:bg-amber-100 dark:border-amber-500/30 dark:text-amber-300"
                         >
                           Cancelar

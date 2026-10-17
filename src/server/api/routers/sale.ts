@@ -65,7 +65,7 @@ export const saleRouter = createTRPCRouter({
         if (input.paymentMethod === "CREDIT" && !input.customerId) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Las ventas a crédito requieren seleccionar un cliente registrado.",
+            message: "Para fiar una venta, selecciona un cliente registrado.",
           });
         }
 
@@ -213,7 +213,8 @@ export const saleRouter = createTRPCRouter({
           subtotal: true, taxAmount: true, taxLines: true, paymentMethod: true, createdAt: true,
           note: true, voidedAt: true, voidReason: true, receiptPath: true,
           user: { select: { name: true } },
-          customer: { select: { name: true } },
+          // Cédula y correo: el PDF de la factura y el envío al cliente (también desde Mesas).
+          customer: { select: { name: true, document: true, email: true } },
           items: { select: { id: true, name: true, unit: true, quantity: true, price: true, subtotal: true, taxLines: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -380,13 +381,17 @@ export const saleRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "No se puede enviar una factura anulada." });
       }
 
+      // Mismo contacto que imprime el PDF: también va en el pie del correo y como "responder a".
+      const contactPhone = resolveInvoiceContact(business.invoicePhoneSource, owner?.phone ?? null, business.phone);
+      const contactEmail = resolveInvoiceContact(business.invoiceEmailSource, owner?.email ?? null, business.email);
+
       const pdfBuffer = await generateFacturaPdfBuffer(
         {
           name: business.name,
           document: business.document,
           address: business.address,
-          phone: resolveInvoiceContact(business.invoicePhoneSource, owner?.phone ?? null, business.phone),
-          email: resolveInvoiceContact(business.invoiceEmailSource, owner?.email ?? null, business.email),
+          phone: contactPhone,
+          email: contactEmail,
           invoiceTaxDetail: business.invoiceTaxDetail,
           logoUrl: business.logoUrl,
         },
@@ -411,7 +416,12 @@ export const saleRouter = createTRPCRouter({
       // Cupo mensual del plan: se reserva antes de enviar y se devuelve si Brevo falla.
       const quota = await consumeInvoiceEmail(ctx.db, businessId, ctx.subscription.billing.plan);
       try {
-        await sendInvoiceEmail(input.customerEmail, sale.invoiceNumber, business.name, pdfBuffer);
+        await sendInvoiceEmail(input.customerEmail, sale.invoiceNumber, business.name, pdfBuffer, {
+          total: sale.total,
+          issuedAt: sale.createdAt,
+          customerName: sale.customer?.name ?? null,
+          business: { address: business.address, phone: contactPhone, email: contactEmail },
+        });
       } catch (error) {
         await quota.release();
         throw error;

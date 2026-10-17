@@ -7,6 +7,7 @@ import { api } from "~/trpc/react";
 import { parseZodError } from "~/lib/parseZodError";
 import { EmptyState } from "~/app/_components/EmptyState";
 import { SkeletonListRows } from "~/app/_components/Skeletons";
+import { formatCOP } from "~/lib/format/money";
 
 type Customer = {
   id: string;
@@ -33,7 +34,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",
   TRANSFER: "Transferencia",
-  CREDIT: "Crédito",
+  CREDIT: "Fiado",
 };
 
 function emptyForm(c?: Customer): EditForm {
@@ -92,11 +93,8 @@ export function CustomerManager() {
       setForm((prev) => ({ ...prev, [field]: e.target.value }));
   }
 
-  const formatCOP = (v: number) =>
-    v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
   const formatDate = (d: Date) =>
-    new Date(d).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
+    new Date(d).toLocaleDateString("es-CO", { timeZone: "America/Bogota", day: "2-digit", month: "short", year: "numeric" });
 
   return (
     <div className="space-y-6">
@@ -105,7 +103,7 @@ export function CustomerManager() {
           <h2 className="font-semibold text-slate-800 dark:text-slate-100">Clientes registrados</h2>
           <button
             onClick={() => { setShowCreate((v) => !v); setEditingId(null); setHistoryId(null); setForm(emptyForm()); }}
-            className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-500"
+            className="min-h-10 rounded-lg bg-violet-600 px-4 text-sm font-medium text-white transition hover:bg-violet-700"
           >
             {showCreate ? "Cancelar" : "+ Nuevo cliente"}
           </button>
@@ -139,7 +137,8 @@ export function CustomerManager() {
             <button
               type="submit"
               disabled={createCustomer.isPending}
-              className="w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-60"
+              aria-busy={createCustomer.isPending}
+              className="w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60"
             >
               {createCustomer.isPending ? "Guardando..." : "Crear cliente"}
             </button>
@@ -182,6 +181,7 @@ export function CustomerManager() {
                       <button
                         type="submit"
                         disabled={updateCustomer.isPending}
+                        aria-busy={updateCustomer.isPending}
                         className="min-h-11 flex-1 rounded-lg bg-violet-600 text-sm font-semibold text-white disabled:opacity-60"
                       >
                         {updateCustomer.isPending ? "Guardando..." : "Guardar"}
@@ -199,15 +199,15 @@ export function CustomerManager() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className={`break-words text-sm font-medium ${c.isActive ? "text-slate-800 dark:text-slate-100" : "text-slate-500 line-through dark:text-slate-500"}`}>
+                        <p className={`break-words text-sm font-medium ${c.isActive ? "text-slate-800 dark:text-slate-100" : "text-slate-500 line-through dark:text-slate-400"}`}>
                           {c.name}
                         </p>
                         {c.alias && (
-                          <span className="text-xs text-slate-500 dark:text-slate-500">
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
                             &quot;{c.alias}&quot;
                           </span>
                         )}
-                        <span className="text-xs text-slate-500 dark:text-slate-500">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
                           {c._count.sales} {c._count.sales === 1 ? "venta" : "ventas"}
                         </span>
                         {c.debt > 0.01 && (
@@ -216,7 +216,7 @@ export function CustomerManager() {
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                         {[c.document, c.phone, c.email].filter(Boolean).join(" · ") || "Sin datos de contacto"}
                       </p>
                     </div>
@@ -224,7 +224,7 @@ export function CustomerManager() {
                       {c._count.sales > 0 && (
                         <button
                           onClick={() => setHistoryId(historyId === c.id ? null : c.id)}
-                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                          className={`min-h-10 rounded-lg border px-3 text-sm font-medium transition sm:min-h-8 sm:text-xs ${
                             historyId === c.id
                               ? "border-violet-300 bg-violet-100 text-violet-700 dark:border-violet-500/40 dark:bg-violet-900/20 dark:text-violet-300"
                               : "border-slate-200 text-slate-500 hover:border-violet-200 hover:text-violet-600 dark:border-white/10 dark:text-slate-400"
@@ -235,14 +235,15 @@ export function CustomerManager() {
                       )}
                       <button
                         onClick={() => startEdit(c)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 hover:border-violet-200 hover:text-violet-600 dark:border-white/10 dark:text-slate-400"
+                        className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 sm:min-h-8 sm:text-xs hover:border-violet-200 hover:text-violet-600 dark:border-white/10 dark:text-slate-400"
                       >
                         Editar
                       </button>
                       <button
                         onClick={() => setActive.mutate({ customerId: c.id, isActive: !c.isActive })}
                         disabled={setActive.isPending}
-                        className={`rounded-full px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                        aria-busy={setActive.isPending && setActive.variables?.customerId === c.id}
+                        className={`min-h-10 rounded-full px-4 text-sm font-medium transition disabled:opacity-50 sm:min-h-8 sm:text-xs ${
                           c.isActive
                             ? "bg-emerald-100 text-emerald-700 hover:bg-red-100 hover:text-red-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-red-500/20 dark:hover:text-red-300"
                             : "bg-red-100 text-red-700 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300"
@@ -275,7 +276,7 @@ export function CustomerManager() {
                                 <span className="font-medium text-slate-700 dark:text-slate-200">
                                   {s.invoiceNumber ?? "Venta rápida"}
                                 </span>
-                                <span className="ml-2 text-slate-500 dark:text-slate-500">
+                                <span className="ml-2 text-slate-500 dark:text-slate-400">
                                   {formatDate(s.createdAt)} · {PAYMENT_LABELS[s.paymentMethod] ?? s.paymentMethod}
                                 </span>
                               </div>

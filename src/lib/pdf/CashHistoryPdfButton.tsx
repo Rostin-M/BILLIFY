@@ -20,7 +20,7 @@ export function CashHistoryPdfButton({ registerId, business, openedAt }: Readonl
 
   if (enabled && isPending) {
     return (
-      <span className="text-xs text-slate-500 dark:text-slate-500">Cargando…</span>
+      <span className="text-xs text-slate-500 dark:text-slate-400">Cargando…</span>
     );
   }
 
@@ -39,7 +39,7 @@ export function CashHistoryPdfButton({ registerId, business, openedAt }: Readonl
   return (
     <button
       onClick={() => setEnabled(true)}
-      className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
+      className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-500 sm:min-h-8 sm:text-xs transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
     >
       Reporte PDF
     </button>

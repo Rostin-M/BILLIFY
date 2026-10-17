@@ -6,7 +6,9 @@ import { PageLayout } from "~/app/_components/PageLayout";
 export default async function ClientesPage() {
   await requirePageUser({ roles: ["OWNER"] });
 
-  void api.customer.list.prefetch();
+  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
+  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  await api.customer.list.prefetch();
 
   return (
     <HydrateClient>

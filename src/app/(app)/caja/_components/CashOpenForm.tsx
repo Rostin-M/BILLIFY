@@ -3,6 +3,7 @@
 import { Landmark } from "lucide-react";
 import { useState } from "react";
 import { api } from "~/trpc/react";
+import { formatCOP } from "~/lib/format/money";
 
 export function CashOpenForm() {
   const [openingBalance, setOpeningBalance] = useState("");
@@ -18,9 +19,6 @@ export function CashOpenForm() {
     if (Number.isNaN(amount) || amount < 0) return;
     openRegister.mutate({ openingBalance: amount });
   }
-
-  const formatCOP = (v: number) =>
-    v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
   return (
     <div className="flex flex-col items-center justify-center py-12">
@@ -45,6 +43,7 @@ export function CashOpenForm() {
                 $
               </span>
               <input
+                aria-label="Fondo inicial en pesos"
                 type="number"
                 min="0"
                 step="100"
@@ -55,9 +54,13 @@ export function CashOpenForm() {
                 autoFocus
               />
             </div>
-            {openingBalance && !Number.isNaN(Number.parseFloat(openingBalance)) && (
-              <p className="text-xs text-slate-500">
+            {openingBalance && !Number.isNaN(Number.parseFloat(openingBalance)) ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {formatCOP(Number.parseFloat(openingBalance))}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                El efectivo con el que empiezas. Si no tienes, escribe 0.
               </p>
             )}
           </label>
@@ -71,7 +74,8 @@ export function CashOpenForm() {
           <button
             type="submit"
             disabled={!openingBalance || Number.isNaN(Number.parseFloat(openingBalance)) || openRegister.isPending}
-            className="w-full rounded-xl bg-violet-600 py-3 text-base font-bold text-white shadow transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-busy={openRegister.isPending}
+            className="w-full rounded-xl bg-violet-600 py-3 text-base font-bold text-white shadow transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {openRegister.isPending ? "Abriendo..." : "Abrir caja"}
           </button>

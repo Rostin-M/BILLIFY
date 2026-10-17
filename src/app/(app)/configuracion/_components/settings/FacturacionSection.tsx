@@ -113,7 +113,7 @@ export function FacturacionSection({
           {/* Slots — solo cuando autoTax está activo */}
           {form.autoTax && (
             <div className="space-y-3">
-              <p className="text-xs text-slate-500 dark:text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Configura hasta 3 impuestos. Se mostrarán en facturas, venta rápida y PDFs.
               </p>
               <div className="hidden gap-2 px-1 text-xs font-medium text-slate-500 dark:text-slate-400 sm:grid sm:grid-cols-[5rem_1fr_7rem]">
@@ -166,7 +166,7 @@ export function FacturacionSection({
                   </div>
                 </div>
               ))}
-              <p className="text-xs text-slate-500 dark:text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Activa cada impuesto por separado. Los desactivados no se incluirán en el cálculo.
               </p>
 
@@ -188,7 +188,7 @@ export function FacturacionSection({
                       <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                         Solo el total al final (actual)
                       </span>
-                      <span className="block text-xs text-slate-500 dark:text-slate-500">
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">
                         La factura muestra subtotal, impuestos y total agrupados al final, sin desglosar por producto.
                       </span>
                     </span>
@@ -206,7 +206,7 @@ export function FacturacionSection({
                       <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                         Desglosado por producto
                       </span>
-                      <span className="block text-xs text-slate-500 dark:text-slate-500">
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">
                         Cada producto muestra qué impuesto se le cobra (o ninguno) y su valor, además del resumen final.
                       </span>
                     </span>

@@ -4,6 +4,8 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "~/trpc/react";
 import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
+import { useDialog } from "~/app/_components/ui/useDialog";
+import { formatCOP as fmt } from "~/lib/format/money";
 
 type Product = {
   id: string; name: string; price: number; stock: number; trackStock: boolean; category: string | null;
@@ -14,11 +16,10 @@ type CartItem = {
   weightKg?: number; customAmount?: number;
 };
 
-const fmt = (v: number) => v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
-
 type Props = { guestId: string; guestName: string; onClose: () => void; onSuccess: () => void };
 
 export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readonly<Props>) {
+  const dialogRef = useDialog(onClose);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
@@ -123,7 +124,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
       />
     )}
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Agregar pedido para ${guestName}`} className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-white/10">
           <h2 className="font-semibold text-slate-800 dark:text-white">
             Agregar pedido — <span className="text-violet-600 dark:text-violet-400">{guestName}</span>
@@ -141,11 +142,12 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
           {/* Catálogo */}
           <div className="flex flex-col gap-3 lg:w-3/5">
             <input
+              aria-label="Buscar producto"
               type="search"
               placeholder="Buscar producto..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white"
             />
             {isLoading ? (
               <p className="text-center text-sm text-slate-500">Cargando...</p>
@@ -243,6 +245,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
             </div>
 
             <textarea
+              aria-label="Nota del pedido (opcional)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={2}
@@ -255,7 +258,8 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
             <button
               onClick={confirm}
               disabled={cart.length === 0 || addOrder.isPending}
-              className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-busy={addOrder.isPending}
+              className="sticky bottom-0 min-h-12 w-full rounded-xl bg-violet-600 text-sm font-bold text-white shadow-lg transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-violet-400 dark:disabled:bg-violet-900"
             >
               {confirmLabel}
             </button>

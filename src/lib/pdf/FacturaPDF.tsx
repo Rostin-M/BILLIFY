@@ -1,4 +1,5 @@
 import { Document, Image, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { formatCOP } from "~/lib/format/money";
 
 const PAYMENT_LABELS: Record<string, string> = {
   CASH: "Efectivo",
@@ -65,9 +66,6 @@ const s = StyleSheet.create({
   footerLine: { fontSize: 7.5, color: "#94a3b8", marginBottom: 2, textAlign: "center" },
   footerCopy: { fontSize: 7, color: "#cbd5e1", marginTop: 2, textAlign: "center" },
 });
-
-const formatCOP = (v: number) =>
-  v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
 const formatDateTime = (d: Date | string) =>
   new Date(d).toLocaleString("es-CO", {

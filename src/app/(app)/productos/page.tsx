@@ -8,14 +8,16 @@ export const metadata = { title: "Catálogo — BILLIFY" };
 export default async function ProductosPage() {
   const user = await requirePageUser();
 
-  void api.product.list.prefetch();
+  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
+  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  await api.product.list.prefetch();
 
   const isOwner = user.role === "OWNER";
 
   return (
     <HydrateClient>
       <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 dark:bg-slate-950 dark:text-white">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-3xl lg:max-w-5xl">
           <PageLayout
             title="Catálogo de productos"
             subtitle={

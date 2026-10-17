@@ -46,7 +46,7 @@ export function PermisosSection({ form, update }: SectionProps) {
 
       <div>
         <SubHeading>Caja</SubHeading>
-        <p className="text-xs text-slate-500 dark:text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Quién puede abrir y gestionar la caja se define por cada cajero en{" "}
           <Link href="/empleados" className="font-medium text-violet-600 hover:underline dark:text-violet-400">
             Empleados

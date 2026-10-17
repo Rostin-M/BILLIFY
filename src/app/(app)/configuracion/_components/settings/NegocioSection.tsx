@@ -77,7 +77,7 @@ export function NegocioSection({
           />
         </label>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         En <span className="font-medium">Facturación e impuestos</span> decides si este teléfono y
         correo aparecen en las facturas.
       </p>
