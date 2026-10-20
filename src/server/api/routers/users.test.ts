@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sendEmployeeWelcomeEmail } from "~/server/lib/email";
 import { callerFor, createShop, db } from "../../../../tests/integration/helpers";
+import { TEST_PASSWORDS } from "../../../../tests/fixtures/passwords";
 
 const employeeInput = { name: "Laura Gómez", document: "10203040", email: "  Laura@Tienda.CO " };
 
@@ -38,11 +39,11 @@ describe("user.createEmployee", () => {
   it("usa la contraseña indicada por el dueño sin devolverla", async () => {
     const { owner } = await createShop();
 
-    const result = await callerFor(owner).user.createEmployee({ ...employeeInput, password: "ClaveSegura-123" });
+    const result = await callerFor(owner).user.createEmployee({ ...employeeInput, password: TEST_PASSWORDS.employee });
 
     expect(result.temporaryPassword).toBeNull();
     const employee = await db.user.findUniqueOrThrow({ where: { id: result.id } });
-    await expect(bcrypt.compare("ClaveSegura-123", employee.passwordHash!)).resolves.toBe(true);
+    await expect(bcrypt.compare(TEST_PASSWORDS.employee, employee.passwordHash!)).resolves.toBe(true);
   });
 
   it("rechaza correos repetidos y contraseñas débiles; solo el dueño crea empleados", async () => {

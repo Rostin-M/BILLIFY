@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BadgeCheck, Package, Receipt, ShieldCheck, Store, Wallet } from "lucide-react";
+import { BadgeCheck, DatabaseBackup, Package, Receipt, ShieldCheck, Store, Wallet } from "lucide-react";
 
 export type TaxFormItem = { name: string; rate: string; enabled: boolean };
 export type TaxSlots = [TaxFormItem, TaxFormItem, TaxFormItem];
@@ -63,6 +63,7 @@ export type SectionId =
   | "productos"
   | "permisos"
   | "caja"
+  | "datos"
   | "plan";
 
 export type SectionMeta = {
@@ -116,6 +117,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     description: "Cajas simultáneas y cómo se cuenta el efectivo al cerrar.",
     icon: Wallet,
     fields: ["maxCashRegisters", "cashBlindClose", "cashCountByDenomination"],
+  },
+  {
+    id: "datos",
+    label: "Respaldo de datos",
+    description: "Exporta o carga tus productos y clientes.",
+    icon: DatabaseBackup,
+    fields: [],
   },
   {
     id: "plan",

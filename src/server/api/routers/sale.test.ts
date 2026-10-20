@@ -11,10 +11,11 @@ import {
   db,
   newKey,
 } from "../../../../tests/integration/helpers";
+import type * as SupabaseServer from "~/lib/supabase-server";
 
 const createSignedUrl = vi.fn();
 vi.mock("~/lib/supabase-server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("~/lib/supabase-server")>()),
+  ...(await importOriginal<typeof SupabaseServer>()),
   createSupabaseServiceClient: () => ({ storage: { from: () => ({ createSignedUrl }) } }),
 }));
 

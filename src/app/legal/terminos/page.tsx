@@ -272,9 +272,10 @@ export default function TermsPage() {
 
       <Section id="fin" title={h("fin")}>
         <P>
-          Desde el plan {EXPORTS_FROM} puedes descargar tus ventas y movimientos
-          de caja en CSV cuando quieras. Si cancelas, tu cuenta queda en solo
-          lectura y conservamos tus datos durante{" "}
+          En todos los planes puedes descargar tus productos y clientes (con sus
+          fiados pendientes) en JSON o Excel, y desde el plan {EXPORTS_FROM}
+          también tus ventas y movimientos de caja en CSV. Si cancelas, tu
+          cuenta queda en solo lectura y conservamos tus datos durante{" "}
           <Info field="retentionAfterCancel" />; después los eliminamos, salvo
           lo que la ley nos obligue a guardar. Puedes pedir que los eliminemos
           antes, como explica la{" "}

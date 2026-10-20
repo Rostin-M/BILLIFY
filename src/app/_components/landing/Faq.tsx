@@ -56,7 +56,7 @@ const QUESTIONS = [
   },
   {
     q: "¿Puedo exportar mis datos?",
-    a: `Sí, desde el plan ${EXPORTS_FROM}. Descargas tus ventas y movimientos de caja en CSV, que abre en Excel o Google Sheets.`,
+    a: `Sí. En todos los planes descargas tus productos y clientes, con sus fiados pendientes, en Excel o en un archivo que puedes volver a cargar. Desde el plan ${EXPORTS_FROM} también tus ventas y movimientos de caja en CSV.`,
   },
   {
     q: "¿Puedo cancelar cuando quiera?",

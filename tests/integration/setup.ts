@@ -1,5 +1,7 @@
 import { afterAll, beforeEach, vi } from "vitest";
 
+import type * as NextServer from "next/server";
+import type * as Email from "~/server/lib/email";
 import { TEST_DATABASE_URL } from "../../vitest.config";
 
 // Segunda barrera: nunca truncar una base que no sea la de prueba.
@@ -17,7 +19,7 @@ vi.mock("~/server/auth", () => ({
 
 // Ningún test envía correos reales.
 vi.mock("~/server/lib/email", async (importOriginal) => {
-  const original = await importOriginal<typeof import("~/server/lib/email")>();
+  const original = await importOriginal<typeof Email>();
   return {
     ...original,
     sendVerificationCode: vi.fn(async () => undefined),
@@ -32,7 +34,7 @@ vi.mock("~/server/lib/email", async (importOriginal) => {
 
 // `after` de Next solo existe dentro de una petición: en tests se ejecuta en línea.
 vi.mock("next/server", async (importOriginal) => {
-  const original = await importOriginal<typeof import("next/server")>();
+  const original = await importOriginal<typeof NextServer>();
   return {
     ...original,
     after: (task: Promise<unknown> | (() => unknown)) => {

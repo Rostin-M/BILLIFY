@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createShop, createUser, db } from "../../../tests/integration/helpers";
 import { TooManyAttemptsError, authorizeCredentials } from "./credentials";
+import { TEST_PASSWORDS } from "../../../tests/fixtures/passwords";
 
-const PASSWORD = "ClaveCorrecta123";
+const PASSWORD = TEST_PASSWORDS.login;
 
 const requestFrom = (ip: string) =>
   new Request("http://localhost/api/auth/callback/credentials", {

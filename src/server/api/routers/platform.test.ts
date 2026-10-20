@@ -12,6 +12,7 @@ import {
   db,
   setSubscription,
 } from "../../../../tests/integration/helpers";
+import { TEST_PASSWORDS } from "../../../../tests/fixtures/passwords";
 
 const ADMIN_EMAIL = "admin@billify.test";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -68,7 +69,7 @@ describe("platformAdminProcedure", () => {
     await expect(callerFor(admin).platform.listBusinesses({})).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     // Tampoco al resto de procedimientos con sesión.
     await expect(
-      callerFor(admin).auth.changePassword({ currentPassword: "x", newPassword: "NuevaClave123" }),
+      callerFor(admin).auth.changePassword({ currentPassword: "x", newPassword: TEST_PASSWORDS.reset }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
@@ -154,7 +155,7 @@ describe("aislamiento del SUPERADMIN", () => {
         ownerName: "Impostor",
         ownerDocument: "1234567",
         ownerEmail: ADMIN_EMAIL,
-        ownerPassword: "ClaveSegura-2026",
+        ownerPassword: TEST_PASSWORDS.owner,
         acceptedTerms: true,
       }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
@@ -165,7 +166,7 @@ describe("aislamiento del SUPERADMIN", () => {
       ownerName: "Otro",
       ownerDocument: "7654321",
       ownerEmail: "otro@billify.test",
-      ownerPassword: "ClaveSegura-2026",
+      ownerPassword: TEST_PASSWORDS.owner,
       acceptedTerms: true,
     });
     await expect(db.pendingRegistration.count()).resolves.toBe(1);
@@ -634,9 +635,9 @@ describe("contraseña del administrador de la plataforma", () => {
   it("al cambiarla exige la misma política del alta, no la de los negocios", async () => {
     const bcrypt = (await import("bcryptjs")).default;
     const admin = await createAdmin();
-    await db.user.update({ where: { id: admin.id }, data: { passwordHash: await bcrypt.hash("Actual-Clave-2026!", 4) } });
+    await db.user.update({ where: { id: admin.id }, data: { passwordHash: await bcrypt.hash(TEST_PASSWORDS.adminCurrent, 4) } });
     const change = (newPassword: string) =>
-      callerFor(admin).auth.changePassword({ currentPassword: "Actual-Clave-2026!", newPassword });
+      callerFor(admin).auth.changePassword({ currentPassword: TEST_PASSWORDS.adminCurrent, newPassword });
 
     // Válida para un negocio (10 caracteres, letra, número y símbolo), insuficiente para el administrador.
     await expect(change("Definitiva#12")).rejects.toMatchObject({
@@ -649,9 +650,9 @@ describe("contraseña del administrador de la plataforma", () => {
     await expect(change("Admin-Clave-2026!")).rejects.toThrow("no puede contener tu correo");
     await expect(db.user.findUniqueOrThrow({ where: { id: admin.id } })).resolves.toMatchObject({ sessionVersion: 0 });
 
-    await expect(change("Nueva-Clave-Fuerte-2027!")).resolves.toMatchObject({ requiresReLogin: true });
+    await expect(change(TEST_PASSWORDS.adminNew)).resolves.toMatchObject({ requiresReLogin: true });
     const updated = await db.user.findUniqueOrThrow({ where: { id: admin.id } });
-    await expect(bcrypt.compare("Nueva-Clave-Fuerte-2027!", updated.passwordHash!)).resolves.toBe(true);
+    await expect(bcrypt.compare(TEST_PASSWORDS.adminNew, updated.passwordHash!)).resolves.toBe(true);
   });
 
   it("no se restablece por correo aunque exista un código vigente", async () => {
@@ -662,7 +663,7 @@ describe("contraseña del administrador de la plataforma", () => {
     });
 
     await expect(
-      callerFor(null).auth.resetPassword({ email: ADMIN_EMAIL, token: "123456", newPassword: "Nueva-Clave-Fuerte-2027!" }),
+      callerFor(null).auth.resetPassword({ email: ADMIN_EMAIL, token: "123456", newPassword: TEST_PASSWORDS.adminNew }),
     ).rejects.toThrow("Código incorrecto o vencido.");
     await expect(db.user.findUniqueOrThrow({ where: { id: admin.id } })).resolves.toMatchObject({
       passwordHash: null,

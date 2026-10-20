@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { firstErrorMessage } from "~/lib/parseZodError";
 import { api } from "~/trpc/react";
 import { CajaSection } from "./settings/CajaSection";
+import { DatosSection } from "./settings/DatosSection";
 import { FacturacionSection } from "./settings/FacturacionSection";
 import { LogoCard } from "./settings/LogoCard";
 import { NegocioSection } from "./settings/NegocioSection";
@@ -219,6 +220,8 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
 
         {active === "plan" ? (
           <PlanSection />
+        ) : active === "datos" ? (
+          <DatosSection />
         ) : (
           <SectionCard
             key={active}

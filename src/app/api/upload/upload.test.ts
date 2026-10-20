@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
-import type { Session } from "next-auth";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { auth } from "~/server/auth";
 import { createShop, db } from "../../../../tests/integration/helpers";
+import type * as SupabaseServer from "~/lib/supabase-server";
 
 const storage = vi.hoisted(() => ({
   upload: vi.fn(),
@@ -11,7 +11,7 @@ const storage = vi.hoisted(() => ({
   getPublicUrl: vi.fn(),
 }));
 vi.mock("~/lib/supabase-server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("~/lib/supabase-server")>()),
+  ...(await importOriginal<typeof SupabaseServer>()),
   createSupabaseServiceClient: () => ({ storage: { from: () => storage } }),
 }));
 

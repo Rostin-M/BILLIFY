@@ -7,7 +7,7 @@ const compat = new FlatCompat({
 
 export default tseslint.config(
   {
-		ignores: ['.next']
+		ignores: ['.next', 'next-env.d.ts']
 	},
   ...compat.extends("next/core-web-vitals"),
   {
@@ -24,13 +24,19 @@ export default tseslint.config(
       "warn",
       { prefer: "type-imports", fixStyle: "inline-type-imports" },
     ],
-    "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+    "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     "@typescript-eslint/require-await": "off",
     "@typescript-eslint/no-misused-promises": [
       "error",
       { checksVoidReturn: { attributes: false } },
     ],
   },
+  },
+  {
+    // El <Image> de @react-pdf/renderer no admite alt (los PDF no tienen texto alternativo):
+    // la regla lo confunde con next/image.
+    files: ['src/lib/pdf/**/*.tsx'],
+    rules: { "jsx-a11y/alt-text": "off" },
   },
   {
 		linterOptions: {

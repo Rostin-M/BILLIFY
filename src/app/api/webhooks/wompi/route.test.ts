@@ -3,10 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createShop, db, setSubscription } from "../../../../../tests/integration/helpers";
 import { signedWompiEvent, WOMPI_TEST_CONFIG } from "../../../../../tests/wompiEvents";
+import type * as Gateway from "~/server/subscription/gateway";
 
 // La ruta usa la pasarela activa: aquí, Wompi con secretos de prueba.
 vi.mock("~/server/subscription/gateway", async (importOriginal) => {
-  const original = await importOriginal<typeof import("~/server/subscription/gateway")>();
+  const original = await importOriginal<typeof Gateway>();
   const { WompiGateway } = await import("~/server/subscription/gateway/wompi");
   return { ...original, getPaymentGateway: () => new WompiGateway(WOMPI_TEST_CONFIG) };
 });

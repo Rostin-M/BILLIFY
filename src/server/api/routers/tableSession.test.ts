@@ -86,6 +86,8 @@ describe("apertura de mesas y clientes", () => {
     const byId = new Map(guests.map((g) => [g.id, g]));
     expect(byId.get(byDocument.id)!.customerId).toBe(registered.id);
     expect(byId.get(linked.id)!.customerId).toBe(registered.id);
+    // Con documento nuevo se crea el cliente registrado y el comensal queda vinculado a él.
+    expect(byId.get(newCustomer.id)!.customerId).not.toBeNull();
     await expect(db.customer.findFirst({ where: { document: "777" } })).resolves.toMatchObject({
       name: "Beto",
       phone: "300",

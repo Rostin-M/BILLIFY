@@ -7,6 +7,7 @@ const REASON_LABELS: Record<string, string> = {
   SALE: "Venta",
   RETURN: "Devolución",
   CORRECTION: "Corrección",
+  IMPORT: "Importación",
 };
 
 type MovementsQuery = { isLoading: boolean; isError: boolean; data: RouterOutputs["product"]["listMovements"] | undefined };

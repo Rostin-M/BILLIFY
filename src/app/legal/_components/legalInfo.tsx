@@ -23,7 +23,7 @@ export function Provider() {
   return (
     <>
       <Info field="ownerName" />
-      {LEGAL_INFO.ownerId && `, identificado con ${LEGAL_INFO.ownerId}`}
+      {LEGAL_INFO.ownerId && `, identificado con ${String(LEGAL_INFO.ownerId)}`}
     </>
   );
 }
@@ -35,7 +35,7 @@ export function domicile(): string {
 
 /** Jueces competentes: los de la ciudad de domicilio si está definida. */
 export function courts(): string {
-  return LEGAL_INFO.city ? `los jueces de ${LEGAL_INFO.city}` : "los jueces competentes de Colombia";
+  return LEGAL_INFO.city ? `los jueces de ${String(LEGAL_INFO.city)}` : "los jueces competentes de Colombia";
 }
 
 /** Bloque de identificación que cierra cada documento. */
