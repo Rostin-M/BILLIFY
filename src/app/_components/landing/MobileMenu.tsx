@@ -63,7 +63,7 @@ export function MobileMenu() {
           </Link>
           <Link
             href={REGISTER_HREF}
-            className="bg-ala-violet rounded-xl px-4 py-3 text-center font-semibold text-white hover:bg-violet-600"
+            className="bg-ala-violet hover:bg-ala-violet-hover rounded-xl px-4 py-3 text-center font-semibold text-white"
           >
             Prueba gratis 7 días
           </Link>

@@ -1,4 +1,6 @@
-import { Check } from "lucide-react";
+import { ArrowDown, ArrowRight, Check } from "lucide-react";
+
+import { cssVars } from "./style";
 
 const PAIRS = [
   {
@@ -35,64 +37,70 @@ export function ProblemSolution() {
   return (
     <section
       aria-labelledby="problema-title"
-      className="border-y border-slate-200 bg-white py-20 lg:py-28 dark:border-white/10 dark:bg-slate-950/60"
+      className="relative py-20 lg:py-28"
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <h2
-          id="problema-title"
-          className="max-w-2xl text-3xl leading-tight font-extrabold tracking-[-0.025em] text-slate-950 sm:text-[2.5rem] dark:text-white"
-        >
-          Lo que hoy anotas a mano, BILLIFY lo lleva solo.
-        </h2>
-        <p className="mt-4 max-w-xl text-lg leading-relaxed text-slate-600 dark:text-slate-300">
-          El cuaderno y el Excel sirven hasta que el negocio se llena. Las apps
-          grandes traen cien cosas que no usas. BILLIFY hace lo que una
-          cafetería necesita, y lo hace rápido.
-        </p>
-
-        <div className="mt-12 overflow-hidden rounded-3xl border border-slate-200 dark:border-white/10">
-          <div
-            aria-hidden="true"
-            className="hidden grid-cols-2 border-b border-slate-200 text-sm font-semibold md:grid dark:border-white/10"
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-end">
+          <h2
+            id="problema-title"
+            className="font-display max-w-2xl text-4xl leading-[1.02] font-extrabold tracking-[-0.035em] text-slate-950 sm:text-5xl dark:text-white"
           >
-            <p className="bg-[#fbfaf5] px-6 py-4 text-slate-600 dark:bg-white/[0.03] dark:text-slate-400">
-              Con el cuaderno
-            </p>
-            <p className="bg-ala-mist text-ala-navy px-6 py-4 dark:bg-indigo-500/10 dark:text-cyan-200">
-              Con BILLIFY
-            </p>
-          </div>
-          <ul>
-            {PAIRS.map((pair) => (
-              <li
-                key={pair.before}
-                className="grid border-b border-slate-200 last:border-b-0 md:grid-cols-2 dark:border-white/10"
-              >
-                <div className="relative bg-[#fbfaf5] py-5 pr-6 pl-11 dark:bg-white/[0.03]">
-                  {/* Margen rojo de cuaderno */}
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-y-0 left-7 w-px bg-rose-300/80 dark:bg-rose-400/30"
-                  />
-                  <p className="text-[15px] leading-relaxed text-slate-600 dark:text-slate-400">
-                    <span className="sr-only">Con el cuaderno: </span>
-                    {pair.before}
-                  </p>
-                </div>
-                <div className="bg-ala-mist flex gap-3 px-6 py-5 dark:bg-indigo-500/10">
-                  <Check
-                    aria-hidden="true"
-                    className="text-ala-blue mt-0.5 h-5 w-5 shrink-0 dark:text-cyan-300"
-                  />
-                  <p className="text-[15px] leading-relaxed font-medium text-slate-900 dark:text-slate-100">
-                    <span className="sr-only">Con BILLIFY: </span>
-                    {pair.after}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+            Lo que hoy anotas a mano, BILLIFY lo lleva solo.
+          </h2>
+          <p className="max-w-xl text-lg leading-relaxed text-slate-600 dark:text-slate-300">
+            El cuaderno y el Excel sirven hasta que el negocio se llena. Las
+            apps grandes traen cien cosas que no usas. BILLIFY hace lo que una
+            cafetería necesita, y lo hace rápido.
+          </p>
         </div>
+
+        <ul className="mt-14 space-y-5 lg:space-y-6">
+          {PAIRS.map((pair, i) => (
+            <li
+              key={pair.before}
+              data-reveal
+              className="grid items-center gap-3 md:grid-cols-[1fr_auto_1fr] md:gap-5"
+            >
+              {/* Antes: papelito del cuaderno, que se tacha al aparecer */}
+              <div
+                className={`notebook-paper rounded-lg py-4 pr-5 pl-12 shadow-md shadow-slate-900/10 dark:shadow-black/40 ${i % 2 ? "md:rotate-[0.8deg]" : "md:-rotate-[0.8deg]"}`}
+              >
+                <p className="font-hand text-ala-ink text-[17px] leading-7">
+                  <span className="sr-only">Con el cuaderno: </span>
+                  <span className="strike-text">{pair.before}</span>
+                </p>
+              </div>
+
+              <span
+                aria-hidden="true"
+                data-reveal
+                style={cssVars({ "--delay": "500ms" })}
+                className="bg-ala-violet shadow-ala-violet/30 mx-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-lg"
+              >
+                <ArrowDown className="h-4 w-4 md:hidden" />
+                <ArrowRight className="hidden h-4 w-4 md:block" />
+              </span>
+
+              {/* Después: tarjeta de la app */}
+              <div
+                data-reveal
+                style={cssVars({ "--delay": "750ms" })}
+                className="flex gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-lg shadow-indigo-950/[0.06] dark:border-white/10 dark:bg-white/[0.05] dark:shadow-none"
+              >
+                <span
+                  aria-hidden="true"
+                  className="from-ala-violet via-ala-blue to-ala-cyan mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-white"
+                >
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                </span>
+                <p className="text-[15px] leading-relaxed font-medium text-slate-900 dark:text-slate-100">
+                  <span className="sr-only">Con BILLIFY: </span>
+                  {pair.after}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

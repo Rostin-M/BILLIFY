@@ -1,6 +1,10 @@
 import { Plus } from "lucide-react";
 
-import { cheapestPlanWith, PLAN_CODES, PLANS } from "~/lib/subscription/catalog";
+import {
+  cheapestPlanWith,
+  PLAN_CODES,
+  PLANS,
+} from "~/lib/subscription/catalog";
 
 const LIMITS_TEXT = PLAN_CODES.map((c) => {
   const { name, limits } = PLANS[c];
@@ -75,7 +79,7 @@ export function Faq() {
         <div className="lg:sticky lg:top-28 lg:self-start">
           <h2
             id="preguntas-title"
-            className="text-3xl leading-tight font-extrabold tracking-[-0.025em] text-slate-950 sm:text-[2.5rem] dark:text-white"
+            className="font-display text-4xl leading-[1.02] font-extrabold tracking-[-0.035em] text-slate-950 sm:text-5xl dark:text-white"
           >
             Preguntas frecuentes
           </h2>
@@ -86,12 +90,12 @@ export function Faq() {
 
         <div className="divide-y divide-slate-200 border-y border-slate-200 dark:divide-white/10 dark:border-white/10">
           {QUESTIONS.map(({ q, a }) => (
-            <details key={q} className="faq-item group">
-              <summary className="flex cursor-pointer items-start justify-between gap-4 py-5 text-left text-[17px] font-semibold text-slate-950 dark:text-white">
+            <details key={q} name="preguntas" className="faq-item group">
+              <summary className="hover:text-ala-violet dark:hover:text-ala-cyan flex cursor-pointer items-start justify-between gap-4 py-5 text-left text-[17px] font-semibold text-slate-950 transition-colors dark:text-white">
                 {q}
                 <Plus
                   aria-hidden="true"
-                  className="faq-icon text-ala-blue mt-0.5 h-5 w-5 shrink-0 transition-transform duration-200 motion-reduce:transition-none dark:text-cyan-300"
+                  className="faq-icon text-ala-blue dark:text-ala-cyan mt-0.5 h-5 w-5 shrink-0 transition-transform duration-300 motion-reduce:transition-none"
                 />
               </summary>
               <p className="max-w-2xl pr-9 pb-6 text-[15px] leading-relaxed text-slate-600 dark:text-slate-400">

@@ -281,7 +281,7 @@ function SalesBarChart({
             <div className="h-px w-full border-t border-slate-200 dark:border-white/10" />
           </div>
 
-          <div className="flex h-[130px] items-end gap-1">
+          <div className="flex h-[130px] gap-1">
             {chartData.map((bucket, index) => {
               const heightPct = maxDayTotal > 0 ? (bucket.total / maxDayTotal) * 100 : 0;
               const hasData = bucket.total > 0;
@@ -300,10 +300,10 @@ function SalesBarChart({
                     <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(bucket.total)}</p>
                     <p className="text-slate-500">{bucket.count} venta{bucket.count !== 1 ? "s" : ""}</p>
                   </div>
-                  {/* Barra */}
-                  <div className="flex w-full flex-1 items-end">
+                  {/* Barra: posición absoluta para que el alto en % se calcule sobre la columna */}
+                  <div className="relative w-full flex-1">
                     <div
-                      className={`w-full rounded-t-md ${chartBarColorClass(hasData, isLatest)}`}
+                      className={`absolute inset-x-0 bottom-0 rounded-t-md ${chartBarColorClass(hasData, isLatest)}`}
                       style={{
                         height: barHeight,
                         transition: "height 0.55s cubic-bezier(0.4, 0, 0.2, 1)",

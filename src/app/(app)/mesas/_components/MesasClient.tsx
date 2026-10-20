@@ -4,7 +4,9 @@ import { Armchair, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type RouterOutputs } from "~/trpc/react";
 import type { BusinessInfoForPdf } from "~/lib/pdf/FacturaPDF";
+import { AddOrderModal } from "./AddOrderModal";
 import { MesaInvoicesModal } from "./MesaInvoicesModal";
+import { OpenTableForm } from "./OpenTableForm";
 import { TableCard } from "./TableCard";
 
 type SessionData = RouterOutputs["tableSession"]["listActive"][number];
@@ -14,7 +16,8 @@ type Props = { business: Business; invoiceBusiness: BusinessInfoForPdf };
 
 export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
   const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState("");
+  // Al abrir una mesa se va directo al pedido de su primer cliente.
+  const [orderingFor, setOrderingFor] = useState<{ id: string; name: string } | null>(null);
   // Accordion: only one table expanded at a time, to keep the mobile view compact.
   const [expandedTableId, setExpandedTableId] = useState<string | null>(null);
   const [guestSearch, setGuestSearch] = useState("");
@@ -52,25 +55,12 @@ export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
   }, [uniqueMatch?.sessionId, uniqueMatch?.guestId]);
   const { data: suggestedName = "Mesa 1" } = api.tableSession.suggestName.useQuery();
 
-  const utils = api.useUtils();
-  const createSession = api.tableSession.create.useMutation({
-    onSuccess: async () => {
-      await utils.tableSession.listActive.invalidate();
-      await utils.tableSession.suggestName.invalidate();
-      setShowCreate(false);
-      setNewName("");
-    },
-  });
-
-  function handleCreate(e: React.SubmitEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const name = newName.trim() || suggestedName;
-    createSession.mutate({ name });
-  }
-
-  function openCreate() {
-    setNewName(suggestedName);
-    setShowCreate(true);
+  function handleOpened(table: RouterOutputs["tableSession"]["create"]) {
+    setShowCreate(false);
+    setGuestSearch("");
+    setExpandedTableId(table.id);
+    const first = table.guests[0];
+    if (first) setOrderingFor(first);
   }
 
   if (isLoading) {
@@ -92,40 +82,23 @@ export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
         />
       )}
       {/* Nueva mesa */}
+      {orderingFor && (
+        <AddOrderModal
+          guestId={orderingFor.id}
+          guestName={orderingFor.name}
+          onClose={() => setOrderingFor(null)}
+          onSuccess={() => setOrderingFor(null)}
+        />
+      )}
       {showCreate ? (
-        <form onSubmit={handleCreate} className="flex flex-col gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-900/10 sm:flex-row sm:items-center">
-          <input
-            aria-label="Nombre de la mesa"
-            autoFocus
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Nombre de la mesa..."
-            className="min-h-11 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
-          />
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={createSession.isPending}
-              aria-busy={createSession.isPending}
-              className="min-h-11 flex-1 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50 sm:flex-none"
-            >
-              {createSession.isPending ? "Abriendo..." : "Abrir mesa"}
-            </button>
-            <button type="button" onClick={() => setShowCreate(false)} className="min-h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-500 hover:bg-white dark:border-white/10">
-              Cancelar
-            </button>
-          </div>
-          {createSession.error && (
-            <p className="text-xs text-red-500">{createSession.error.message}</p>
-          )}
-        </form>
+        <OpenTableForm suggestedName={suggestedName} onCancel={() => setShowCreate(false)} onOpened={handleOpened} />
       ) : (
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {sessionsLabel}
           </p>
           <button
-            onClick={openCreate}
+            onClick={() => setShowCreate(true)}
             className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-700"
           >
             + Nueva mesa

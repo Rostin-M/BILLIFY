@@ -20,6 +20,7 @@ type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 const MAX_CHECKOUT_GROUPS = 50;
 const MAX_GROUP_GUESTS = 100;
+const MAX_OPENING_GUESTS = 30;
 
 const ALREADY_CHARGED_MESSAGE = "Esta cuenta ya fue cobrada. Actualiza la mesa para ver su estado actual.";
 
@@ -337,9 +338,16 @@ export const tableSessionRouter = createTRPCRouter({
     return `Mesa ${n}`;
   }),
 
-  // Open a new table
+  // Open a new table. `guests` seats the diners right away (one entry per diner;
+  // an empty name becomes "Cliente N"); without it the table opens empty.
   create: businessProcedure
-    .input(z.object({ name: z.string().trim().min(1, "El nombre de la mesa es obligatorio").max(120) }))
+    .input(z.object({
+      name: z.string().trim().min(1, "El nombre de la mesa es obligatorio").max(120),
+      guests: z.array(z.string().trim().max(120))
+        .min(1)
+        .max(MAX_OPENING_GUESTS, `Máximo ${MAX_OPENING_GUESTS} clientes al abrir la mesa`)
+        .optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const { businessId, id: userId } = ctx.session.user;
 
@@ -351,9 +359,20 @@ export const tableSessionRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN", message: "Debes tener una caja abierta para abrir una mesa." });
       }
 
+      // addedAt explícito y creciente: la mesa lista a los clientes por addedAt.
+      const openedAt = Date.now();
+      const guests = (input.guests ?? []).map((name, i) => ({
+        name: name || `Cliente ${i + 1}`,
+        addedAt: new Date(openedAt + i),
+      }));
+
       const session = await ctx.db.tableSession.create({
-        data: { businessId, userId, name: input.name },
-        select: { id: true, name: true },
+        data: { businessId, userId, name: input.name, guests: { create: guests } },
+        select: {
+          id: true,
+          name: true,
+          guests: { select: { id: true, name: true }, orderBy: { addedAt: "asc" } },
+        },
       });
       return session;
     }),

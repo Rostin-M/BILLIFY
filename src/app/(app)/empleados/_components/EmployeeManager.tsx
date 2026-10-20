@@ -6,6 +6,7 @@ import { Check, UserCog } from "lucide-react";
 
 import { api } from "~/trpc/react";
 import { EmptyState } from "~/app/_components/EmptyState";
+import { NewPasswordFields, newPasswordReady } from "~/app/_components/NewPasswordFields";
 import { SkeletonListRows } from "~/app/_components/Skeletons";
 
 type CreateForm = {
@@ -23,6 +24,8 @@ export function EmployeeManager() {
   const utils = api.useUtils();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<CreateForm>(emptyForm);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   // Contraseña temporal generada por el servidor: se muestra una sola vez
   const [tempCredential, setTempCredential] = useState<TempCredential | null>(null);
 
@@ -37,6 +40,7 @@ export function EmployeeManager() {
           : null,
       );
       setForm(emptyForm);
+      setConfirmPassword("");
       setShowForm(false);
       await utils.user.list.invalidate();
     },
@@ -76,6 +80,15 @@ export function EmployeeManager() {
 
   const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (form.password && !newPasswordReady(form.password, confirmPassword)) {
+      setPasswordError(
+        form.password === confirmPassword
+          ? "La contraseña aún no cumple todos los requisitos."
+          : "Las contraseñas no coinciden.",
+      );
+      return;
+    }
+    setPasswordError(null);
     setTempCredential(null);
     createEmployee.mutate(form);
   };
@@ -176,25 +189,36 @@ export function EmployeeManager() {
               />
             </label>
 
-            <label className="block space-y-1 text-sm">
-              <span className="text-slate-700 dark:text-slate-300">
-                Contraseña temporal <span className="text-slate-500 dark:text-slate-400">(opcional)</span>
-              </span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                minLength={10}
-                maxLength={128}
-                value={form.password}
-                onChange={handleChange("password")}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+            <div className="space-y-1">
+              <NewPasswordFields
+                optional
+                label="Contraseña temporal (opcional)"
+                confirmLabel="Confirmar contraseña temporal"
                 placeholder="Déjala vacía para generar una segura"
+                password={form.password}
+                onPasswordChange={(value) => {
+                  setForm((prev) => ({ ...prev, password: value }));
+                  if (!value) setConfirmPassword("");
+                  setPasswordError(null);
+                }}
+                confirm={confirmPassword}
+                onConfirmChange={(value) => {
+                  setConfirmPassword(value);
+                  setPasswordError(null);
+                }}
+                inputClassName="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+                labelClassName="text-slate-700 dark:text-slate-300"
               />
-              <span className="block text-xs text-slate-500 dark:text-slate-400">
-                Mínimo 10 caracteres con letras y números. No se envía por correo: el empleado
-                deberá cambiarla al ingresar.
-              </span>
-            </label>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                No se envía por correo: el empleado deberá cambiarla al ingresar.
+              </p>
+            </div>
+
+            {passwordError && (
+              <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+                {passwordError}
+              </p>
+            )}
 
             {createEmployee.error && (
               <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">

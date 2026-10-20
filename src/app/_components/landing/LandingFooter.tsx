@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { copyrightNotice } from "~/lib/legal";
 import { LANDING_LINKS, LOGIN_HREF, REGISTER_HREF } from "./nav-links";
 
 const LEGAL_LINKS = [
@@ -29,7 +30,7 @@ export function LandingFooter() {
               height={32}
               className="logo-eagle object-contain"
             />
-            <span className="text-[15px] font-extrabold tracking-[0.18em] text-slate-900 dark:text-white">
+            <span className="font-display text-[17px] font-extrabold tracking-[0.12em] text-slate-900 dark:text-white">
               BILLIFY
             </span>
           </Link>
@@ -88,7 +89,7 @@ export function LandingFooter() {
       </div>
       <div className="ala-stripe h-1 w-full" aria-hidden="true" />
       <p className="mx-auto max-w-6xl px-4 py-6 text-xs text-slate-500 sm:px-6 dark:text-slate-400">
-        © {new Date().getFullYear()} BILLIFY. Hecho en Colombia.
+        {copyrightNotice()} Hecho en Colombia.
       </p>
     </footer>
   );

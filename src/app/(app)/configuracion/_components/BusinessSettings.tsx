@@ -118,6 +118,8 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
   const [form, setForm] = useState<SettingsForm>(() => formFromData(initial));
   const [savingSection, setSavingSection] = useState<SectionId | null>(null);
   const [error, setError] = useState<{ section: SectionId; message: string } | null>(null);
+  // Sección recién guardada: muestra "Cambios guardados" unos segundos.
+  const [justSaved, setJustSaved] = useState<SectionId | null>(null);
 
   const updateSettings = api.business.updateSettings.useMutation();
 
@@ -125,6 +127,12 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
     SECTIONS.filter((s) => isSectionDirty(s, form, saved)).map((s) => s.id),
   );
   const hasDirty = dirtyIds.size > 0;
+
+  useEffect(() => {
+    if (!justSaved) return;
+    const timer = setTimeout(() => setJustSaved(null), 3500);
+    return () => clearTimeout(timer);
+  }, [justSaved]);
 
   // Avisa antes de cerrar/recargar si hay cambios sin guardar
   useEffect(() => {
@@ -163,6 +171,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
     updateSettings.mutate(toInput(candidate, maxReg), {
       onSuccess: (data) => {
         setSaved(candidate);
+        setJustSaved(meta.id);
         toast.success(data.message);
         void utils.business.getSettings.invalidate();
       },
@@ -217,6 +226,7 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
             description={activeMeta.description}
             dirty={dirtyIds.has(active)}
             saving={savingSection !== null}
+            justSaved={justSaved === active}
             error={error?.section === active ? error.message : null}
             onSave={() => save(activeMeta)}
             onDiscard={() => discard(activeMeta)}

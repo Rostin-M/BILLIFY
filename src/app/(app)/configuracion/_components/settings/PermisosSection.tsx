@@ -4,14 +4,15 @@ import Link from "next/link";
 import { Info } from "lucide-react";
 
 import type { SectionProps } from "./types";
-import { CheckboxRow, dividerClass, SubHeading } from "./ui";
+import { dividerClass, SubHeading, ToggleRow } from "./ui";
 
-export function PermisosSection({ form, update }: SectionProps) {
+export function PermisosSection({ form, saved, update }: SectionProps) {
   return (
     <>
       <div>
         <SubHeading>Precios</SubHeading>
-        <CheckboxRow
+        <ToggleRow
+          changed={form.cashiersCanEditPrices !== saved.cashiersCanEditPrices}
           checked={form.cashiersCanEditPrices}
           onChange={(checked) => update({ cashiersCanEditPrices: checked })}
           title="Permitir que los cajeros cambien precios"

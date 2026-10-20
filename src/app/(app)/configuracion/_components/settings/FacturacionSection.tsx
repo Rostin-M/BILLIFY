@@ -2,14 +2,18 @@
 
 import type { ContactSource, SectionProps, TaxFormItem, TaxSlots } from "./types";
 import {
-  CheckboxRow,
+  changedInput,
+  choiceCardClass,
   dividerClass,
+  FieldLabel,
   inputClass,
   labelTextClass,
   Notice,
   Optional,
   readOnlyInputClass,
   SubHeading,
+  ToggleRow,
+  Unsaved,
 } from "./ui";
 
 export function FacturacionSection({
@@ -24,6 +28,12 @@ export function FacturacionSection({
   };
 
   // El servidor valida contra lo guardado en "Negocio", no contra borradores
+  const taxChanged = (i: number) => {
+    const a = form.taxes[i]!;
+    const b = saved.taxes[i]!;
+    return a.enabled !== b.enabled || a.name !== b.name || a.rate !== b.rate;
+  };
+
   const missingBusinessPhone = form.invoicePhoneSource === "BUSINESS" && !saved.phone.trim();
   const missingBusinessEmail = form.invoiceEmailSource === "BUSINESS" && !saved.email.trim();
 
@@ -35,24 +45,26 @@ export function FacturacionSection({
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-1 text-sm">
-              <span className={labelTextClass}>
+              <FieldLabel changed={form.ownerPhone !== saved.ownerPhone}>
                 Mi teléfono personal <Optional />
-              </span>
+              </FieldLabel>
               <input
                 type="tel"
                 maxLength={20}
                 value={form.ownerPhone}
                 onChange={(e) => update({ ownerPhone: e.target.value })}
-                className={inputClass}
+                className={`${inputClass} ${changedInput(form.ownerPhone !== saved.ownerPhone)}`}
                 placeholder="300 123 4567"
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span className={labelTextClass}>¿Qué teléfono va en la factura?</span>
+              <FieldLabel changed={form.invoicePhoneSource !== saved.invoicePhoneSource}>
+                ¿Qué teléfono va en la factura?
+              </FieldLabel>
               <select
                 value={form.invoicePhoneSource}
                 onChange={(e) => update({ invoicePhoneSource: e.target.value as ContactSource })}
-                className={inputClass}
+                className={`${inputClass} ${changedInput(form.invoicePhoneSource !== saved.invoicePhoneSource)}`}
               >
                 <option value="NONE">No mostrar teléfono</option>
                 <option value="BUSINESS">Teléfono del negocio</option>
@@ -77,11 +89,13 @@ export function FacturacionSection({
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span className={labelTextClass}>¿Qué correo va en la factura?</span>
+              <FieldLabel changed={form.invoiceEmailSource !== saved.invoiceEmailSource}>
+                ¿Qué correo va en la factura?
+              </FieldLabel>
               <select
                 value={form.invoiceEmailSource}
                 onChange={(e) => update({ invoiceEmailSource: e.target.value as ContactSource })}
-                className={inputClass}
+                className={`${inputClass} ${changedInput(form.invoiceEmailSource !== saved.invoiceEmailSource)}`}
               >
                 <option value="NONE">No mostrar correo</option>
                 <option value="OWNER">Mi correo (propietario)</option>
@@ -103,7 +117,8 @@ export function FacturacionSection({
       <div>
         <SubHeading>Impuestos</SubHeading>
         <div className="space-y-4">
-          <CheckboxRow
+          <ToggleRow
+            changed={form.autoTax !== saved.autoTax}
             checked={form.autoTax}
             onChange={(checked) => update({ autoTax: checked })}
             title="Calcular impuesto en facturas"
@@ -127,7 +142,7 @@ export function FacturacionSection({
                   className="flex flex-col gap-2 rounded-xl border border-slate-100 p-2 dark:border-white/5 sm:grid sm:grid-cols-[5rem_1fr_7rem] sm:items-center sm:gap-2 sm:border-0 sm:p-0"
                 >
                   <div className="flex items-center gap-2 sm:contents">
-                    <label className="flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2 py-2 dark:border-white/10">
+                    <label className="flex min-h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2.5 transition-colors has-checked:border-violet-300 has-checked:bg-violet-50 dark:border-white/10 dark:has-checked:border-violet-500/40 dark:has-checked:bg-violet-900/20">
                       <input
                         type="checkbox"
                         checked={taxItem.enabled}
@@ -144,7 +159,7 @@ export function FacturacionSection({
                       disabled={!taxItem.enabled}
                       placeholder={`Impuesto ${i + 1}`}
                       aria-label={`Nombre del impuesto ${i + 1}`}
-                      className={inputClass}
+                      className={`${inputClass} ${changedInput(taxChanged(i))}`}
                     />
                   </div>
                   <div className="relative">
@@ -158,7 +173,7 @@ export function FacturacionSection({
                       disabled={!taxItem.enabled}
                       placeholder="0"
                       aria-label={`Tasa del impuesto ${i + 1}`}
-                      className={`${inputClass} pr-7`}
+                      className={`${inputClass} pr-7 ${changedInput(taxChanged(i))}`}
                     />
                     <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">
                       %
@@ -171,11 +186,12 @@ export function FacturacionSection({
               </p>
 
               <div className={`${dividerClass} pt-3`}>
-                <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                <p className="mb-2 flex flex-wrap items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
                   ¿Cómo mostrar los impuestos en la factura?
+                  <Unsaved show={form.invoiceTaxDetail !== saved.invoiceTaxDetail} />
                 </p>
                 <div className="space-y-2">
-                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+                  <label className={choiceCardClass}>
                     <input
                       type="radio"
                       name="invoiceTaxDetail"
@@ -193,7 +209,7 @@ export function FacturacionSection({
                       </span>
                     </span>
                   </label>
-                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+                  <label className={choiceCardClass}>
                     <input
                       type="radio"
                       name="invoiceTaxDetail"

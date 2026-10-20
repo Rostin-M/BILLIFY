@@ -6,21 +6,29 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
 import { PLATFORM_ADMIN_ROLE, platformAdminPasswordProblem } from "~/server/auth/platformAdminPolicy";
 import { logAuthEvent } from "~/server/lib/authEvents";
-import { sendPasswordReset, sendVerificationCode, sendWelcomeEmail } from "~/server/lib/email";
+import {
+  sendLegalAcceptanceEmail,
+  sendPasswordReset,
+  sendVerificationCode,
+  sendWelcomeEmail,
+} from "~/server/lib/email";
 import { enforceRateLimits, RATE_LIMITS } from "~/server/lib/rateLimit";
 import { getClientIp, getUserAgent } from "~/server/lib/requestMeta";
 import { generateNumericCode, hashCode, MAX_CODE_ATTEMPTS, verifyCode } from "~/server/lib/secureCode";
 import { trialSubscriptionData } from "~/server/subscription/service";
+import { LEGAL_VERSION } from "~/lib/legal";
+import { PASSWORD_MAX_LENGTH, PASSWORD_RULE_ERRORS, PASSWORD_RULES } from "~/lib/passwordPolicy";
 
 // ─── Validaciones compartidas ──────────────────────────────────────────────
 
-/** Política de contraseñas nuevas: 10–128 caracteres, al menos una letra y un número. */
+/** Política de contraseñas nuevas (ver ~/lib/passwordPolicy): las existentes siguen sirviendo para ingresar. */
 export const passwordPolicySchema = z
   .string()
-  .min(10, "La contraseña debe tener mínimo 10 caracteres")
-  .max(128, "La contraseña debe tener máximo 128 caracteres")
-  .regex(/[A-Za-z]/, "La contraseña debe incluir al menos una letra")
-  .regex(/\d/, "La contraseña debe incluir al menos un número");
+  .max(PASSWORD_MAX_LENGTH, `La contraseña debe tener máximo ${PASSWORD_MAX_LENGTH} caracteres`)
+  .superRefine((password, ctx) => {
+    const failed = PASSWORD_RULES.find((rule) => !rule.test(password));
+    if (failed) ctx.addIssue({ code: "custom", message: PASSWORD_RULE_ERRORS[failed.id] });
+  });
 
 const emailSchema = z
   .string()
@@ -57,6 +65,9 @@ export const registerOwnerSchema = z.object({
     .max(20, "La cédula del propietario es demasiado larga"),
   ownerEmail: emailSchema,
   ownerPassword: passwordPolicySchema,
+  acceptedTerms: z.literal(true, {
+    errorMap: () => ({ message: "Debes aceptar los Términos y la Política de Tratamiento de Datos para crear tu cuenta." }),
+  }),
 });
 
 const CODE_TTL_MINUTES = 15;
@@ -118,6 +129,7 @@ export const authRouter = createTRPCRouter({
     .input(registerOwnerSchema)
     .mutation(async ({ ctx, input }) => {
       const ip = getClientIp(ctx.headers);
+      const userAgent = getUserAgent(ctx.headers);
       await enforceRateLimits([{ key: `register:ip:${ip}`, rule: RATE_LIMITS.registerByIp }]);
 
       const now = new Date();
@@ -177,6 +189,11 @@ export const authRouter = createTRPCRouter({
         ownerName: input.ownerName,
         ownerDocument: input.ownerDocument,
         passwordHash,
+        // Prueba de la autorización: se guarda ahora, cuando se marcó la casilla.
+        termsVersion: LEGAL_VERSION,
+        termsAcceptedAt: now,
+        termsIp: ip,
+        termsUserAgent: userAgent,
       };
 
       // Upsert: sobrescribe un pendiente vencido del mismo correo
@@ -246,7 +263,7 @@ export const authRouter = createTRPCRouter({
       }
 
       // Crear negocio y usuario solo ahora que el correo está verificado
-      await ctx.db.$transaction(async (tx) => {
+      const consent = await ctx.db.$transaction(async (tx) => {
         // Consumir el pendiente primero: si otra petición ya lo usó, se aborta
         const consumed = await tx.pendingRegistration.deleteMany({
           where: { id: pending.id, codeHash: pending.codeHash },
@@ -265,7 +282,7 @@ export const authRouter = createTRPCRouter({
         // Todo negocio nuevo arranca con la prueba gratis.
         await tx.subscription.create({ data: trialSubscriptionData(business.id, new Date()) });
 
-        await tx.user.create({
+        const owner = await tx.user.create({
           data: {
             name: pending.ownerName,
             email: pending.email,
@@ -277,10 +294,31 @@ export const authRouter = createTRPCRouter({
             businessId: business.id,
           },
         });
+
+        // Un registro pendiente anterior a esta función no traía la aceptación:
+        // el formulario ya la exigía, así que se toma la versión y hora actuales.
+        return tx.legalConsent.create({
+          data: {
+            userId: owner.id,
+            businessId: business.id,
+            email: pending.email,
+            version: pending.termsVersion ?? LEGAL_VERSION,
+            acceptedAt: pending.termsAcceptedAt ?? new Date(),
+            ip: pending.termsIp ?? ip,
+            userAgent: pending.termsUserAgent ?? userAgent,
+          },
+          select: { id: true, version: true, acceptedAt: true },
+        });
       }, { maxWait: 10000, timeout: 15000 });
 
       // Correo de bienvenida — no bloquea si falla
       void sendWelcomeEmail(pending.email, pending.ownerName, pending.businessName).catch(() => null);
+
+      // Constancia de aceptación de los documentos legales; se marca al salir.
+      runAfterResponse(async () => {
+        await sendLegalAcceptanceEmail(pending.email, pending.ownerName, consent);
+        await ctx.db.legalConsent.update({ where: { id: consent.id }, data: { emailSentAt: new Date() } });
+      });
 
       return { message: "Cuenta creada. Ya puedes iniciar sesión." };
     }),

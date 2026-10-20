@@ -1,7 +1,13 @@
 import bcrypt from "bcryptjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { sendPasswordReset, sendVerificationCode, sendWelcomeEmail } from "~/server/lib/email";
+import { LEGAL_VERSION } from "~/lib/legal";
+import {
+  sendLegalAcceptanceEmail,
+  sendPasswordReset,
+  sendVerificationCode,
+  sendWelcomeEmail,
+} from "~/server/lib/email";
 import { hashCode } from "~/server/lib/secureCode";
 import { callerFor, createShop, db } from "../../../../tests/integration/helpers";
 
@@ -11,7 +17,8 @@ const registration = {
   ownerName: "Marta Ruiz",
   ownerDocument: "52123456",
   ownerEmail: "  Marta@Panaderia.CO ",
-  ownerPassword: "PanFresco2026",
+  ownerPassword: "PanFresco-2026",
+  acceptedTerms: true as const,
 };
 const EMAIL = "marta@panaderia.co";
 
@@ -28,6 +35,7 @@ beforeEach(() => {
   vi.mocked(sendVerificationCode).mockClear();
   vi.mocked(sendPasswordReset).mockClear();
   vi.mocked(sendWelcomeEmail).mockClear();
+  vi.mocked(sendLegalAcceptanceEmail).mockClear();
 });
 
 describe("registro con verificación de correo", () => {
@@ -43,9 +51,37 @@ describe("registro con verificación de correo", () => {
     const owner = await db.user.findUniqueOrThrow({ where: { email: EMAIL }, include: { business: true } });
     expect(owner).toMatchObject({ role: "OWNER", isActive: true, name: "Marta Ruiz" });
     expect(owner.business).toMatchObject({ name: "Panadería La 14", document: "900123456" });
-    await expect(bcrypt.compare("PanFresco2026", owner.passwordHash!)).resolves.toBe(true);
+    await expect(bcrypt.compare("PanFresco-2026", owner.passwordHash!)).resolves.toBe(true);
     await expect(db.pendingRegistration.count()).resolves.toBe(0);
     expect(sendWelcomeEmail).toHaveBeenCalledWith(EMAIL, "Marta Ruiz", "Panadería La 14");
+  });
+
+  it("guarda la prueba de la aceptación legal y envía la constancia", async () => {
+    await anonymous().auth.registerOwner(registration);
+    await anonymous().auth.verifyEmail({ email: EMAIL, code: lastCode(sendVerificationCode) });
+
+    const owner = await db.user.findUniqueOrThrow({ where: { email: EMAIL } });
+    const consent = await db.legalConsent.findFirstOrThrow({ where: { userId: owner.id } });
+    expect(consent).toMatchObject({ email: EMAIL, businessId: owner.businessId, version: LEGAL_VERSION });
+    expect(consent.acceptedAt).toBeInstanceOf(Date);
+
+    // El envío corre después de responder: se espera a que marque la constancia.
+    await vi.waitFor(async () => {
+      const sent = await db.legalConsent.findUniqueOrThrow({ where: { id: consent.id } });
+      expect(sent.emailSentAt).not.toBeNull();
+    });
+    expect(sendLegalAcceptanceEmail).toHaveBeenCalledWith(
+      EMAIL,
+      "Marta Ruiz",
+      expect.objectContaining({ version: LEGAL_VERSION }),
+    );
+  });
+
+  it("no registra sin aceptar los términos", async () => {
+    await expect(
+      anonymous().auth.registerOwner({ ...registration, acceptedTerms: false as unknown as true }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(db.pendingRegistration.count()).resolves.toBe(0);
   });
 
   it("rechaza correos o documentos ya registrados", async () => {
@@ -123,16 +159,16 @@ describe("recuperación de contraseña", () => {
     const { owner, code } = await requestReset();
 
     await expect(
-      anonymous().auth.resetPassword({ email: owner.email!, token: code, newPassword: "NuevaClave123" }),
+      anonymous().auth.resetPassword({ email: owner.email!, token: code, newPassword: "NuevaClave-123" }),
     ).resolves.toEqual({ message: "Contraseña actualizada. Ya puedes iniciar sesión." });
 
     const updated = await db.user.findUniqueOrThrow({ where: { id: owner.id } });
     expect(updated).toMatchObject({ sessionVersion: 1, failedLogins: 0 });
-    await expect(bcrypt.compare("NuevaClave123", updated.passwordHash!)).resolves.toBe(true);
+    await expect(bcrypt.compare("NuevaClave-123", updated.passwordHash!)).resolves.toBe(true);
     await expect(db.authEvent.count({ where: { type: "PASSWORD_RESET_SUCCESS" } })).resolves.toBe(1);
     // El código no se puede reutilizar.
     await expect(
-      anonymous().auth.resetPassword({ email: owner.email!, token: code, newPassword: "OtraClave123" }),
+      anonymous().auth.resetPassword({ email: owner.email!, token: code, newPassword: "OtraClave-123" }),
     ).rejects.toThrow("Código incorrecto o vencido.");
   });
 
@@ -145,20 +181,20 @@ describe("recuperación de contraseña", () => {
     });
     expect(sendPasswordReset).toHaveBeenCalledTimes(1);
     await expect(
-      anonymous().auth.resetPassword({ email: "nadie@x.co", token: code, newPassword: "NuevaClave123" }),
+      anonymous().auth.resetPassword({ email: "nadie@x.co", token: code, newPassword: "NuevaClave-123" }),
     ).rejects.toThrow("Código incorrecto o vencido.");
     for (let i = 0; i < 5; i++) {
       await expect(
-        anonymous().auth.resetPassword({ email: owner.email!, token: wrong, newPassword: "NuevaClave123" }),
+        anonymous().auth.resetPassword({ email: owner.email!, token: wrong, newPassword: "NuevaClave-123" }),
       ).rejects.toThrow("Código incorrecto o vencido.");
     }
     await expect(
-      anonymous().auth.resetPassword({ email: owner.email!, token: code, newPassword: "NuevaClave123" }),
+      anonymous().auth.resetPassword({ email: owner.email!, token: code, newPassword: "NuevaClave-123" }),
     ).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
     // Aun liberando el límite, tras 5 fallos el código correcto quedó invalidado.
     await db.rateLimit.deleteMany();
     await expect(
-      anonymous().auth.resetPassword({ email: owner.email!, token: code, newPassword: "NuevaClave123" }),
+      anonymous().auth.resetPassword({ email: owner.email!, token: code, newPassword: "NuevaClave-123" }),
     ).rejects.toThrow("Código incorrecto o vencido.");
   });
 });
@@ -174,10 +210,10 @@ describe("auth.changePassword", () => {
   }
 
   it("cambia la contraseña aunque se exija el cambio y cierra la sesión", async () => {
-    const owner = await ownerWithPassword("Temporal123");
+    const owner = await ownerWithPassword("Temporal-123");
 
     await expect(
-      callerFor(owner).auth.changePassword({ currentPassword: "Temporal123", newPassword: "Definitiva123" }),
+      callerFor(owner).auth.changePassword({ currentPassword: "Temporal-123", newPassword: "Definitiva-123" }),
     ).resolves.toEqual({
       message: "Contraseña actualizada. Inicia sesión con tu nueva contraseña.",
       requiresReLogin: true,
@@ -191,13 +227,13 @@ describe("auth.changePassword", () => {
   });
 
   it("valida la contraseña actual y que la nueva sea distinta", async () => {
-    const owner = await ownerWithPassword("Temporal123");
+    const owner = await ownerWithPassword("Temporal-123");
     const caller = callerFor(owner);
 
-    await expect(caller.auth.changePassword({ currentPassword: "Otra12345678", newPassword: "Definitiva123" })).rejects.toThrow(
+    await expect(caller.auth.changePassword({ currentPassword: "Otra12345678", newPassword: "Definitiva-123" })).rejects.toThrow(
       "La contraseña actual es incorrecta.",
     );
-    await expect(caller.auth.changePassword({ currentPassword: "Temporal123", newPassword: "Temporal123" })).rejects.toThrow(
+    await expect(caller.auth.changePassword({ currentPassword: "Temporal-123", newPassword: "Temporal-123" })).rejects.toThrow(
       "La nueva contraseña debe ser diferente a la actual.",
     );
   });
@@ -205,7 +241,7 @@ describe("auth.changePassword", () => {
   it("falla para usuarios sin contraseña", async () => {
     const { owner } = await createShop();
     await expect(
-      callerFor(owner).auth.changePassword({ currentPassword: "x", newPassword: "Definitiva123" }),
+      callerFor(owner).auth.changePassword({ currentPassword: "x", newPassword: "Definitiva-123" }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });

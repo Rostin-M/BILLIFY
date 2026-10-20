@@ -5,6 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 
 import { Logo } from "~/app/_components/Logo";
+import { NewPasswordFields, newPasswordReady } from "~/app/_components/NewPasswordFields";
 import { ThemeToggle } from "~/app/_components/ThemeToggle";
 import { api } from "~/trpc/react";
 
@@ -156,8 +157,12 @@ export default function RecuperarContrasenaPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 setClientError(null);
-                if (newPassword !== confirmPassword) {
-                  setClientError("Las contraseñas no coinciden.");
+                if (!newPasswordReady(newPassword, confirmPassword)) {
+                  setClientError(
+                    newPassword === confirmPassword
+                      ? "La nueva contraseña aún no cumple todos los requisitos."
+                      : "Las contraseñas no coinciden.",
+                  );
                   return;
                 }
                 resetPassword.mutate({ email, token: code, newPassword });
@@ -179,35 +184,22 @@ export default function RecuperarContrasenaPage() {
                 />
               </label>
 
-              <label className="block space-y-1 text-sm">
-                <span className="text-slate-300">Nueva contraseña</span>
-                <input
-                  required
-                  type="password"
-                  minLength={10}
-                  maxLength={128}
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-blue-500 transition placeholder:text-slate-600 focus:ring-2"
-                  placeholder="Mínimo 10 caracteres con letras y números"
-                />
-              </label>
-
-              <label className="block space-y-1 text-sm">
-                <span className="text-slate-300">Confirmar contraseña</span>
-                <input
-                  required
-                  type="password"
-                  minLength={10}
-                  maxLength={128}
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-blue-500 transition placeholder:text-slate-600 focus:ring-2"
-                  placeholder="Repite la contraseña"
-                />
-              </label>
+              <NewPasswordFields
+                tone="dark"
+                label="Nueva contraseña"
+                password={newPassword}
+                onPasswordChange={(value) => {
+                  setNewPassword(value);
+                  setClientError(null);
+                }}
+                confirm={confirmPassword}
+                onConfirmChange={(value) => {
+                  setConfirmPassword(value);
+                  setClientError(null);
+                }}
+                inputClassName="w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-blue-500 transition placeholder:text-slate-600 focus:ring-2"
+                labelClassName="text-slate-300"
+              />
 
               {clientError && (
                 <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">

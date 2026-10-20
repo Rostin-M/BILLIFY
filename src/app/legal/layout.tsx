@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { Logo } from "~/app/_components/Logo";
+import { copyrightNotice } from "~/lib/legal";
+import { LegalTabs } from "./_components/LegalTabs";
 
-const TABS = [
-  { href: "/legal/privacidad", label: "Privacidad" },
-  { href: "/legal/terminos", label: "Términos y condiciones" },
-  { href: "/legal/cookies", label: "Cookies" },
-];
-
-export default function LegalLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function LegalLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900 dark:bg-slate-950 dark:text-white">
       <div className="mx-auto max-w-3xl">
@@ -20,26 +18,22 @@ export default function LegalLayout({ children }: Readonly<{ children: React.Rea
           </Link>
         </div>
 
-        <nav aria-label="Documentos legales" className="mb-8 flex flex-wrap gap-2 border-b border-slate-200 pb-4 dark:border-white/10">
-          {TABS.map((tab) => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-violet-300 hover:text-violet-700 dark:border-white/10 dark:text-slate-300 dark:hover:border-violet-500/40 dark:hover:text-violet-300"
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+        <LegalTabs />
 
-        <article className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-8">
+        <article className="space-y-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 dark:border-white/10 dark:bg-white/5">
           {children}
         </article>
 
         <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
-          <Link href="/" className="underline underline-offset-4 hover:text-slate-600 dark:hover:text-slate-300">
+          <Link
+            href="/"
+            className="underline underline-offset-4 hover:text-slate-600 dark:hover:text-slate-300"
+          >
             Volver al inicio
           </Link>
+        </p>
+        <p className="mt-3 text-center text-xs text-slate-500 dark:text-slate-400">
+          {copyrightNotice()} Prohibida su reproducción o distribución sin autorización.
         </p>
       </div>
     </main>

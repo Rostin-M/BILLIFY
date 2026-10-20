@@ -145,6 +145,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   authEvents          AuthEvent[]
   platformAuditLogs   PlatformAuditLog[]
+  legalConsents       LegalConsent[]
 
   @@index([businessId])
 }
@@ -281,20 +282,48 @@ model PasswordResetToken {
 }
 
 model PendingRegistration {
-  id               String   @id @default(cuid())
-  email            String   @unique
+  id               String    @id @default(cuid())
+  email            String    @unique
   // SHA-256 del código de verificación enviado por correo.
-  codeHash         String   @map("code_hash")
-  attempts         Int      @default(0)
-  expiresAt        DateTime @map("expires_at")
-  businessName     String   @map("business_name")
-  businessDocument String   @map("business_document")
-  ownerName        String   @map("owner_name")
-  ownerDocument    String   @map("owner_document")
-  passwordHash     String   @map("password_hash")
-  createdAt        DateTime @default(now()) @map("created_at")
+  codeHash         String    @map("code_hash")
+  attempts         Int       @default(0)
+  expiresAt        DateTime  @map("expires_at")
+  businessName     String    @map("business_name")
+  businessDocument String    @map("business_document")
+  ownerName        String    @map("owner_name")
+  ownerDocument    String    @map("owner_document")
+  passwordHash     String    @map("password_hash")
+  // Aceptación de los documentos legales en el formulario; pasa a LegalConsent al verificar.
+  termsVersion     String?   @map("terms_version")
+  termsAcceptedAt  DateTime? @map("terms_accepted_at")
+  termsIp          String?   @map("terms_ip")
+  termsUserAgent   String?   @map("terms_user_agent")
+  createdAt        DateTime  @default(now()) @map("created_at")
 
   @@map("pending_registrations")
+}
+
+// Prueba de la autorización de tratamiento de datos (Ley 1581 de 2012, art. 9):
+// quién aceptó qué versión de los términos y la política, cuándo y desde dónde.
+// Se conserva aunque se borre el usuario (correo y negocio quedan como referencia).
+model LegalConsent {
+  id          String    @id @default(cuid())
+  userId      String?   @map("user_id")
+  businessId  String?   @map("business_id")
+  email       String
+  version     String
+  acceptedAt  DateTime  @map("accepted_at")
+  ip          String?
+  userAgent   String?   @map("user_agent")
+  // Fecha en que salió el correo de constancia (null = no se pudo enviar).
+  emailSentAt DateTime? @map("email_sent_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([email])
+  @@map("legal_consents")
 }
 
 model Customer {

@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { Check } from "lucide-react";
+import { type ReactNode, useId } from "react";
 
 // Clases compartidas (mismo lenguaje visual que el resto de pantallas)
 export const cardClass =
@@ -26,33 +27,99 @@ export function SubHeading({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
-export function CheckboxRow({
+/** Marca de "cambiado pero sin guardar" junto a una opción o campo. */
+export function Unsaved({ show }: Readonly<{ show: boolean }>) {
+  if (!show) return null;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+      Sin guardar
+    </span>
+  );
+}
+
+/** Etiqueta de un campo de texto con su marca de "Sin guardar". */
+export function FieldLabel({ changed, children }: Readonly<{ changed: boolean; children: ReactNode }>) {
+  return (
+    <span className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${labelTextClass}`}>
+      <span>{children}</span>
+      <Unsaved show={changed} />
+    </span>
+  );
+}
+
+/** Borde del campo que cambió y falta guardar. */
+export function changedInput(changed: boolean) {
+  return changed ? "!border-amber-400 dark:!border-amber-500/60" : "";
+}
+
+// Opción de sí/no: interruptor grande y la tarjeta se ilumina al activarla, para que
+// el toque se note aunque el cambio solo se aplique al guardar.
+export function ToggleRow({
   checked,
   onChange,
   title,
   description,
+  changed = false,
 }: Readonly<{
   checked: boolean;
   onChange: (checked: boolean) => void;
   title: string;
   description: ReactNode;
+  /** Distinto de lo guardado. */
+  changed?: boolean;
 }>) {
+  const id = useId();
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-white/10">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        aria-label={title}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded accent-violet-600"
-      />
-      <div>
-        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{title}</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
+    <div
+      className={`flex items-start gap-3 rounded-xl border p-3 transition-colors ${
+        checked
+          ? "border-violet-300 bg-violet-50/70 dark:border-violet-500/40 dark:bg-violet-900/15"
+          : "border-slate-200 dark:border-white/10"
+      }`}
+    >
+      <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{title}</span>
+          <Unsaved show={changed} />
+        </span>
+        <span id={`${id}-desc`} className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+          {description}
+        </span>
+      </label>
+      <div className="flex shrink-0 flex-col items-center gap-1">
+        <button
+          id={id}
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-describedby={`${id}-desc`}
+          onClick={() => onChange(!checked)}
+          className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+            checked ? "bg-violet-600" : "bg-slate-300 dark:bg-slate-600"
+          }`}
+        >
+          <span
+            aria-hidden
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-[translate] duration-200 ${
+              checked ? "translate-x-6" : "translate-x-1"
+            }`}
+          />
+        </button>
+        <span
+          aria-hidden
+          className={`text-[11px] font-semibold ${checked ? "text-violet-700 dark:text-violet-300" : "text-slate-500 dark:text-slate-400"}`}
+        >
+          {checked ? "Activado" : "Apagado"}
+        </span>
       </div>
-    </label>
+    </div>
   );
 }
+
+/** Tarjeta de radio/checkbox que se ilumina cuando está marcada. */
+export const choiceCardClass =
+  "flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors border-slate-200 dark:border-white/10 has-checked:border-violet-300 has-checked:bg-violet-50/70 dark:has-checked:border-violet-500/40 dark:has-checked:bg-violet-900/15";
 
 export function Notice({ children }: Readonly<{ children: ReactNode }>) {
   return (
@@ -68,6 +135,7 @@ export function SectionCard({
   description,
   dirty,
   saving,
+  justSaved,
   error,
   onSave,
   onDiscard,
@@ -77,6 +145,8 @@ export function SectionCard({
   description: string;
   dirty: boolean;
   saving: boolean;
+  /** Recién guardado: confirma con "Cambios guardados" unos segundos. */
+  justSaved: boolean;
   error: string | null;
   onSave: () => void;
   onDiscard: () => void;
@@ -110,24 +180,47 @@ export function SectionCard({
         </p>
       )}
 
-      <div className={`${dividerClass} mt-5 flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end`}>
-        {dirty && (
+      {/* Con cambios pendientes la barra queda fija abajo (sobre la navegación móvil) hasta guardar o descartar. */}
+      <div
+        className={`mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${
+          dirty
+            ? "sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 -mx-2 rounded-xl border border-amber-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-sm dark:border-amber-500/30 dark:bg-slate-900/95 md:bottom-4"
+            : `${dividerClass} pt-4`
+        }`}
+      >
+        <p role="status" aria-live="polite" className="flex min-h-5 items-center gap-2 text-sm">
+          {dirty && (
+            <>
+              <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
+              <span className="font-medium text-amber-800 dark:text-amber-300">Tienes cambios sin guardar</span>
+            </>
+          )}
+          {!dirty && justSaved && (
+            <span className="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-400">
+              <Check className="h-4 w-4" aria-hidden /> Cambios guardados
+            </span>
+          )}
+        </p>
+        <div className="flex gap-2 sm:shrink-0">
+          {dirty && (
+            <button
+              type="button"
+              onClick={onDiscard}
+              disabled={saving}
+              className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 sm:flex-none dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+            >
+              Descartar
+            </button>
+          )}
           <button
-            type="button"
-            onClick={onDiscard}
-            disabled={saving}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+            type="submit"
+            disabled={!dirty || saving}
+            aria-busy={saving}
+            className="flex-[2] whitespace-nowrap rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold sm:px-6 text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
-            Descartar
+            {saving ? "Guardando..." : "Guardar cambios"}
           </button>
-        )}
-        <button
-          type="submit"
-          disabled={!dirty || saving}
-          className="rounded-lg bg-violet-600 px-6 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saving ? "Guardando..." : "Guardar cambios"}
-        </button>
+        </div>
       </div>
     </form>
   );

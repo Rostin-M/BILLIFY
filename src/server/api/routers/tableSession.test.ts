@@ -45,6 +45,27 @@ describe("apertura de mesas y clientes", () => {
     await expect(caller.tableSession.suggestName()).resolves.toBe("Mesa 2");
   });
 
+  it("abre la mesa con sus clientes en orden; los que no tienen nombre quedan como Cliente N", async () => {
+    const table = await caller.tableSession.create({ name: "Mesa 1", guests: ["", "  Juan  ", ""] });
+
+    expect(table.guests.map((g) => g.name)).toEqual(["Cliente 1", "Juan", "Cliente 3"]);
+    const [listed] = await caller.tableSession.listActive();
+    expect(listed!.guests.map((g) => g.id)).toEqual(table.guests.map((g) => g.id));
+
+    // El siguiente que se agregue sigue la numeración.
+    await expect(caller.tableSession.addGuest({ sessionId: table.id })).resolves.toMatchObject({ name: "Cliente 4" });
+  });
+
+  it("sin clientes la mesa abre vacía, y limita cuántos se crean al abrir", async () => {
+    const empty = await openTable();
+    expect(empty.guests).toEqual([]);
+
+    await expect(
+      caller.tableSession.create({ name: "Mesa 2", guests: Array.from({ length: 31 }, () => "") }),
+    ).rejects.toThrow("Máximo 30 clientes al abrir la mesa");
+    await expect(db.tableSession.count({ where: { name: "Mesa 2" } })).resolves.toBe(0);
+  });
+
   it("agrega clientes con nombre por defecto y los vincula a clientes registrados", async () => {
     const table = await openTable();
     const registered = await createCustomer(shop.business.id, { document: "555" });

@@ -38,11 +38,11 @@ describe("user.createEmployee", () => {
   it("usa la contraseña indicada por el dueño sin devolverla", async () => {
     const { owner } = await createShop();
 
-    const result = await callerFor(owner).user.createEmployee({ ...employeeInput, password: "ClaveSegura123" });
+    const result = await callerFor(owner).user.createEmployee({ ...employeeInput, password: "ClaveSegura-123" });
 
     expect(result.temporaryPassword).toBeNull();
     const employee = await db.user.findUniqueOrThrow({ where: { id: result.id } });
-    await expect(bcrypt.compare("ClaveSegura123", employee.passwordHash!)).resolves.toBe(true);
+    await expect(bcrypt.compare("ClaveSegura-123", employee.passwordHash!)).resolves.toBe(true);
   });
 
   it("rechaza correos repetidos y contraseñas débiles; solo el dueño crea empleados", async () => {

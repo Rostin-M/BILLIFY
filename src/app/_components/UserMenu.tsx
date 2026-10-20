@@ -7,6 +7,7 @@ import Link from "next/link";
 import { AlertTriangle, CreditCard, KeyRound, Loader2, LogOut } from "lucide-react";
 import { pendingSalesBeforeSignOut, signOutAndClear } from "~/lib/clientSignOut";
 import { api } from "~/trpc/react";
+import { NewPasswordFields, newPasswordReady } from "~/app/_components/NewPasswordFields";
 import { useDialog } from "~/app/_components/ui/useDialog";
 
 type Props = { name: string | null; role: string };
@@ -44,7 +45,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
     ? name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()
     : "?";
 
-  const mismatch = next.length > 0 && confirm.length > 0 && next !== confirm;
+  const ready = newPasswordReady(next, confirm);
 
   useEffect(() => {
     if (!open) return;
@@ -98,7 +99,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
 
   function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (mismatch) return;
+    if (!ready) return;
     changePassword.mutate({ currentPassword: current, newPassword: next });
   }
 
@@ -237,35 +238,16 @@ export function UserMenu({ name, role }: Readonly<Props>) {
                   />
                 </label>
 
-                <label className="block space-y-1 text-sm">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Nueva contraseña</span>
-                  <input
-                    type="password"
-                    required
-                    value={next}
-                    onChange={(e) => setNext(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
-                  />
-                  <span className="text-xs text-slate-500">Mínimo 10 caracteres, una letra y un número</span>
-                </label>
-
-                <label className="block space-y-1 text-sm">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Confirmar nueva contraseña</span>
-                  <input
-                    type="password"
-                    required
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:bg-slate-800 dark:text-white ${
-                      mismatch
-                        ? "border-red-300 dark:border-red-500/50"
-                        : "border-slate-300 dark:border-white/15"
-                    }`}
-                  />
-                  {mismatch && (
-                    <span className="text-xs text-red-500">Las contraseñas no coinciden</span>
-                  )}
-                </label>
+                <NewPasswordFields
+                  label="Nueva contraseña"
+                  confirmLabel="Confirmar nueva contraseña"
+                  password={next}
+                  onPasswordChange={setNext}
+                  confirm={confirm}
+                  onConfirmChange={setConfirm}
+                  inputClassName="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+                  labelClassName="font-medium text-slate-700 dark:text-slate-300"
+                />
 
                 {changePassword.error && (
                   <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-400">
@@ -276,7 +258,7 @@ export function UserMenu({ name, role }: Readonly<Props>) {
                 <div className="flex gap-2 pt-1">
                   <button
                     type="submit"
-                    disabled={mismatch || changePassword.isPending}
+                    disabled={!ready || changePassword.isPending}
                     aria-busy={changePassword.isPending}
                     className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
                   >

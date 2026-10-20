@@ -4,6 +4,7 @@ import { KeyRound } from "lucide-react";
 import { useState } from "react";
 
 import { Logo } from "~/app/_components/Logo";
+import { NewPasswordFields, newPasswordReady } from "~/app/_components/NewPasswordFields";
 import { ThemeToggle } from "~/app/_components/ThemeToggle";
 import { signOutAndClear } from "~/lib/clientSignOut";
 import { api } from "~/trpc/react";
@@ -65,8 +66,12 @@ export default function CambiarContrasenaPage() {
           onSubmit={(e) => {
             e.preventDefault();
             setClientError(null);
-            if (newPassword !== confirmPassword) {
-              setClientError("Las contraseñas no coinciden.");
+            if (!newPasswordReady(newPassword, confirmPassword)) {
+              setClientError(
+                newPassword === confirmPassword
+                  ? "La nueva contraseña aún no cumple todos los requisitos."
+                  : "Las contraseñas no coinciden.",
+              );
               return;
             }
             if (newPassword === currentPassword) {
@@ -90,35 +95,23 @@ export default function CambiarContrasenaPage() {
             />
           </label>
 
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-300">Nueva contraseña</span>
-            <input
-              required
-              type="password"
-              autoComplete="new-password"
-              minLength={10}
-              maxLength={128}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className={inputClassName}
-              placeholder="Mínimo 10 caracteres con letras y números"
-            />
-          </label>
-
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-300">Confirmar nueva contraseña</span>
-            <input
-              required
-              type="password"
-              autoComplete="new-password"
-              minLength={10}
-              maxLength={128}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className={inputClassName}
-              placeholder="Repite la nueva contraseña"
-            />
-          </label>
+          <NewPasswordFields
+            tone="dark"
+            label="Nueva contraseña"
+            confirmLabel="Confirmar nueva contraseña"
+            password={newPassword}
+            onPasswordChange={(value) => {
+              setNewPassword(value);
+              setClientError(null);
+            }}
+            confirm={confirmPassword}
+            onConfirmChange={(value) => {
+              setConfirmPassword(value);
+              setClientError(null);
+            }}
+            inputClassName={inputClassName}
+            labelClassName="text-slate-300"
+          />
 
           {clientError && (
             <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">

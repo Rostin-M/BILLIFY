@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { type ChangeEvent, useRef, useState } from "react";
 
 import { Logo } from "~/app/_components/Logo";
+import { NewPasswordFields, newPasswordReady } from "~/app/_components/NewPasswordFields";
 import { ThemeToggle } from "~/app/_components/ThemeToggle";
 import { api } from "~/trpc/react";
 
@@ -42,6 +43,8 @@ export default function RegisterPage() {
   // "signing-in": entrando solo tras verificar; "manual": hay que iniciar sesión a mano.
   const [verified, setVerified] = useState<null | "signing-in" | "manual">(null);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   // Contraseña del registro hecho en esta misma visita, para entrar sin volver a escribirla.
   // Solo vive en memoria y se borra al terminar; si se llegó con "Ingresar código" no existe.
   const pendingPasswordRef = useRef<string | null>(null);
@@ -58,6 +61,7 @@ export default function RegisterPage() {
     const password = pendingPasswordRef.current;
     pendingPasswordRef.current = null;
     setForm((prev) => ({ ...prev, ownerPassword: "" }));
+    setConfirmPassword("");
 
     if (password) {
       setVerified("signing-in");
@@ -245,7 +249,17 @@ export default function RegisterPage() {
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            registerOwner.mutate(form);
+            if (!newPasswordReady(form.ownerPassword, confirmPassword)) {
+              setPasswordError(
+                form.ownerPassword === confirmPassword
+                  ? "La contraseña aún no cumple todos los requisitos."
+                  : "Las contraseñas no coinciden.",
+              );
+              return;
+            }
+            setPasswordError(null);
+            if (!acceptedTerms) return;
+            registerOwner.mutate({ ...form, acceptedTerms: true });
           }}
         >
           <div className="grid gap-4 sm:grid-cols-2">
@@ -294,33 +308,38 @@ export default function RegisterPage() {
             </label>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1 text-sm">
-              <span className="text-slate-700 dark:text-slate-200">Correo electrónico</span>
-              <input
-                required
-                type="email"
-                value={form.ownerEmail}
-                onChange={handleChange("ownerEmail")}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
-                placeholder="tucorreo@negocio.com"
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="text-slate-700 dark:text-slate-200">Contraseña</span>
-              <input
-                required
-                type="password"
-                minLength={10}
-                maxLength={128}
-                autoComplete="new-password"
-                value={form.ownerPassword}
-                onChange={handleChange("ownerPassword")}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
-                placeholder="Mínimo 10 caracteres con letras y números"
-              />
-            </label>
-          </div>
+          <label className="block space-y-1 text-sm">
+            <span className="text-slate-700 dark:text-slate-200">Correo electrónico</span>
+            <input
+              required
+              type="email"
+              value={form.ownerEmail}
+              onChange={handleChange("ownerEmail")}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+              placeholder="tucorreo@negocio.com"
+            />
+          </label>
+
+          <NewPasswordFields
+            password={form.ownerPassword}
+            onPasswordChange={(value) => {
+              setForm((prev) => ({ ...prev, ownerPassword: value }));
+              setPasswordError(null);
+            }}
+            confirm={confirmPassword}
+            onConfirmChange={(value) => {
+              setConfirmPassword(value);
+              setPasswordError(null);
+            }}
+            inputClassName="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-900"
+            labelClassName="text-slate-700 dark:text-slate-200"
+          />
+
+          {passwordError && (
+            <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+              {passwordError}
+            </p>
+          )}
 
           <label className="flex items-start gap-2 text-sm">
             <input

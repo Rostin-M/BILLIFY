@@ -22,7 +22,7 @@ export function LandingHeader() {
             priority
             className="logo-eagle object-contain"
           />
-          <span className="text-[15px] font-extrabold tracking-[0.18em] text-slate-900 dark:text-white">
+          <span className="font-display text-[17px] font-extrabold tracking-[0.12em] text-slate-900 dark:text-white">
             BILLIFY
           </span>
         </Link>
@@ -52,7 +52,7 @@ export function LandingHeader() {
           </Link>
           <Link
             href={REGISTER_HREF}
-            className="bg-ala-violet hidden rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-sm shadow-violet-900/20 transition-colors hover:bg-violet-600 sm:inline-block"
+            className="btn-shine bg-ala-violet hover:bg-ala-violet-hover shadow-ala-violet/25 hidden rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-md transition-colors sm:inline-block"
           >
             Prueba gratis 7 días
           </Link>

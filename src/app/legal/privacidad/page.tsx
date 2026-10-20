@@ -1,192 +1,301 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Placeholder } from "../_components/Placeholder";
 
-export const metadata: Metadata = { title: "Política de Privacidad — BILLIFY" };
+import {
+  ContactBlock,
+  domicile,
+  Info,
+  Provider,
+} from "../_components/legalInfo";
+import {
+  B,
+  DocHeader,
+  DocLink,
+  List,
+  numbered,
+  P,
+  Section,
+  Toc,
+} from "../_components/prose";
+
+export const metadata: Metadata = {
+  title: "Política de Tratamiento de Datos Personales — BILLIFY",
+};
+
+const TOC = [
+  ["responsable", "Responsable"],
+  ["roles", "Tus datos y los de tus clientes"],
+  ["datos", "Qué datos tratamos"],
+  ["finalidades", "Para qué los usamos"],
+  ["autorizacion", "Tu autorización"],
+  ["terceros", "Proveedores y transferencias"],
+  ["derechos", "Tus derechos"],
+  ["procedimiento", "Cómo ejercerlos"],
+  ["conservacion", "Cuánto tiempo los guardamos"],
+  ["seguridad", "Seguridad"],
+  ["menores", "Menores de edad"],
+  ["vigencia", "Vigencia y cambios"],
+  ["contacto", "Contacto"],
+] as const;
+
+const h = (id: (typeof TOC)[number][0]) => numbered(TOC, id);
 
 export default function PrivacyPolicyPage() {
   return (
     <>
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight">Política de Privacidad</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Última actualización: <Placeholder>[fecha de publicación]</Placeholder>
-        </p>
-      </header>
+      <DocHeader
+        title="Política de Tratamiento de Datos Personales"
+        intro="Aquí explicamos qué datos personales trata BILLIFY, para qué, con quién los compartimos y cómo puedes conocerlos, corregirlos o pedir que se borren. Cumple la Ley 1581 de 2012 y el Decreto 1074 de 2015 (Habeas Data)."
+      />
+      <Toc items={TOC} />
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">1. Quiénes somos</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          BILLIFY (&quot;BILLIFY&quot;, &quot;nosotros&quot;) es un software como servicio (SaaS) de punto
-          de venta y facturación para pequeños negocios en Colombia, operado por{" "}
-          <Placeholder>[razón social de BILLIFY]</Placeholder>, identificada con NIT{" "}
-          <Placeholder>[NIT de BILLIFY]</Placeholder>, con domicilio en{" "}
-          <Placeholder>[dirección de BILLIFY]</Placeholder>. Esta política explica qué datos
-          personales recopilamos, para qué los usamos y qué derechos tienes sobre ellos, en
-          cumplimiento de la Ley 1581 de 2012 y el Decreto 1074 de 2015 (Habeas Data) de Colombia.
-        </p>
-      </section>
+      <Section id="responsable" title={h("responsable")}>
+        <P>
+          El responsable del tratamiento es <Provider />, con domicilio en{" "}
+          {domicile()}. Correo para temas de datos personales:{" "}
+          <Info field="privacyEmail" />.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">2. Dos roles distintos: BILLIFY y tu negocio</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          BILLIFY es un producto multi-negocio: distintas empresas usan la misma plataforma, cada
-          una con sus propios clientes y datos. Por eso existen dos roles separados frente a la ley:
-        </p>
-        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+      <Section id="roles" title={h("roles")}>
+        <P>
+          Muchos negocios usan BILLIFY, cada uno con sus propios datos. Por eso
+          hay dos papeles distintos:
+        </P>
+        <List>
           <li>
-            <span className="font-medium text-slate-800 dark:text-slate-100">BILLIFY como Responsable del Tratamiento</span>{" "}
-            de los datos de la cuenta: el nombre y documento del negocio que se registra, el nombre
-            y cédula del propietario, su correo y su actividad dentro de la plataforma.
+            <B>BILLIFY es Responsable</B> de los datos de las cuentas: los del
+            propietario que registra el negocio y los de los usuarios que entran
+            a la plataforma.
           </li>
           <li>
-            <span className="font-medium text-slate-800 dark:text-slate-100">BILLIFY como Encargado del Tratamiento</span>{" "}
-            de los datos que cada negocio ingresa sobre sus propios clientes (por ejemplo, nombres
-            de clientes en mesas, fiados o ventas facturadas). El negocio que usa BILLIFY es el{" "}
-            <span className="font-medium text-slate-800 dark:text-slate-100">Responsable</span> de
-            esos datos y es quien debe contar con la autorización de sus propios clientes para
-            tratarlos.
+            <B>BILLIFY es Encargado</B> de los datos que cada negocio registra
+            sobre <B>sus clientes y sus empleados</B>. El negocio es el
+            Responsable de esos datos: debe tener la autorización de sus
+            clientes y empleados y atender sus solicitudes. BILLIFY solo trata
+            esos datos siguiendo las instrucciones del negocio y para prestarle
+            el servicio.
           </li>
-        </ul>
-      </section>
+        </List>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">3. Qué datos recopilamos</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          Recopilamos únicamente los datos necesarios para prestar el servicio:
-        </p>
-        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+      <Section id="datos" title={h("datos")}>
+        <P>Tratamos solo lo necesario para prestar el servicio:</P>
+        <List>
           <li>
-            <span className="font-medium text-slate-800 dark:text-slate-100">Datos de registro del negocio:</span>{" "}
-            nombre del negocio, NIT/documento del negocio, nombre y cédula del propietario, correo
-            electrónico y contraseña (almacenada cifrada, nunca en texto plano). La cédula del
-            propietario se solicita porque el negocio queda identificado como responsable ante la
-            DIAN en la facturación que genera desde la plataforma.
+            <B>Registro del negocio:</B> nombre y documento del negocio; nombre,
+            cédula y correo del propietario; contraseña (guardada cifrada, nadie
+            puede leerla). La cédula sirve para identificar a la persona
+            responsable de la cuenta y verificar su identidad cuando hace
+            solicitudes sobre ella.
           </li>
           <li>
-            <span className="font-medium text-slate-800 dark:text-slate-100">Datos operativos que tu negocio ingresa:</span>{" "}
-            productos, precios, inventario, ventas, clientes (fiados, mesas), empleados que
-            autorices y movimientos de caja. Estos datos son tuyos y los tratamos por tu cuenta.
+            <B>Usuarios y empleados</B> (los registra el propietario): nombre,
+            cédula, correo, teléfono si se agrega, rol y permisos.
           </li>
           <li>
-            <span className="font-medium text-slate-800 dark:text-slate-100">Datos técnicos mínimos:</span>{" "}
-            una cookie de sesión para mantenerte autenticado y registros de auditoría (qué usuario
-            hizo qué acción y cuándo) para seguridad y trazabilidad de tu propio negocio. No usamos
-            cookies de analítica ni de publicidad — ver la{" "}
-            <Link href="/legal/cookies" className="text-violet-600 underline underline-offset-2 dark:text-violet-400">
-              Política de Cookies
-            </Link>.
+            <B>Clientes del negocio</B> (los registra el negocio): nombre o
+            alias, y si el negocio los agrega, documento, correo y teléfono; sus
+            compras, fiados y abonos.
           </li>
-        </ul>
-      </section>
+          <li>
+            <B>Operación del negocio:</B> productos, ventas, mesas, caja,
+            inventario, el logo y las fotos de comprobantes de pago que se
+            suban.
+          </li>
+          <li>
+            <B>Pagos de la suscripción:</B> plan, valores, fechas y estado de
+            cada pago. Los datos de tarjeta o de cuenta bancaria los recibe
+            directamente la pasarela de pagos; BILLIFY no los guarda.
+          </li>
+          <li>
+            <B>Seguridad:</B> dirección IP, navegador, intentos de inicio de
+            sesión y un registro de qué usuario hizo cada acción importante
+            (ventas, anulaciones, movimientos de caja).
+          </li>
+          <li>
+            <B>En tu dispositivo:</B> la sesión, preferencias y ventas
+            pendientes de enviar; lo detallamos en la{" "}
+            <DocLink href="/legal/cookies">Política de Cookies</DocLink>.
+          </li>
+        </List>
+        <P>
+          No pedimos datos sensibles (salud, orientación, datos biométricos,
+          etc.). Te pedimos no registrarlos en campos de notas o descripciones.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">4. Para qué usamos tus datos</h2>
-        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          <li>Crear y administrar tu cuenta y la de tu negocio.</li>
-          <li>Prestar las funciones de la plataforma (ventas, inventario, mesas, caja, facturación).</li>
-          <li>Generar facturas electrónicas ante la DIAN cuando tu negocio lo requiera.</li>
-          <li>Enviarte comunicaciones operativas (verificación de correo, restablecimiento de contraseña).</li>
-          <li>Dar soporte técnico cuando lo solicites.</li>
-          <li>Prevenir fraude y proteger la seguridad de la plataforma.</li>
-          <li>Cumplir obligaciones legales y tributarias aplicables.</li>
-        </ul>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          No vendemos ni alquilamos tus datos personales ni los de tus clientes a terceros, y no los
-          usamos con fines publicitarios.
-        </p>
-      </section>
+      <Section id="finalidades" title={h("finalidades")}>
+        <List>
+          <li>
+            Crear y administrar tu cuenta, la de tu negocio y las de tus
+            usuarios.
+          </li>
+          <li>
+            Prestar las funciones de la plataforma: ventas, mesas, caja, fiados,
+            inventario y reportes.
+          </li>
+          <li>
+            Enviar por correo las facturas en PDF a los clientes del negocio,
+            cuando el negocio lo pide.
+          </li>
+          <li>
+            Enviarte correos del servicio: códigos de verificación, cambio de
+            contraseña, bienvenida, avisos de la prueba y recordatorios de pago.
+          </li>
+          <li>Cobrar la suscripción y llevar el registro de pagos.</li>
+          <li>Darte soporte cuando lo pidas.</li>
+          <li>
+            Detectar accesos sospechosos, prevenir fraude y proteger la
+            plataforma.
+          </li>
+          <li>
+            Cumplir obligaciones legales y atender requerimientos de autoridades
+            competentes.
+          </li>
+        </List>
+        <P>
+          No vendemos ni alquilamos datos personales, no los usamos para
+          publicidad y no te enviaremos publicidad sin pedirte una autorización
+          aparte.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">5. Base legal</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          Tratamos tus datos con base en la autorización que otorgas al crear tu cuenta (aceptando
-          esta política y los{" "}
-          <Link href="/legal/terminos" className="text-violet-600 underline underline-offset-2 dark:text-violet-400">
-            Términos y Condiciones
-          </Link>
-          ) y en la ejecución del servicio que contrataste con nosotros.
-        </p>
-      </section>
+      <Section id="autorizacion" title={h("autorizacion")}>
+        <P>
+          Nos das tu autorización al marcar la casilla de aceptación en el
+          registro, de forma previa, expresa e informada. Como prueba guardamos
+          la fecha y hora, la versión de los documentos que aceptaste, la
+          dirección IP y el navegador desde los que lo hiciste, y te enviamos
+          una constancia a tu correo. Puedes revocarla en
+          cualquier momento (sección{" "}
+          {TOC.findIndex(([id]) => id === "procedimiento") + 1}), salvo cuando
+          debamos conservar los datos por una obligación legal o contractual
+          vigente, como mientras tengas la cuenta activa.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">6. Con quién compartimos datos</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          Solo compartimos datos con proveedores estrictamente necesarios para operar la plataforma
-          (por ejemplo, nuestro proveedor de base de datos y almacenamiento en la nube, y la DIAN
-          cuando generas una factura electrónica), bajo obligaciones contractuales de
-          confidencialidad y seguridad. Parte de esta infraestructura puede estar ubicada fuera de
-          Colombia (por ejemplo, en Estados Unidos), lo que implica una transferencia internacional
-          de datos necesaria para prestarte el servicio; en ese caso adoptamos medidas contractuales
-          razonables para proteger tu información.
-        </p>
-      </section>
+      <Section id="terceros" title={h("terceros")}>
+        <P>
+          Para operar usamos proveedores que tratan datos por nuestra cuenta,
+          con obligaciones de confidencialidad y seguridad, y solo para lo que
+          les encargamos:
+        </P>
+        <List>
+          <li>
+            <B>Vercel</B> (Estados Unidos): aloja la aplicación.
+          </li>
+          <li>
+            <B>Supabase</B> (Estados Unidos): base de datos y almacenamiento de
+            archivos (logos y comprobantes).
+          </li>
+          <li>
+            <B>Brevo</B> (Unión Europea): envío de correos.
+          </li>
+          <li>
+            <B>Wompi</B> (Colombia): pasarela para pagar la suscripción.
+          </li>
+        </List>
+        <P>
+          Algunos de estos proveedores están fuera de Colombia. Al aceptar esta
+          política autorizas esa transmisión internacional, que se hace solo
+          para prestarte el servicio y a países con niveles adecuados de
+          protección o con garantías contractuales.
+        </P>
+        <P>
+          El personal autorizado de BILLIFY solo accede a los datos de un
+          negocio cuando hace falta para darle soporte, gestionar su suscripción
+          o atender un problema de seguridad, y esos accesos quedan registrados.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">7. Conservación de los datos</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          Conservamos tus datos mientras tu cuenta esté activa y por el tiempo adicional que exijan
-          las normas contables, tributarias o de archivo aplicables en Colombia. Si cierras tu
-          cuenta, puedes solicitar la eliminación de tus datos conforme a la sección 9, salvo la
-          información que debamos conservar por obligación legal.
-        </p>
-      </section>
+      <Section id="derechos" title={h("derechos")}>
+        <P>Como titular de tus datos tienes derecho a:</P>
+        <List>
+          <li>Conocerlos, actualizarlos y corregirlos.</li>
+          <li>Pedir prueba de la autorización que nos diste.</li>
+          <li>Saber qué uso les hemos dado.</li>
+          <li>
+            Revocar la autorización o pedir que los borremos, cuando no haya un
+            deber legal o contractual de guardarlos.
+          </li>
+          <li>Consultarlos gratis.</li>
+          <li>
+            Quejarte ante la Superintendencia de Industria y Comercio (SIC),
+            después de haber hecho tu consulta o reclamo ante nosotros.
+          </li>
+        </List>
+        <P>
+          Si eres cliente o empleado de un negocio que usa BILLIFY, dirige tu
+          solicitud primero a ese negocio, que es el responsable de tus datos.
+          Si nos escribes a nosotros, se la haremos llegar.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">8. Seguridad</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          Aplicamos medidas técnicas y administrativas razonables (cifrado de contraseñas, control
-          de acceso por rol, conexiones cifradas) para proteger tus datos. Ningún sistema es
-          completamente infalible; si detectamos un incidente de seguridad que te afecte, te lo
-          informaremos conforme a la normativa aplicable.
-        </p>
-      </section>
+      <Section id="procedimiento" title={h("procedimiento")}>
+        <P>
+          Escríbenos a <Info field="privacyEmail" /> con tu nombre, tu
+          documento, lo que pides y un correo de respuesta. Si actúas en nombre
+          de otra persona, adjunta el poder o documento que te autoriza.
+        </P>
+        <List>
+          <li>
+            <B>Consultas</B> (conocer tus datos): respondemos en máximo 10 días
+            hábiles. Si no alcanzamos, te avisamos el motivo y respondemos en
+            máximo 5 días hábiles más.
+          </li>
+          <li>
+            <B>Reclamos</B> (corregir, actualizar, borrar o revocar):
+            respondemos en máximo 15 días hábiles, prorrogables 8 días hábiles
+            más avisándote el motivo. Si al reclamo le falta información, te
+            pedimos completarla dentro de los 5 días siguientes; si pasan 2
+            meses sin respuesta, entendemos que desististe.
+          </li>
+        </List>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">9. Tus derechos (Habeas Data)</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          Como titular de tus datos personales, tienes derecho a:
-        </p>
-        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          <li>Conocer, actualizar y rectificar tus datos personales.</li>
-          <li>Solicitar prueba de la autorización que nos otorgaste.</li>
-          <li>Ser informado sobre el uso que le hemos dado a tus datos.</li>
-          <li>Revocar tu autorización y/o solicitar la supresión de tus datos, cuando no exista un deber legal de conservarlos.</li>
-          <li>Presentar quejas ante la Superintendencia de Industria y Comercio (SIC) por infracciones a la ley.</li>
-          <li>Acceder de forma gratuita a tus datos personales.</li>
-        </ul>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          Para ejercer estos derechos escríbenos a{" "}
-          <Placeholder>[correo de contacto para datos personales]</Placeholder>. Responderemos tu
-          solicitud dentro de los plazos que establece la ley.
-        </p>
-      </section>
+      <Section id="conservacion" title={h("conservacion")}>
+        <P>
+          Guardamos los datos mientras tu cuenta esté activa. Si cancelas, los
+          conservamos durante <Info field="retentionAfterCancel" /> para que
+          puedas volver o descargarlos, y después los eliminamos, salvo lo que
+          debamos guardar por obligaciones legales, contables o tributarias. Los
+          registros de seguridad se guardan solo el tiempo necesario para
+          proteger la plataforma.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">10. Menores de edad</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          BILLIFY está dirigido a negocios y a personas mayores de edad que los representan. No
-          recopilamos intencionalmente datos de menores de edad.
-        </p>
-      </section>
+      <Section id="seguridad" title={h("seguridad")}>
+        <P>
+          Protegemos los datos con conexiones cifradas, contraseñas guardadas
+          con cifrado de una sola vía, separación de los datos de cada negocio,
+          permisos por rol, bloqueo tras varios intentos fallidos de inicio de
+          sesión, sesiones que se cierran solas a las 24 horas y registro de
+          auditoría. Ningún sistema es infalible: si ocurre un incidente que
+          afecte tus datos, te avisaremos y lo informaremos a la SIC como exige
+          la ley.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">11. Cambios a esta política</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          Podemos actualizar esta política para reflejar cambios en el servicio o en la normativa
-          aplicable. Publicaremos la fecha de la última actualización al inicio de este documento.
-        </p>
-      </section>
+      <Section id="menores" title={h("menores")}>
+        <P>
+          BILLIFY es para negocios y para personas mayores de edad que los
+          representan o trabajan en ellos. No tratamos a sabiendas datos de
+          menores de edad.
+        </P>
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">12. Contacto</h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          <Placeholder>[razón social de BILLIFY]</Placeholder> · NIT{" "}
-          <Placeholder>[NIT de BILLIFY]</Placeholder> ·{" "}
-          <Placeholder>[dirección de BILLIFY]</Placeholder> ·{" "}
-          <Placeholder>[correo de contacto]</Placeholder>
-        </p>
-      </section>
+      <Section id="vigencia" title={h("vigencia")}>
+        <P>
+          Esta política rige desde la fecha de actualización indicada arriba.
+          Nuestras bases de datos estarán vigentes mientras prestemos el
+          servicio y durante los plazos de conservación descritos. Si hacemos
+          cambios importantes, te avisaremos por correo antes de que apliquen.
+        </P>
+      </Section>
+
+      <Section id="contacto" title={h("contacto")}>
+        <ContactBlock />
+      </Section>
     </>
   );
 }

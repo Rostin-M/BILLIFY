@@ -1,5 +1,6 @@
 import { BrevoClient } from "@getbrevo/brevo";
 import { env } from "~/env";
+import { copyrightNotice, LEGAL_DOCUMENTS, LEGAL_INFO } from "~/lib/legal";
 import { escapeHtml, renderEmail, type EmailSpec } from "./emailLayout";
 
 const brevo = new BrevoClient({ apiKey: env.BREVO_API_KEY });
@@ -143,6 +144,72 @@ export async function sendWelcomeEmail(to: string, ownerName: string, businessNa
       ],
       cta: baseUrl ? { label: "Entrar a BILLIFY", url: `${baseUrl}/auth/login` } : null,
       footer: accountFooter("Recibes este correo porque acabas de crear una cuenta en BILLIFY."),
+    },
+  });
+}
+
+/** Fecha y hora en Colombia, p. ej. "19 de octubre de 2026, 3:42 p. m.". */
+function bogotaDateTime(date: Date): string {
+  return new Intl.DateTimeFormat("es-CO", { dateStyle: "long", timeStyle: "short", timeZone: "America/Bogota" }).format(
+    date,
+  );
+}
+
+/**
+ * Constancia de que el propietario aceptó los Términos y la Política de Datos
+ * al registrarse: le sirve a él como copia y a BILLIFY como prueba del envío.
+ */
+export async function sendLegalAcceptanceEmail(
+  to: string,
+  name: string,
+  consent: { version: string; acceptedAt: Date },
+) {
+  const baseUrl = appBaseUrl();
+  const blocks: EmailSpec["blocks"] = [
+    {
+      kind: "paragraph",
+      content: [
+        "Al crear tu cuenta aceptaste los documentos legales de BILLIFY. Te enviamos esta constancia para que la guardes.",
+      ],
+    },
+    {
+      kind: "facts",
+      rows: [
+        { label: "Aceptado por", value: to },
+        { label: "Fecha y hora", value: `${bogotaDateTime(consent.acceptedAt)} (hora de Colombia)` },
+        { label: "Versión de los documentos", value: consent.version },
+      ],
+    },
+    {
+      kind: "facts",
+      rows: LEGAL_DOCUMENTS.map((doc) => ({
+        label: doc.title,
+        value: baseUrl ? `${baseUrl}${doc.path}` : doc.path,
+      })),
+    },
+    {
+      kind: "paragraph",
+      content: [
+        "Puedes consultar, corregir o pedir que borremos tus datos, o revocar tu autorización, escribiendo a ",
+        { strong: LEGAL_INFO.privacyEmail },
+        ".",
+      ],
+    },
+  ];
+
+  await send({
+    to,
+    subject: "Constancia de aceptación de Términos y Política de Datos — BILLIFY",
+    spec: {
+      preheader: `Aceptaste la versión ${consent.version} de los documentos legales de BILLIFY.`,
+      brand: "BILLIFY",
+      eyebrow: "Constancia legal",
+      title: "Aceptaste nuestros términos",
+      greeting: greet(name),
+      blocks,
+      cta: baseUrl ? { label: "Leer los Términos", url: `${baseUrl}/legal/terminos` } : null,
+      note: "Si no creaste una cuenta en BILLIFY, escríbenos para revisarlo.",
+      footer: [...accountFooter("Recibes este correo porque aceptaste los documentos legales al registrarte."), copyrightNotice()],
     },
   });
 }

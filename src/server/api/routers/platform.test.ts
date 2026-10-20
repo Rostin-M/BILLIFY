@@ -154,7 +154,8 @@ describe("aislamiento del SUPERADMIN", () => {
         ownerName: "Impostor",
         ownerDocument: "1234567",
         ownerEmail: ADMIN_EMAIL,
-        ownerPassword: "ClaveSegura2026",
+        ownerPassword: "ClaveSegura-2026",
+        acceptedTerms: true,
       }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
     // Un correo de la lista que aún no tiene cuenta se registra como propietario, no como administrador.
@@ -164,7 +165,8 @@ describe("aislamiento del SUPERADMIN", () => {
       ownerName: "Otro",
       ownerDocument: "7654321",
       ownerEmail: "otro@billify.test",
-      ownerPassword: "ClaveSegura2026",
+      ownerPassword: "ClaveSegura-2026",
+      acceptedTerms: true,
     });
     await expect(db.pendingRegistration.count()).resolves.toBe(1);
     await expect(db.user.findMany({ where: { role: "SUPERADMIN" }, select: { id: true } })).resolves.toEqual([
@@ -636,13 +638,13 @@ describe("contraseña del administrador de la plataforma", () => {
     const change = (newPassword: string) =>
       callerFor(admin).auth.changePassword({ currentPassword: "Actual-Clave-2026!", newPassword });
 
-    // Válida para un negocio (10 caracteres, letra y número), insuficiente para el administrador.
-    await expect(change("Definitiva123")).rejects.toMatchObject({
+    // Válida para un negocio (10 caracteres, letra, número y símbolo), insuficiente para el administrador.
+    await expect(change("Definitiva#12")).rejects.toMatchObject({
       code: "BAD_REQUEST",
       message: "La contraseña del administrador debe tener mínimo 14 caracteres.",
     });
     await expect(change("definitiva-clave-2026")).rejects.toThrow("debe incluir una letra mayúscula");
-    await expect(change("DefinitivaClave2026")).rejects.toThrow("debe incluir un símbolo");
+    await expect(change("DefinitivaClave2026")).rejects.toThrow("carácter especial");
     await expect(change("Definitiva-Clave-Larga")).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await expect(change("Admin-Clave-2026!")).rejects.toThrow("no puede contener tu correo");
     await expect(db.user.findUniqueOrThrow({ where: { id: admin.id } })).resolves.toMatchObject({ sessionVersion: 0 });

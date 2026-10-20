@@ -4,9 +4,9 @@ import Link from "next/link";
 
 import { api } from "~/trpc/react";
 import type { SectionProps } from "./types";
-import { CheckboxRow, dividerClass, inputClass, labelTextClass, SubHeading } from "./ui";
+import { changedInput, dividerClass, FieldLabel, inputClass, SubHeading, ToggleRow } from "./ui";
 
-export function CajaSection({ form, update }: SectionProps) {
+export function CajaSection({ form, saved, update }: SectionProps) {
   const { data: status } = api.billing.status.useQuery();
   // Máximo que permite el plan; mientras carga se deja el tope técnico (10).
   const limit = status?.usage.cashRegisters.limit ?? 10;
@@ -16,7 +16,9 @@ export function CajaSection({ form, update }: SectionProps) {
   return (
     <>
       <label className="block max-w-sm space-y-1 text-sm">
-        <span className={labelTextClass}>Máximo de cajas abiertas al mismo tiempo</span>
+        <FieldLabel changed={form.maxCashRegisters !== saved.maxCashRegisters}>
+          Máximo de cajas abiertas al mismo tiempo
+        </FieldLabel>
         <input
           type="number"
           required
@@ -25,7 +27,7 @@ export function CajaSection({ form, update }: SectionProps) {
           step="1"
           value={form.maxCashRegisters}
           onChange={(e) => update({ maxCashRegisters: e.target.value })}
-          className={`${inputClass} max-w-40`}
+          className={`${inputClass} max-w-40 ${changedInput(form.maxCashRegisters !== saved.maxCashRegisters)}`}
         />
         {status ? (
           <span
@@ -55,7 +57,8 @@ export function CajaSection({ form, update }: SectionProps) {
         <p className="text-xs text-slate-500 dark:text-slate-400">
           Al cerrar, siempre se cuenta el efectivo del cajón. Si no cuadra con lo registrado, hay que escribir el motivo.
         </p>
-        <CheckboxRow
+        <ToggleRow
+          changed={form.cashBlindClose !== saved.cashBlindClose}
           checked={form.cashBlindClose}
           onChange={(checked) => update({ cashBlindClose: checked })}
           title="Cierre ciego para cajeros"
@@ -66,7 +69,8 @@ export function CajaSection({ form, update }: SectionProps) {
             </>
           }
         />
-        <CheckboxRow
+        <ToggleRow
+          changed={form.cashCountByDenomination !== saved.cashCountByDenomination}
           checked={form.cashCountByDenomination}
           onChange={(checked) => update({ cashCountByDenomination: checked })}
           title="Contar por billetes y monedas"
