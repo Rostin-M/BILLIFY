@@ -174,11 +174,14 @@ function CartList({
   onUpdateQty,
   onRemove,
   formatCOP,
+  flash,
 }: Readonly<{
   cart: CartItem[];
   onUpdateQty: (cartItemId: string, delta: number) => void;
   onRemove: (cartItemId: string) => void;
   formatCOP: (v: number) => string;
+  /** Línea recién agregada: se ilumina (n cambia en cada toque para repetir el destello). */
+  flash: { key: string; n: number } | null;
 }>) {
   if (cart.length === 0) {
     return (
@@ -189,12 +192,17 @@ function CartList({
   }
   return (
     <ul className="flex flex-col gap-2">
-      {cart.map((item) => {
+      {/* Lo último que se agregó va arriba. */}
+      {[...cart].reverse().map((item) => {
         const isSpecial = item.weightKg != null || item.customAmount != null;
+        const flashed = flash?.key === item.cartItemId;
         return (
-          <li key={item.cartItemId} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5">
+          <li
+            key={flashed ? `${item.cartItemId}-${flash.n}` : item.cartItemId}
+            className={`flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5 ${flashed ? "cart-flash" : ""}`}
+          >
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{item.name}</p>
+              <p className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">{item.name}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {isSpecial
                   ? formatCOP(item.price)
@@ -498,6 +506,13 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
   // Zona de carrito y cobro: la barra fija de móvil se oculta cuando ya está en pantalla.
   const checkoutRef = useRef<HTMLDivElement>(null);
   const [checkoutVisible, setCheckoutVisible] = useState(false);
+  const cartListRef = useRef<HTMLDivElement>(null);
+  const [flash, setFlash] = useState<{ key: string; n: number } | null>(null);
+
+  function markAdded(key: string) {
+    setFlash((f) => ({ key, n: (f?.n ?? 0) + 1 }));
+    cartListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   useEffect(() => {
     const el = checkoutRef.current;
@@ -618,9 +633,8 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
       const existing = prev.find((i) => i.cartItemId === product.id);
       if (existing) {
         if (product.trackStock && existing.quantity >= product.stock) return prev;
-        return prev.map((i) =>
-          i.cartItemId === product.id ? { ...i, quantity: i.quantity + 1 } : i,
-        );
+        // Al final del arreglo = arriba en la lista.
+        return [...prev.filter((i) => i !== existing), { ...existing, quantity: existing.quantity + 1 }];
       }
       if (product.trackStock && product.stock === 0) return prev;
       return [
@@ -628,6 +642,7 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
         { cartItemId: product.id, productId: product.id, name: product.name, price: product.price, quantity: 1, taxSlots: product.taxSlots },
       ];
     });
+    markAdded(product.id);
     if (search) setSearch("");
   }
 
@@ -645,6 +660,7 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
         { cartItemId, productId: product.id, name: product.name, price: value, quantity: 1, taxSlots: product.taxSlots, customAmount: value },
       ]);
     }
+    markAdded(cartItemId);
     setSpecialPrompt(null);
     if (search) setSearch("");
   }
@@ -785,8 +801,8 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
       </div>
 
       {/* Un solo árbol para todos los tamaños: el escáner (cámara) se monta una sola vez.
-          Móvil: catálogo primero y barra fija para ir a cobrar. Escritorio: catálogo a la
-          izquierda y carrito fijo a la derecha. */}
+          Móvil: catálogo y carrito uno sobre otro, cada uno con su scroll, y barra fija para ir
+          a cobrar. Escritorio: catálogo a la izquierda y carrito fijo a la derecha. */}
       <div className="grid grid-cols-1 gap-3 pb-24 md:grid-cols-[minmax(0,1fr)_19rem] md:items-start md:gap-4 md:pb-0 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex min-w-0 flex-col gap-3">
           <ScanControls
@@ -804,7 +820,7 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
           {continuousScan && (
             <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
           )}
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:max-h-[calc(100dvh-15rem)] md:overflow-y-auto dark:border-white/10 dark:bg-white/5">
+          <div className="max-h-[32dvh] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:max-h-[calc(100dvh-15rem)] dark:border-white/10 dark:bg-white/5">
             <ProductGrid
               isLoading={isLoading}
               hasAnyProducts={products.length > 0}
@@ -816,20 +832,23 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
           </div>
         </div>
 
-        <div ref={checkoutRef} className="flex scroll-mt-20 flex-col gap-3 md:sticky md:top-20">
+        <div className="flex flex-col gap-3 md:sticky md:top-20">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-3 flex items-baseline gap-2">
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Carrito</h2>
               {cart.length > 0 && (
-                <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-                  guardado automáticamente
-                </span>
+                <>
+                  <span className="whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+                    {cartUnits} {cartUnits === 1 ? "producto" : "productos"}
+                  </span>
+                  <span className="ml-auto hidden whitespace-nowrap text-xs text-slate-500 min-[400px]:inline dark:text-slate-400">lo último, arriba</span>
+                </>
               )}
             </div>
-            <div className="max-h-[40dvh] overflow-y-auto md:max-h-[calc(100dvh-30rem)] md:min-h-24">
-              <CartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
+            <div ref={cartListRef} className="max-h-[24dvh] overflow-y-auto overscroll-contain md:max-h-[calc(100dvh-30rem)] md:min-h-24">
+              <CartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} flash={flash} />
             </div>
-            <div className="mt-3">
+            <div ref={checkoutRef} className="mt-3 scroll-mt-20">
               <TotalsAndPayment
                 cart={cart}
                 paymentMethod={paymentMethod}

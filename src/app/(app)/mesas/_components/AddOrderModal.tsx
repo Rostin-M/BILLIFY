@@ -29,6 +29,8 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [specialPrompt, setSpecialPrompt] = useState<{ product: Product; mode: "weight" | "amount" } | null>(null);
+  const cartListRef = useRef<HTMLUListElement>(null);
+  const [flash, setFlash] = useState<{ key: string; n: number } | null>(null);
   const requestClose = () => (cart.length > 0 ? setConfirmDiscard(true) : onClose());
   const dialogRef = useDialog(requestClose);
   // Clave de idempotencia del pedido: se reutiliza en reintentos y se descarta si cambia el pedido.
@@ -62,16 +64,24 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
       (!q || p.name.toLowerCase().includes(q) || (p.brand?.toLowerCase().includes(q) ?? false)),
   );
 
+  function markAdded(key: string) {
+    setFlash((f) => ({ key, n: (f?.n ?? 0) + 1 }));
+    cartListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function addToCart(p: Product) {
+    const inCart = cart.find((i) => i.cartItemId === p.id)?.quantity ?? 0;
+    if (p.trackStock && inCart >= p.stock) {
+      toast.error(p.stock === 0 ? `${p.name} no tiene unidades disponibles.` : `Solo hay ${p.stock} de ${p.name}.`);
+      return;
+    }
     setCart((prev) => {
       const ex = prev.find((i) => i.cartItemId === p.id);
-      if (ex) {
-        if (p.trackStock && ex.quantity >= p.stock) return prev;
-        return prev.map((i) => i.cartItemId === p.id ? { ...i, quantity: i.quantity + 1 } : i);
-      }
-      if (p.trackStock && p.stock === 0) return prev;
+      // Al final del arreglo = arriba en la lista.
+      if (ex) return [...prev.filter((i) => i !== ex), { ...ex, quantity: ex.quantity + 1 }];
       return [...prev, { cartItemId: p.id, productId: p.id, name: p.name, price: p.price, quantity: 1 }];
     });
+    markAdded(p.id);
     setConfirmDiscard(false);
     if (search) setSearch("");
   }
@@ -84,6 +94,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
     } else {
       setCart((prev) => [...prev, { cartItemId, productId: p.id, name: p.name, price: value, quantity: 1, customAmount: value }]);
     }
+    markAdded(cartItemId);
     setSpecialPrompt(null);
     if (search) setSearch("");
   }
@@ -268,11 +279,16 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
             {cart.length === 0 ? (
               <p className="py-1 text-sm text-slate-500 dark:text-slate-400">Toca un producto para agregarlo.</p>
             ) : (
-              <ul className="max-h-36 divide-y divide-slate-200 overflow-y-auto lg:max-h-none lg:flex-1 dark:divide-white/10">
-                {cart.map((item) => {
+              <ul ref={cartListRef} className="max-h-36 divide-y divide-slate-200 overflow-y-auto overscroll-contain lg:max-h-none lg:flex-1 dark:divide-white/10">
+                {/* Lo último que se agregó va arriba. */}
+                {[...cart].reverse().map((item) => {
                   const isSpecial = item.weightKg != null || item.customAmount != null;
+                  const flashed = flash?.key === item.cartItemId;
                   return (
-                    <li key={item.cartItemId} className="flex items-center gap-2 py-1.5">
+                    <li
+                      key={flashed ? `${item.cartItemId}-${flash.n}` : item.cartItemId}
+                      className={`flex items-center gap-2 rounded-lg px-1 py-1.5 ${flashed ? "cart-flash" : ""}`}
+                    >
                       <span className="min-w-0 flex-1">
                         <span className="line-clamp-2 text-sm text-slate-800 dark:text-slate-100">{item.name}</span>
                         <span className="block text-xs tabular-nums text-slate-500">{fmt(item.price * item.quantity)}</span>

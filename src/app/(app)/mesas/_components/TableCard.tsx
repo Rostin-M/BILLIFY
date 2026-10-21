@@ -219,6 +219,11 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               Ronda {index + 1} · <span className="tabular-nums">{fmt(order.total)}</span>
+              {index > 0 && index === guest.orders.length - 1 && (
+                <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
+                  Última
+                </span>
+              )}
             </p>
             <p className="truncate text-xs text-slate-500 dark:text-slate-400">
               {fmtTime(order.createdAt)}
@@ -254,7 +259,7 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
         )}
 
         <ul className="divide-y divide-slate-200/70 border-t border-slate-200 bg-white px-3 dark:divide-white/5 dark:border-white/10 dark:bg-transparent">
-          {order.items.map((item) => (
+          {[...order.items].reverse().map((item) => (
             <li key={item.id} className="flex items-baseline justify-between gap-3 py-1.5 text-sm">
               <span className="min-w-0 text-slate-700 dark:text-slate-200">
                 <span className="font-semibold tabular-nums text-slate-900 dark:text-white">{item.quantity}×</span> {item.name}
@@ -365,7 +370,12 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
 
         {isGuestExpanded && renamingGuestId !== guest.id && (
           <div className="mt-2 space-y-2 sm:pl-6">
-            {hasOrders && <ul className="space-y-2">{guest.orders.map((order, oi) => renderOrder(guest, order, oi))}</ul>}
+            {/* La ronda más reciente arriba; conserva su número. */}
+            {hasOrders && (
+              <ul className="space-y-2">
+                {guest.orders.map((order, oi) => renderOrder(guest, order, oi)).reverse()}
+              </ul>
+            )}
 
             {confirmRemoveGuest === guest.id ? (
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 dark:border-red-500/30 dark:bg-red-900/10">

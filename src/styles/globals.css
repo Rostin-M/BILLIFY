@@ -149,6 +149,20 @@
   animation: activity-slide 1.1s ease-in-out infinite;
 }
 
+/* Línea del carrito recién agregada (venta rápida y factura). */
+@keyframes cart-flash {
+  0% {
+    background-color: rgb(139 92 246 / 0.35);
+    box-shadow: 0 0 0 2px rgb(139 92 246 / 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(139 92 246 / 0);
+  }
+}
+.cart-flash {
+  animation: cart-flash 1.4s ease-out;
+}
+
 /* Quien pide menos movimiento no ve animaciones en bucle ni entradas animadas. */
 @media (prefers-reduced-motion: reduce) {
   *,

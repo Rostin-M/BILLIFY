@@ -216,11 +216,14 @@ function InvoiceCartList({
   onUpdateQty,
   onRemove,
   formatCOP,
+  flash,
 }: Readonly<{
   cart: CartItem[];
   onUpdateQty: (key: string, delta: number) => void;
   onRemove: (key: string) => void;
   formatCOP: (v: number) => string;
+  /** Línea recién agregada: se ilumina (n cambia en cada toque para repetir el destello). */
+  flash: { key: string; n: number } | null;
 }>) {
   if (cart.length === 0) {
     return (
@@ -231,13 +234,16 @@ function InvoiceCartList({
   }
   return (
     <ul className="flex flex-col gap-2">
-      {cart.map((item) => (
+      {/* Lo último que se agregó va arriba. */}
+      {[...cart].reverse().map((item) => {
+        const flashed = flash?.key === lineKey(item);
+        return (
         <li
-          key={lineKey(item)}
-          className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5"
+          key={flashed ? `${lineKey(item)}-${flash.n}` : lineKey(item)}
+          className={`flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/5 dark:bg-white/5 ${flashed ? "cart-flash" : ""}`}
         >
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+            <p className="line-clamp-2 text-sm font-medium text-slate-800 dark:text-slate-100">
               {item.name}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -275,7 +281,8 @@ function InvoiceCartList({
             </button>
           </div>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
@@ -494,6 +501,13 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   // Zona de detalle y emisión: la barra fija de móvil se oculta cuando ya está en pantalla.
   const checkoutRef = useRef<HTMLDivElement>(null);
   const [checkoutVisible, setCheckoutVisible] = useState(false);
+  const cartListRef = useRef<HTMLDivElement>(null);
+  const [flash, setFlash] = useState<{ key: string; n: number } | null>(null);
+
+  function markAdded(key: string) {
+    setFlash((f) => ({ key, n: (f?.n ?? 0) + 1 }));
+    cartListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
   useEffect(() => {
     const el = checkoutRef.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
@@ -613,7 +627,8 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
       const existing = prev.find((i) => i.productId === product.id && !isSpecialLine(i));
       if (existing) {
         if (product.trackStock && existing.quantity >= product.stock) return prev;
-        return prev.map((i) => (i === existing ? { ...i, quantity: i.quantity + 1 } : i));
+        // Al final del arreglo = arriba en la lista.
+        return [...prev.filter((i) => i !== existing), { ...existing, quantity: existing.quantity + 1 }];
       }
       if (product.trackStock && product.stock === 0) return prev;
       return [
@@ -621,6 +636,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
         { productId: product.id, name: product.name, price: product.price, quantity: 1, unit: product.unit, taxSlots: product.taxSlots },
       ];
     });
+    markAdded(product.id);
   }
 
   // Peso y monto libre: igual que en venta rápida, se piden antes de agregar la línea.
@@ -638,6 +654,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     } else {
       setCart((prev) => [...prev, { ...base, name: product.name, price: value, customAmount: value }]);
     }
+    markAdded(base.cartItemId);
     setSpecialPrompt(null);
   }
 
@@ -825,7 +842,7 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
           {continuousScan && (
             <ContinuousScanPanel onScan={handleContinuousScan} onClose={() => setContinuousScan(false)} />
           )}
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:max-h-[calc(100dvh-17rem)] md:overflow-y-auto dark:border-white/10 dark:bg-white/5">
+          <div className="max-h-[32dvh] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:max-h-[calc(100dvh-17rem)] dark:border-white/10 dark:bg-white/5">
             <InvoiceProductGrid
               statusMessage={catalogStatusMessage}
               filteredProducts={filteredProducts}
@@ -836,18 +853,26 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
           </div>
         </div>
 
-        <div ref={checkoutRef} className="flex scroll-mt-20 flex-col gap-3 md:sticky md:top-20">
+        <div className="flex flex-col gap-3 md:sticky md:top-20">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+            <div className="mb-3 flex items-baseline gap-2">
+              <span className="inline-flex items-center self-center rounded-lg bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
                 FACTURA
               </span>
               <h2 className="font-semibold text-slate-700 dark:text-slate-200">Detalle</h2>
+              {cart.length > 0 && (
+                <>
+                  <span className="whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+                    {cartUnits} {cartUnits === 1 ? "producto" : "productos"}
+                  </span>
+                  <span className="ml-auto hidden whitespace-nowrap text-xs text-slate-500 min-[400px]:inline dark:text-slate-400">lo último, arriba</span>
+                </>
+              )}
             </div>
-            <div className="max-h-[40dvh] overflow-y-auto md:max-h-[calc(100dvh-34rem)] md:min-h-24">
-              <InvoiceCartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} />
+            <div ref={cartListRef} className="max-h-[24dvh] overflow-y-auto overscroll-contain md:max-h-[calc(100dvh-34rem)] md:min-h-24">
+              <InvoiceCartList cart={cart} onUpdateQty={updateQty} onRemove={removeFromCart} formatCOP={formatCOP} flash={flash} />
             </div>
-            <div className="mt-3">
+            <div ref={checkoutRef} className="mt-3 scroll-mt-20">
               <FactureBottom
                 cart={cart}
                 paymentMethod={paymentMethod}
