@@ -105,7 +105,6 @@ export function UserMenu({ name, role }: Readonly<Props>) {
 
   return (
     <>
-      {/* Botón del menú */}
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => (open ? closeMenu() : setOpen(true))}

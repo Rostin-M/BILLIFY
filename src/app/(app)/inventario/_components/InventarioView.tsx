@@ -86,7 +86,6 @@ export function InventarioView() {
 
   return (
     <div className="space-y-4">
-      {/* Barra de búsqueda y filtros */}
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
           aria-label="Buscar producto"
@@ -123,7 +122,6 @@ export function InventarioView() {
         </button>
       </div>
 
-      {/* Resumen de estado */}
       {!isPending && products && products.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {(["disponible", "bajo", "agotado"] as StockStatus[]).map((status) => (
@@ -144,7 +142,6 @@ export function InventarioView() {
         </div>
       )}
 
-      {/* Tabla de productos */}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
         {isPending && (
           <p className="p-5 text-sm text-slate-500 dark:text-slate-400">
@@ -160,7 +157,6 @@ export function InventarioView() {
         )}
         {!isPending && filtered.length > 0 && (
           <>
-            {/* Tarjetas apiladas en móvil */}
             <ul className="divide-y divide-slate-100 dark:divide-white/5 md:hidden">
               {filtered.map((product) => {
                 const status = getStockStatus(product.stock, product.trackStock);
@@ -197,7 +193,6 @@ export function InventarioView() {
               })}
             </ul>
 
-            {/* Tabla en tablet/escritorio */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead>

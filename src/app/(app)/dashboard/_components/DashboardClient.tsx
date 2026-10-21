@@ -265,16 +265,13 @@ function SalesBarChart({
       </div>
 
       <div className="flex gap-2">
-        {/* Eje Y */}
         <div className="flex w-14 shrink-0 flex-col justify-between pb-5 text-right">
           <span className="text-[10px] text-slate-500 sm:text-xs">{formatCOP(maxDayTotal)}</span>
           <span className="text-[10px] text-slate-500 sm:text-xs">{formatCOP(maxDayTotal / 2)}</span>
           <span className="text-[10px] text-slate-500 sm:text-xs">$0</span>
         </div>
 
-        {/* Barras */}
         <div className="relative min-w-0 flex-1">
-          {/* Líneas de referencia */}
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between pb-5">
             <div className="h-px w-full border-t border-dashed border-slate-100 dark:border-white/5" />
             <div className="h-px w-full border-t border-dashed border-slate-100 dark:border-white/5" />
@@ -295,7 +292,6 @@ function SalesBarChart({
                   aria-label={`${bucket.label}: ${formatCOP(bucket.total)}, ${bucket.count} venta${bucket.count !== 1 ? "s" : ""}`}
                   className="group relative flex flex-1 flex-col items-center gap-1 rounded outline-none"
                 >
-                  {/* Tooltip */}
                   <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden min-w-max -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block group-focus:block dark:border-white/10 dark:bg-slate-800">
                     <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(bucket.total)}</p>
                     <p className="text-slate-500">{bucket.count} venta{bucket.count !== 1 ? "s" : ""}</p>
@@ -311,7 +307,6 @@ function SalesBarChart({
                       }}
                     />
                   </div>
-                  {/* Etiqueta */}
                   <span className="truncate text-[10px] text-slate-500 sm:text-xs dark:text-slate-400">
                     {bucket.label}
                   </span>

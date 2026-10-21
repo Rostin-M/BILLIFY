@@ -56,6 +56,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
     staleTime: 30_000,
   });
   const categories = settings?.categories ?? [];
+  const brands = settings?.brands ?? [];
   const businessTaxes: EnabledTax[] = (
     (settings?.taxes as BusinessTax[] | undefined) ?? []
   )
@@ -79,7 +80,8 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       toast.success(data.message);
       setCreateForm(emptyForm);
       setShowCreate(false);
-      await utils.product.list.invalidate();
+      // Una marca nueva queda guardada en el negocio: se refresca para sugerirla en el siguiente.
+      await Promise.all([utils.product.list.invalidate(), utils.business.getSettings.invalidate()]);
     },
   });
 
@@ -109,14 +111,13 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       return { prev };
     },
     onError: (err, __, ctx) => {
-      // Se revierte el cambio optimista y se avisa: antes volvía al valor anterior sin decir nada.
       utils.product.list.setData(undefined, ctx?.prev);
       toast.error(`No se guardó el cambio: ${err.message}`);
     },
     onSuccess: async (data) => {
       toast.success(data.message);
       setActiveRow(null);
-      await utils.product.list.invalidate();
+      await Promise.all([utils.product.list.invalidate(), utils.business.getSettings.invalidate()]);
     },
   });
 
@@ -130,7 +131,6 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       return { prev };
     },
     onError: (err, __, ctx) => {
-      // Se revierte el cambio optimista y se avisa: antes volvía al valor anterior sin decir nada.
       utils.product.list.setData(undefined, ctx?.prev);
       toast.error(`No se guardó el cambio: ${err.message}`);
     },
@@ -154,7 +154,6 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       return { prev };
     },
     onError: (err, __, ctx) => {
-      // Se revierte el cambio optimista y se avisa: antes volvía al valor anterior sin decir nada.
       utils.product.list.setData(undefined, ctx?.prev);
       toast.error(`No se guardó el cambio: ${err.message}`);
     },
@@ -176,7 +175,6 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
       return { prev };
     },
     onError: (err, __, ctx) => {
-      // Se revierte el cambio optimista y se avisa: antes volvía al valor anterior sin decir nada.
       utils.product.list.setData(undefined, ctx?.prev);
       toast.error(`No se guardó el cambio: ${err.message}`);
     },
@@ -292,7 +290,6 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        {/* Cabecera */}
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold">Productos registrados</h2>
           {userRole === "OWNER" && (
@@ -309,7 +306,6 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
           )}
         </div>
 
-        {/* Buscador */}
         {products && products.length > 0 && (
           <div className="mb-4">
             <input
@@ -342,6 +338,8 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
               onExclusiveCheckChange={makeExclusiveCheckHandler(setCreateForm)}
               fieldErrors={createErrors.fieldErrors}
               categories={categories}
+              brands={brands}
+              onBrandChange={(brand) => setCreateForm((p) => ({ ...p, brand }))}
               businessTaxes={businessTaxes}
               produceModuleEnabled={settings?.produceModuleEnabled ?? false}
               onApplyCalculator={(price, cost, taxSlots) =>
@@ -369,7 +367,6 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
           </form>
         )}
 
-        {/* Lista */}
         {listStatusMessage ? (
           <p role="status" className="text-sm text-slate-500 dark:text-slate-400">{listStatusMessage}</p>
         ) : (
@@ -384,7 +381,6 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
             <ul className="divide-y divide-slate-100 dark:divide-white/5">
               {filteredProducts?.map((product) => (
                 <li key={product.id}>
-                  {/* Fila de lectura */}
                   <div className="grid grid-cols-12 items-start gap-2 py-3">
                     <div className="col-span-12 min-w-0 sm:col-span-4">
                       <p className="truncate text-sm font-medium">{product.name}</p>
@@ -443,6 +439,8 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
                         onExclusiveCheckChange: makeExclusiveCheckHandler(setEditForm),
                         fieldErrors: updateErrors.fieldErrors,
                         categories,
+                        brands,
+                        onBrandChange: (brand) => setEditForm((p) => ({ ...p, brand })),
                         businessTaxes,
                         produceModuleEnabled: settings?.produceModuleEnabled ?? false,
                         onApplyCalculator: (price, cost, taxSlots) =>

@@ -319,7 +319,6 @@ export const cashRegisterRouter = createTRPCRouter({
   getActive: businessProcedure.query(async ({ ctx }) => {
     const { businessId, id: userId, role } = ctx.session.user;
 
-    // Verificar permiso de caja para cajeros
     if (role !== "OWNER") {
       const userData = await ctx.db.user.findFirst({
         where: { id: userId },

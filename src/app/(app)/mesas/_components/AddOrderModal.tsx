@@ -1,7 +1,8 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
 import { useDialog } from "~/app/_components/ui/useDialog";
@@ -16,15 +17,20 @@ type CartItem = {
   weightKg?: number; customAmount?: number;
 };
 
+const LOW_STOCK = 5;
+
 type Props = { guestId: string; guestName: string; onClose: () => void; onSuccess: () => void };
 
 export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readonly<Props>) {
-  const dialogRef = useDialog(onClose);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [specialPrompt, setSpecialPrompt] = useState<{ product: Product; mode: "weight" | "amount" } | null>(null);
+  const requestClose = () => (cart.length > 0 ? setConfirmDiscard(true) : onClose());
+  const dialogRef = useDialog(requestClose);
   // Clave de idempotencia del pedido: se reutiliza en reintentos y se descarta si cambia el pedido.
   const orderKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -35,17 +41,25 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   const utils = api.useUtils();
 
   const addOrder = api.tableSession.addOrder.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (order) => {
       await utils.tableSession.listActive.invalidate();
       await utils.product.search.invalidate();
       await utils.product.list.invalidate();
+      toast.success(`Pedido registrado para ${guestName} · ${fmt(order.total)}`);
       onSuccess();
     },
     onError: (e) => setError(e.message),
   });
 
-  const filtered = (products as Product[]).filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()),
+  const allProducts = products as Product[];
+  const categories = [...new Set(allProducts.map((p) => p.category).filter((c): c is string => !!c))].sort((a, b) =>
+    a.localeCompare(b, "es"),
+  );
+  const q = search.trim().toLowerCase();
+  const filtered = allProducts.filter(
+    (p) =>
+      (!category || p.category === category) &&
+      (!q || p.name.toLowerCase().includes(q) || (p.brand?.toLowerCase().includes(q) ?? false)),
   );
 
   function addToCart(p: Product) {
@@ -58,6 +72,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
       if (p.trackStock && p.stock === 0) return prev;
       return [...prev, { cartItemId: p.id, productId: p.id, name: p.name, price: p.price, quantity: 1 }];
     });
+    setConfirmDiscard(false);
     if (search) setSearch("");
   }
 
@@ -85,7 +100,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
         if (i.cartItemId !== cartItemId) return i;
         const newQty = i.quantity + delta;
         if (delta > 0) {
-          const p = (products as Product[]).find((p) => p.id === i.productId);
+          const p = allProducts.find((p) => p.id === i.productId);
           if (p?.trackStock && newQty > p.stock) return i;
         }
         return { ...i, quantity: newQty };
@@ -110,8 +125,15 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   }
 
   const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-  const subtotalSuffix = cart.length > 0 ? ` · ${fmt(subtotal)}` : "";
-  const confirmLabel = addOrder.isPending ? "Registrando..." : `Confirmar pedido${subtotalSuffix}`;
+  const units = cart.reduce((s, i) => s + i.quantity, 0);
+  const confirmLabel = addOrder.isPending ? "Registrando..." : `Confirmar pedido · ${fmt(subtotal)}`;
+
+  const chipClass = (active: boolean) =>
+    `min-h-9 shrink-0 rounded-full border px-3 text-sm font-medium transition ${
+      active
+        ? "border-violet-500 bg-violet-600 text-white"
+        : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+    }`;
 
   return (
     <>
@@ -123,36 +145,64 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
         onCancel={() => setSpecialPrompt(null)}
       />
     )}
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Agregar pedido para ${guestName}`} className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-white/10">
-          <h2 className="font-semibold text-slate-800 dark:text-white">
-            Agregar pedido — <span className="text-violet-600 dark:text-violet-400">{guestName}</span>
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 sm:items-center sm:p-4">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Agregar pedido para ${guestName}`}
+        className="flex h-[100dvh] w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-4xl sm:rounded-2xl dark:bg-slate-900"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-white/10">
+          <h2 className="min-w-0 font-semibold text-slate-800 dark:text-white">
+            <span className="block text-xs font-medium text-slate-500 dark:text-slate-400">Pedido para</span>
+            <span className="block truncate text-lg text-violet-700 dark:text-violet-300">{guestName}</span>
           </h2>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Cerrar"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex flex-col gap-4 p-5 lg:flex-row">
-          {/* Catálogo */}
-          <div className="flex flex-col gap-3 lg:w-3/5">
-            <input
-              aria-label="Buscar producto"
-              type="search"
-              placeholder="Buscar producto..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white"
-            />
-            {isLoading ? (
-              <p className="text-center text-sm text-slate-500">Cargando...</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="shrink-0 space-y-2 px-4 pb-2 pt-3 sm:px-5">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  aria-label="Buscar producto"
+                  type="search"
+                  placeholder="Buscar producto o marca..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-base outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 sm:text-sm dark:border-white/10 dark:bg-white/5 dark:text-white"
+                />
+              </div>
+              {categories.length > 1 && (
+                <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5" role="group" aria-label="Categorías">
+                  <button type="button" onClick={() => setCategory(null)} aria-pressed={category === null} className={chipClass(category === null)}>
+                    Todo
+                  </button>
+                  {categories.map((c) => (
+                    <button key={c} type="button" onClick={() => setCategory(c)} aria-pressed={category === c} className={chipClass(category === c)}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 sm:min-h-64 sm:px-5">
+              {isLoading && <p role="status" className="py-6 text-center text-sm text-slate-500">Cargando productos...</p>}
+              {!isLoading && filtered.length === 0 && (
+                <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                  {q ? <>Ningún producto coincide con &quot;{search}&quot;.</> : "No hay productos en esta categoría."}
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {filtered.map((p: Product) => {
                   const inCartQty = cart.filter((i) => i.productId === p.id).reduce((s, i) => s + i.quantity, 0);
                   const outOfStock = p.trackStock && p.stock === 0;
@@ -161,18 +211,18 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
                   if (outOfStock) {
                     tileClass = "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50 dark:border-white/5 dark:bg-white/5";
                   } else if (inCartQty > 0) {
-                    tileClass = "border-violet-300 bg-violet-50 dark:border-violet-500/50 dark:bg-violet-900/20";
+                    tileClass = "border-violet-400 bg-violet-50 ring-1 ring-violet-400 dark:border-violet-500/60 dark:bg-violet-900/25 dark:ring-violet-500/60";
                   } else {
-                    tileClass = "border-slate-200 bg-white hover:border-violet-200 dark:border-white/10 dark:bg-white/5";
+                    tileClass = "border-slate-200 bg-white hover:border-violet-300 dark:border-white/10 dark:bg-white/5";
                   }
 
-                  let stockLabel: string;
+                  let stockLabel: React.ReactNode = null;
                   if (outOfStock) {
-                    stockLabel = "Sin stock";
+                    stockLabel = <span className="text-xs font-semibold text-red-600 dark:text-red-400">Agotado</span>;
+                  } else if (p.trackStock && p.stock <= LOW_STOCK) {
+                    stockLabel = <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Quedan {p.stock}</span>;
                   } else if (p.trackStock) {
-                    stockLabel = `${p.stock} disp.`;
-                  } else {
-                    stockLabel = "∞";
+                    stockLabel = <span className="text-xs text-slate-500">{p.stock} disp.</span>;
                   }
 
                   let priceLabel: string;
@@ -189,80 +239,119 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
                       key={p.id}
                       onClick={() => handleProductTap(p)}
                       disabled={outOfStock}
-                      className={`flex flex-col rounded-xl border p-2.5 text-left text-sm transition active:scale-95 ${tileClass}`}
+                      aria-label={`${p.name}, ${priceLabel}${inCartQty > 0 ? `, ${inCartQty} en el pedido` : ""}`}
+                      className={`relative flex min-h-24 flex-col rounded-xl border p-2.5 text-left text-sm transition active:scale-95 ${tileClass}`}
                     >
-                      <span className="font-medium text-slate-800 dark:text-slate-100 line-clamp-2">{p.name}</span>
-                      {(p.brand ?? p.presentation) && (
-                        <span className="text-xs text-slate-500">{[p.brand, p.presentation].filter(Boolean).join(" · ")}</span>
+                      {inCartQty > 0 && (
+                        <span aria-hidden className="absolute right-1.5 top-1.5 rounded-full bg-violet-600 px-2 py-0.5 text-xs font-bold tabular-nums text-white">
+                          {inCartQty}
+                        </span>
                       )}
-                      <span className="mt-0.5 font-bold text-violet-600 dark:text-violet-400">
-                        {priceLabel}
-                      </span>
-                      <span className={`text-xs mt-0.5 ${outOfStock ? "text-red-500" : "text-slate-500"}`}>
-                        {stockLabel}
-                      </span>
-                      {inCartQty > 0 && <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">× {inCartQty}</span>}
+                      <span className={`line-clamp-2 font-medium text-slate-800 dark:text-slate-100 ${inCartQty > 0 ? "pr-7" : ""}`}>{p.name}</span>
+                      {(p.brand ?? p.presentation) && (
+                        <span className="truncate text-xs text-slate-500">{[p.brand, p.presentation].filter(Boolean).join(" · ")}</span>
+                      )}
+                      <span className="mt-auto pt-1 font-bold text-violet-700 dark:text-violet-300">{priceLabel}</span>
+                      {stockLabel}
                     </button>
                   );
                 })}
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Resumen */}
-          <div className="flex flex-col gap-3 lg:w-2/5">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5 min-h-[120px]">
-              {cart.length === 0 ? (
-                <p className="text-center text-sm text-slate-500 py-4">Toca un producto para agregar</p>
-              ) : (
-                <ul className="divide-y divide-slate-200 dark:divide-white/10">
-                  {cart.map((item) => {
-                    const isSpecial = item.weightKg != null || item.customAmount != null;
-                    return (
-                    <li key={item.cartItemId} className="flex items-center justify-between gap-1 py-1.5 first:pt-0 last:pb-0">
-                      <span className="truncate text-sm text-slate-700 dark:text-slate-200 flex-1">{item.name}</span>
+          <div className="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] sm:px-5 lg:w-96 lg:border-l lg:border-t-0 lg:shadow-none dark:border-white/10 dark:bg-slate-950/40">
+            <p className="flex items-baseline justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <span>Pedido{units > 0 && <span className="font-normal text-slate-500 dark:text-slate-400"> · {units} {units === 1 ? "producto" : "productos"}</span>}</span>
+              {cart.length > 0 && <span className="tabular-nums">{fmt(subtotal)}</span>}
+            </p>
+            {cart.length === 0 ? (
+              <p className="py-1 text-sm text-slate-500 dark:text-slate-400">Toca un producto para agregarlo.</p>
+            ) : (
+              <ul className="max-h-36 divide-y divide-slate-200 overflow-y-auto lg:max-h-none lg:flex-1 dark:divide-white/10">
+                {cart.map((item) => {
+                  const isSpecial = item.weightKg != null || item.customAmount != null;
+                  return (
+                    <li key={item.cartItemId} className="flex items-center gap-2 py-1.5">
+                      <span className="min-w-0 flex-1">
+                        <span className="line-clamp-2 text-sm text-slate-800 dark:text-slate-100">{item.name}</span>
+                        <span className="block text-xs tabular-nums text-slate-500">{fmt(item.price * item.quantity)}</span>
+                      </span>
                       {isSpecial ? (
-                        <button onClick={() => removeFromCart(item.cartItemId)} className="flex h-8 w-8 items-center justify-center rounded text-sm text-red-400 transition active:scale-95 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20">×</button>
+                        <button
+                          onClick={() => removeFromCart(item.cartItemId)}
+                          aria-label={`Quitar ${item.name}`}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-50 active:scale-95 dark:hover:bg-red-900/20"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       ) : (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => updateQty(item.cartItemId, -1)} className="flex h-8 w-8 items-center justify-center rounded bg-slate-200 text-sm transition active:scale-95 dark:bg-white/10">−</button>
-                          <span className="w-4 text-center text-sm font-semibold">{item.quantity}</span>
-                          <button onClick={() => updateQty(item.cartItemId, 1)} className="flex h-8 w-8 items-center justify-center rounded bg-slate-200 text-sm transition active:scale-95 dark:bg-white/10">+</button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            onClick={() => updateQty(item.cartItemId, -1)}
+                            aria-label={item.quantity === 1 ? `Quitar ${item.name}` : `Uno menos de ${item.name}`}
+                            className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white transition active:scale-95 dark:border-white/10 dark:bg-white/10"
+                          >
+                            {item.quantity === 1 ? <Trash2 className="h-4 w-4 text-red-500" /> : <Minus className="h-4 w-4" />}
+                          </button>
+                          <span className="w-6 text-center text-sm font-bold tabular-nums">{item.quantity}</span>
+                          <button
+                            onClick={() => updateQty(item.cartItemId, 1)}
+                            aria-label={`Uno más de ${item.name}`}
+                            className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white transition active:scale-95 dark:border-white/10 dark:bg-white/10"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
                         </div>
                       )}
-                      <span className="text-xs text-slate-500 w-16 text-right">{fmt(item.price * item.quantity)}</span>
                     </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {cart.length > 0 && (
-                <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-semibold dark:border-white/10">
-                  <span>Total</span>
-                  <span>{fmt(subtotal)}</span>
-                </div>
-              )}
-            </div>
+                  );
+                })}
+              </ul>
+            )}
 
-            <textarea
+            <input
               aria-label="Nota del pedido (opcional)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              rows={2}
-              placeholder="Nota (opcional)"
-              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              maxLength={500}
+              placeholder="Nota: sin hielo, término medio... (opcional)"
+              className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-base outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 sm:text-sm dark:border-white/10 dark:bg-white/5 dark:text-white"
             />
 
-            {error && <p className="text-xs text-red-500">{error}</p>}
+            {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-            <button
-              onClick={confirm}
-              disabled={cart.length === 0 || addOrder.isPending}
-              aria-busy={addOrder.isPending}
-              className="sticky bottom-0 min-h-12 w-full rounded-xl bg-violet-600 text-sm font-bold text-white shadow-lg transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-violet-400 dark:disabled:bg-violet-900"
-            >
-              {confirmLabel}
-            </button>
+            {confirmDiscard ? (
+              <div role="alertdialog" aria-label="Descartar pedido" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-500/40 dark:bg-amber-900/20">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                  ¿Descartar el pedido de {guestName}? Tiene {units} {units === 1 ? "producto" : "productos"} sin confirmar.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmDiscard(false)}
+                    autoFocus
+                    className="min-h-11 flex-1 rounded-xl bg-violet-600 px-3 text-sm font-bold text-white hover:bg-violet-700"
+                  >
+                    Seguir pidiendo
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="min-h-11 flex-1 rounded-xl border border-red-300 bg-white px-3 text-sm font-semibold text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:bg-transparent dark:text-red-300"
+                  >
+                    Descartar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={confirm}
+                disabled={cart.length === 0 || addOrder.isPending}
+                aria-busy={addOrder.isPending}
+                className="min-h-12 w-full rounded-xl bg-violet-600 text-base font-bold text-white shadow-lg transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-violet-400 disabled:shadow-none dark:disabled:bg-violet-900"
+              >
+                {cart.length === 0 ? "Confirmar pedido" : confirmLabel}
+              </button>
+            )}
           </div>
         </div>
       </div>

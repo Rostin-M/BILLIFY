@@ -28,6 +28,7 @@ const data: BusinessData = {
   maxCashRegisters: 2,
   logoUrl: null,
   categories: ["Bebidas"],
+  brands: ["Diana"],
   produceModuleEnabled: false,
   cashiersCanEditPrices: false,
   cashBlindClose: true,

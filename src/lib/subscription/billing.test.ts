@@ -172,7 +172,7 @@ describe("upgrade sobre períodos que no duran un ciclo (activación manual, per
   });
 
   it("períodos apilados (renovó antes de tiempo): cobra todos los días que quedan", () => {
-    // Dos meses pagados, quedan 61 días: 50.000 / 30 × 61 = 101.666 → 101.700 (antes: 50.000 como máximo)
+    // Dos meses pagados, quedan 61 días: 50.000 / 30 × 61 = 101.666 → 101.700
     expect(upgrade("MONTHLY", new Date("2026-10-15T15:00:00Z"), new Date("2026-12-15T15:00:00Z"))).toBe(101_700);
   });
 

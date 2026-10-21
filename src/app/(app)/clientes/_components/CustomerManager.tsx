@@ -109,7 +109,6 @@ export function CustomerManager() {
           </button>
         </div>
 
-        {/* Formulario crear */}
         {showCreate && (
           <form
             onSubmit={(e) => { e.preventDefault(); createCustomer.mutate(form); }}
@@ -145,7 +144,6 @@ export function CustomerManager() {
           </form>
         )}
 
-        {/* Lista */}
         {isPending && <SkeletonListRows count={4} />}
         {!isPending && customers.length === 0 && (
           <EmptyState
@@ -159,7 +157,6 @@ export function CustomerManager() {
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
             {customers.map((c) => (
               <li key={c.id} className="py-3">
-                {/* Fila principal */}
                 {editingId === c.id ? (
                   <form
                     onSubmit={(e) => { e.preventDefault(); updateCustomer.mutate({ id: c.id, ...form }); }}

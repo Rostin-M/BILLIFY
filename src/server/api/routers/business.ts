@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getPlan } from "~/lib/subscription/catalog";
 import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
+import { MAX_BRAND_LENGTH, MAX_BRANDS } from "~/server/lib/brands";
 
 // Límites de longitud: evitan payloads gigantes sin romper los datos válidos actuales
 const optionalText = (max: number, label: string) =>
@@ -58,6 +59,17 @@ const updateSettingsSchema = z
       )
       .max(40, "Máximo 40 categorías")
       .default([]),
+    // Opcional: si un cliente viejo no lo envía, se conservan las marcas guardadas
+    brands: z
+      .array(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(MAX_BRAND_LENGTH, `Cada marca admite máximo ${MAX_BRAND_LENGTH} caracteres`),
+      )
+      .max(MAX_BRANDS, `Máximo ${MAX_BRANDS} marcas`)
+      .optional(),
     produceModuleEnabled: z.boolean().default(false),
     // Opcional: si un cliente viejo no lo envía, se conserva el valor guardado
     cashiersCanEditPrices: z.boolean().optional(),
@@ -99,6 +111,7 @@ export const businessRouter = createTRPCRouter({
           maxCashRegisters: true,
           logoUrl: true,
           categories: true,
+          brands: true,
           produceModuleEnabled: true,
           cashiersCanEditPrices: true,
           cashBlindClose: true,
@@ -155,6 +168,7 @@ export const businessRouter = createTRPCRouter({
             autoTax: input.autoTax,
             maxCashRegisters: input.maxCashRegisters,
             categories: input.categories,
+            ...(input.brands !== undefined && { brands: input.brands }),
             produceModuleEnabled: input.produceModuleEnabled,
             ...(input.cashiersCanEditPrices !== undefined && {
               cashiersCanEditPrices: input.cashiersCanEditPrices,
@@ -185,6 +199,7 @@ export const businessRouter = createTRPCRouter({
             autoTax: input.autoTax,
             maxCashRegisters: input.maxCashRegisters,
             categories: input.categories,
+            brands: input.brands,
             produceModuleEnabled: input.produceModuleEnabled,
             cashiersCanEditPrices: input.cashiersCanEditPrices,
             cashBlindClose: input.cashBlindClose,

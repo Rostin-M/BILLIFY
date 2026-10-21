@@ -162,6 +162,8 @@ model Business {
   invoiceTaxDetail        InvoiceTaxDetail      @default(SUMMARY) @map("invoice_tax_detail")
   taxes                   Json                  @default("[]") @map("taxes")
   categories              String[]              @default([]) @map("categories")
+  // Marcas sugeridas en el formulario de productos; se agregan solas al guardar un producto con marca nueva.
+  brands                  String[]              @default([]) @map("brands")
   // Obsoleto: el plan vigente está en Subscription. Se conserva por compatibilidad.
   plan                    String                @default("MVP") @map("plan")
   autoTax                 Boolean               @default(false) @map("auto_tax")

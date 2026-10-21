@@ -11,7 +11,6 @@ const MAX_GUESTS = 30;
 type Props = {
   suggestedName: string;
   onCancel: () => void;
-  /** La mesa ya abierta, con sus clientes en orden. */
   onOpened: (table: OpenedTable) => void;
 };
 
@@ -20,8 +19,6 @@ const inputClass =
 const stepClass =
   "inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-white/15 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
 
-// Abrir mesa: cuántos clientes hay (1 si no se dice nada) y, si se quiere, cómo
-// identificarlos. Sin nombre quedan como "Cliente N".
 export function OpenTableForm({ suggestedName, onCancel, onOpened }: Readonly<Props>) {
   const countLabelId = useId();
   const [name, setName] = useState(suggestedName);

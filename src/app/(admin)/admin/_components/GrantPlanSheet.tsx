@@ -233,7 +233,6 @@ export function GrantPlanSheet({
       footer={footer}
     >
       <div className="space-y-6">
-        {/* Punto de partida: qué tiene hoy */}
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-xl bg-slate-100 px-3 py-2.5 text-sm dark:bg-white/5">
           <span className={mutedText}>Hoy tiene</span>
           <span className="font-semibold text-slate-900 dark:text-white">{currentPlan.name}</span>
@@ -493,7 +492,6 @@ export function GrantPlanSheet({
           </span>
         </label>
 
-        {/* Resultado con detalle: lo mismo que el pie, pero explicado */}
         {preview && dayCount !== null && (
           <section
             aria-label="Revisa antes de activar"

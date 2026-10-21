@@ -11,7 +11,6 @@ const PAYMENT_LABELS: Record<string, string> = {
 const s = StyleSheet.create({
   page: { fontSize: 10, paddingVertical: 40, paddingHorizontal: 44, fontFamily: "Helvetica", color: "#1e293b" },
 
-  // Header
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   headerLeft: { flexDirection: "row", alignItems: "flex-start", gap: 10, flex: 1 },
   logo: { width: 52, height: 52, objectFit: "contain" },
@@ -26,14 +25,12 @@ const s = StyleSheet.create({
   divider: { borderBottomWidth: 1, borderBottomColor: "#e2e8f0", marginVertical: 12 },
   dividerLight: { borderBottomWidth: 0.5, borderBottomColor: "#f1f5f9", marginVertical: 8 },
 
-  // Info row
   infoRow: { flexDirection: "row", gap: 16, marginBottom: 14 },
   infoBlock: { flex: 1 },
   infoLabel: { fontSize: 7.5, color: "#94a3b8", fontWeight: "bold", textTransform: "uppercase", marginBottom: 2 },
   infoValue: { fontSize: 9.5 },
   infoSub: { fontSize: 8.5, color: "#64748b", marginTop: 1 },
 
-  // Table
   tableHeader: { flexDirection: "row", backgroundColor: "#f8fafc", paddingVertical: 5, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" },
   tableRow: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 4, borderBottomWidth: 0.5, borderBottomColor: "#f1f5f9" },
   tableRowAlt: { backgroundColor: "#fafafa" },
@@ -47,7 +44,6 @@ const s = StyleSheet.create({
   colSub: { width: "18%", textAlign: "right" },
   itemTaxLabel: { fontSize: 7, color: "#94a3b8", marginTop: 1 },
 
-  // Totals
   totalsArea: { marginTop: 14, alignItems: "flex-end" },
   totalRow: { flexDirection: "row", justifyContent: "space-between", width: 210, marginBottom: 3 },
   totalLabel: { fontSize: 9, color: "#475569" },
@@ -56,12 +52,10 @@ const s = StyleSheet.create({
   grandLabel: { fontSize: 12, fontWeight: "bold" },
   grandValue: { fontSize: 12, fontWeight: "bold", color: "#7c3aed" },
 
-  // Note
   noteBox: { marginTop: 14, padding: 8, backgroundColor: "#f8fafc", borderRadius: 4, borderLeftWidth: 3, borderLeftColor: "#e2e8f0" },
   noteLabel: { fontSize: 7.5, color: "#94a3b8", fontWeight: "bold", textTransform: "uppercase", marginBottom: 2 },
   noteText: { fontSize: 9, color: "#475569" },
 
-  // Footer
   footer: { marginTop: "auto", paddingTop: 20, borderTopWidth: 0.5, borderTopColor: "#e2e8f0", alignItems: "center" },
   footerLine: { fontSize: 7.5, color: "#94a3b8", marginBottom: 2, textAlign: "center" },
   footerCopy: { fontSize: 7, color: "#cbd5e1", marginTop: 2, textAlign: "center" },
@@ -143,7 +137,6 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        {/* Header */}
         <View style={s.header}>
           <View style={s.headerLeft}>
             {business.logoUrl ? (
@@ -166,7 +159,6 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
 
         <View style={s.divider} />
 
-        {/* Info cliente / pago / cajero */}
         <View style={s.infoRow}>
           <View style={s.infoBlock}>
             <Text style={s.infoLabel}>Cliente</Text>
@@ -187,7 +179,6 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
           ) : null}
         </View>
 
-        {/* Tabla de ítems */}
         {(() => {
           const perItemTax = business.invoiceTaxDetail === "PER_ITEM";
           return (
@@ -226,7 +217,6 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
           );
         })()}
 
-        {/* Totales */}
         <View style={s.totalsArea}>
           {totalsSection}
           <View style={s.grandRow}>
@@ -242,7 +232,6 @@ export function FacturaPDF({ business, sale }: Readonly<{ business: BusinessInfo
           </View>
         ) : null}
 
-        {/* Footer */}
         <View style={s.footer}>
           <Text style={s.footerLine}>
             Este documento es una factura operativa · No tiene validez tributaria ante la DIAN

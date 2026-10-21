@@ -107,7 +107,6 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
 
       {open && !showCreate && !showGuestDoc && (
         <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-800">
-          {/* Opción rápida: Consumidor Final */}
           <div className="border-b border-slate-100 p-2 dark:border-white/10">
             <button
               onClick={() => {
@@ -212,7 +211,6 @@ export function CustomerSelector({ value, onChange }: Readonly<Props>) {
         </div>
       )}
 
-      {/* Formulario: registrar nuevo cliente */}
       {showCreate && (
         <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-white/10 dark:bg-slate-800">
           <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">

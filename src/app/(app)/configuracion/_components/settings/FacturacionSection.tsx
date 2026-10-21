@@ -39,7 +39,6 @@ export function FacturacionSection({
 
   return (
     <>
-      {/* Contacto en facturas */}
       <div>
         <SubHeading>Contacto en facturas</SubHeading>
         <div className="space-y-4">
@@ -113,7 +112,6 @@ export function FacturacionSection({
 
       <div className={dividerClass} />
 
-      {/* Impuestos */}
       <div>
         <SubHeading>Impuestos</SubHeading>
         <div className="space-y-4">

@@ -311,7 +311,6 @@ export default async function Home() {
     <main className="min-h-screen bg-gradient-to-b from-slate-100 to-white px-4 py-8 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-white">
       <div className="mx-auto max-w-2xl space-y-6">
         <>
-          {/* Info de sesión */}
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
             {business?.name && (
               <p className="mb-0.5 text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
@@ -328,7 +327,6 @@ export default async function Home() {
 
           {showFirstSteps ? <FirstSteps steps={steps} /> : businessId && <CashStatus open={!!openRegister} />}
 
-          {/* Operaciones comunes */}
           <NavSection title="Operaciones" items={COMMON_ITEMS} gridClass="grid-cols-1 sm:grid-cols-3" iconSize={22} />
 
           {/* Gestión — solo CASHIER */}

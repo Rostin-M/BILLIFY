@@ -74,7 +74,7 @@ export default function RegisterPage() {
         return;
       }
     }
-    // Sin contraseña en memoria (o si el inicio falla): como antes, al inicio de sesión.
+    // Sin contraseña en memoria (o si el inicio falla): al inicio de sesión.
     setVerified("manual");
     setTimeout(() => router.push("/auth/login?registered=true"), 2500);
   }

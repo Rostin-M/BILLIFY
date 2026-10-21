@@ -15,8 +15,8 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   // Revalida contra la BD: rol fresco, usuario activo y sesión vigente (24 h).
   const user = await loadActiveUser(await auth());
 
-  // Sin sesión el middleware solo deja pasar "/" dentro de este grupo, que ahora
-  // es la landing pública: trae su propio header (anclas, CTA, menú móvil), así
+  // Sin sesión el middleware solo deja pasar "/" dentro de este grupo, que es
+  // la landing pública: trae su propio header (anclas, CTA, menú móvil), así
   // que aquí no se monta el AppHeader de la app para no duplicar cabeceras.
   if (!user) return <>{children}</>;
 

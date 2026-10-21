@@ -42,6 +42,29 @@ describe("product.create y update", () => {
     );
   });
 
+  it("agrega las marcas nuevas al negocio y reutiliza las existentes", async () => {
+    const { owner, business } = await createShop();
+    const other = await createShop();
+    const caller = callerFor(owner);
+
+    const first = await caller.product.create({ ...baseInput, brand: " Diana " });
+    // Misma marca con otra grafía: se guarda como ya estaba en la lista.
+    const second = await caller.product.create({ ...baseInput, name: "Arroz libra", brand: "diana" });
+    const third = await caller.product.create({ ...baseInput, name: "Gaseosa", brand: "Postobón" });
+    await caller.product.update({ ...baseInput, id: third.id, brand: "Coca-Cola" });
+
+    await expect(db.business.findUnique({ where: { id: business.id } })).resolves.toMatchObject({
+      brands: ["Diana", "Postobón", "Coca-Cola"],
+    });
+    for (const { id } of [first, second]) {
+      await expect(db.product.findUnique({ where: { id } })).resolves.toMatchObject({ brand: "Diana" });
+    }
+    // Las marcas son de cada negocio.
+    await expect(db.business.findUnique({ where: { id: other.business.id } })).resolves.toMatchObject({
+      brands: [],
+    });
+  });
+
   it("no permite códigos de barras repetidos en el negocio", async () => {
     const { owner, business } = await createShop();
     const other = await createShop();

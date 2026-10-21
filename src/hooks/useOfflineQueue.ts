@@ -115,7 +115,6 @@ export function useOfflineQueue(syncFn: SyncFn, owner: QueueOwner) {
     else void refreshCount();
   }, [processQueue, refreshCount]);
 
-  // Escuchar eventos de red
   useEffect(() => {
     function handleOnline() {
       setIsOnline(true);

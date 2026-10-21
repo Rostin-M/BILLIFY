@@ -20,11 +20,6 @@ type Props = {
   onClose: () => void;
 };
 
-/**
- * Después de cobrar una mesa con "Generar factura": muestra cada factura emitida con
- * las mismas acciones que el POS (enviar al correo, descargar PDF). Antes el cobro
- * solo mostraba el aviso de éxito y la factura quedaba escondida en el historial.
- */
 export function MesaInvoicesModal({ saleIds, business, onClose }: Readonly<Props>) {
   const dialogRef = useDialog(onClose);
   // Las ventas son de hoy: salen del mismo listado que usa el historial de ventas.

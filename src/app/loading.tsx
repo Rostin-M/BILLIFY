@@ -4,7 +4,6 @@ export default function Loading() {
   return (
     <div role="status" aria-label="Cargando" className="fixed inset-0 z-50 bg-slate-950">
 
-      {/* Gradiente de fondo sutil para profundidad */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -13,20 +12,15 @@ export default function Loading() {
         }}
       />
 
-      {/* Logo + indicador — esquina inferior derecha */}
       <div className="absolute bottom-[max(2rem,env(safe-area-inset-bottom))] right-8 flex flex-col items-end gap-2">
 
-        {/* Contenedor del logo con órbita */}
         <div className="relative h-24 w-24">
 
-          {/* Estela (cola de cometa) */}
           <span className="orbit-trail-2" aria-hidden="true" />
           <span className="orbit-trail-1" aria-hidden="true" />
 
-          {/* Punto de luz principal */}
           <span className="orbit-dot" aria-hidden="true" />
 
-          {/* Logo del águila con pulso suave */}
           {/* next/image sirve una versión de 96 px en vez del PNG original de 1,4 MB */}
           <Image
             src="/logo.png"
@@ -38,7 +32,6 @@ export default function Loading() {
           />
         </div>
 
-        {/* Texto de marca */}
         <div className="flex flex-col items-end gap-0.5 pr-0.5">
           <p className="text-[0.7rem] font-bold tracking-[0.3em] text-slate-300">
             BILLIFY

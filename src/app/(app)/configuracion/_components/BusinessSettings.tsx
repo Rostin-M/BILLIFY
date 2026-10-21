@@ -28,8 +28,7 @@ import {
 } from "./settings/types";
 import { SectionCard } from "./settings/ui";
 
-// Convierte el formulario al input de business.updateSettings
-function toInput(form: SettingsForm, maxCashRegisters: number) {
+function toInput(form: SettingsForm, maxCashRegisters: number, sendBrands: boolean) {
   const taxes = form.taxes
     .map((t) => ({ name: t.name.trim(), rate: Number.parseFloat(t.rate) || 0, enabled: t.enabled }))
     .filter((t) => t.name.length > 0);
@@ -47,6 +46,9 @@ function toInput(form: SettingsForm, maxCashRegisters: number) {
     autoTax: form.autoTax,
     maxCashRegisters,
     categories: form.categories,
+    // Las marcas también se agregan solas al crear productos: se envían solo si se editaron aquí
+    // para no borrar las que se agregaron mientras esta pantalla estaba abierta.
+    brands: sendBrands ? form.brands : undefined,
     produceModuleEnabled: form.produceModuleEnabled,
     cashiersCanEditPrices: form.cashiersCanEditPrices,
     cashBlindClose: form.cashBlindClose,
@@ -169,7 +171,8 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
 
     setError(null);
     setSavingSection(meta.id);
-    updateSettings.mutate(toInput(candidate, maxReg), {
+    const brandsEdited = JSON.stringify(candidate.brands) !== JSON.stringify(saved.brands);
+    updateSettings.mutate(toInput(candidate, maxReg, brandsEdited), {
       onSuccess: (data) => {
         setSaved(candidate);
         setJustSaved(meta.id);

@@ -3,9 +3,11 @@
 import { Armchair, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type RouterOutputs } from "~/trpc/react";
+import { formatCOP } from "~/lib/format/money";
 import type { BusinessInfoForPdf } from "~/lib/pdf/FacturaPDF";
 import { AddOrderModal } from "./AddOrderModal";
 import { MesaInvoicesModal } from "./MesaInvoicesModal";
+import { guestTotal } from "./mesaStatus";
 import { OpenTableForm } from "./OpenTableForm";
 import { TableCard } from "./TableCard";
 
@@ -16,12 +18,16 @@ type Props = { business: Business; invoiceBusiness: BusinessInfoForPdf };
 
 export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
   const [showCreate, setShowCreate] = useState(false);
-  // Al abrir una mesa se va directo al pedido de su primer cliente.
   const [orderingFor, setOrderingFor] = useState<{ id: string; name: string } | null>(null);
   // Accordion: only one table expanded at a time, to keep the mobile view compact.
   const [expandedTableId, setExpandedTableId] = useState<string | null>(null);
   const [guestSearch, setGuestSearch] = useState("");
   const [invoiceSaleIds, setInvoiceSaleIds] = useState<string[] | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const { data: sessions = [], isLoading, isError: refreshFailed } = api.tableSession.listActive.useQuery(undefined, {
     refetchInterval: 5_000,
@@ -71,6 +77,7 @@ export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
   const sessionsLabel = sessions.length === 0
     ? "No hay mesas abiertas"
     : `${sessions.length} mesa${tablePlural} abierta${tablePlural}`;
+  const pendingTotal = sessions.reduce((s, t) => s + t.guests.reduce((g, guest) => g + guestTotal(guest), 0), 0);
 
   return (
     <div className="space-y-4">
@@ -81,7 +88,6 @@ export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
           onClose={() => setInvoiceSaleIds(null)}
         />
       )}
-      {/* Nueva mesa */}
       {orderingFor && (
         <AddOrderModal
           guestId={orderingFor.id}
@@ -93,20 +99,25 @@ export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
       {showCreate ? (
         <OpenTableForm suggestedName={suggestedName} onCancel={() => setShowCreate(false)} onOpened={handleOpened} />
       ) : (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {sessionsLabel}
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{sessionsLabel}</span>
+            {pendingTotal > 0 && (
+              <span className="block sm:inline">
+                <span className="hidden sm:inline"> · </span>
+                <span className="tabular-nums">{formatCOP(pendingTotal)}</span> por cobrar
+              </span>
+            )}
           </p>
           <button
             onClick={() => setShowCreate(true)}
-            className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-700"
+            className="min-h-11 shrink-0 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white transition hover:bg-violet-700"
           >
             + Nueva mesa
           </button>
         </div>
       )}
 
-      {/* Buscar cliente por nombre/apodo */}
       {sessions.length > 0 && (
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -116,26 +127,25 @@ export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
             value={guestSearch}
             onChange={(e) => setGuestSearch(e.target.value)}
             placeholder="Buscar cliente por nombre o apodo..."
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-400"
+            className="min-h-11 w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-base outline-none sm:text-sm focus:border-violet-400 focus:ring-2 focus:ring-violet-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-violet-500 dark:focus:ring-violet-400"
           />
         </div>
       )}
 
-      {/* El listado se refresca cada 5 s: si falla, se dice (antes quedaba desactualizado sin aviso). */}
       {refreshFailed && (
         <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-200">
           No se pudieron actualizar las mesas. Revisa la conexión; se reintentará solo.
         </p>
       )}
 
-      {/* Lista de mesas */}
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
         {filteredSessions.map((session: SessionData) => (
           <TableCard
             key={session.id}
             session={session}
             business={business}
             expanded={expandedTableId === session.id}
+            now={now}
             onToggleExpanded={() =>
               setExpandedTableId((prev) => (prev === session.id ? null : session.id))
             }

@@ -4,7 +4,6 @@ import { formatCOP as fmt } from "~/lib/format/money";
 const s = StyleSheet.create({
   page: { fontSize: 10, paddingVertical: 40, paddingHorizontal: 44, fontFamily: "Helvetica", color: "#1e293b" },
 
-  // Header
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   headerLeft: { flexDirection: "row", alignItems: "flex-start", gap: 10, flex: 1 },
   logo: { width: 52, height: 52, objectFit: "contain" },
@@ -17,7 +16,6 @@ const s = StyleSheet.create({
 
   divider: { borderBottomWidth: 1, borderBottomColor: "#e2e8f0", marginVertical: 12 },
 
-  // Guest
   guestHeader: { fontSize: 11, fontWeight: "bold", marginBottom: 4, marginTop: 6, backgroundColor: "#f8fafc", padding: 5, borderRadius: 3 },
   roundLabel: { fontSize: 8.5, color: "#64748b", marginBottom: 4, marginTop: 2 },
   itemRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 2.5 },
@@ -88,7 +86,6 @@ export function MesaPDF({ business, mesa }: Readonly<Props>) {
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        {/* Header */}
         <View style={s.header}>
           <View style={s.headerLeft}>
             {business.logoUrl ? (
@@ -114,7 +111,6 @@ export function MesaPDF({ business, mesa }: Readonly<Props>) {
 
         <View style={s.divider} />
 
-        {/* Comensales */}
         {mesa.guests.map((guest, gi) => {
           const guestTotal = guest.orders.reduce((s, o) => s + o.total, 0);
           return (
@@ -174,7 +170,6 @@ export function MesaPDF({ business, mesa }: Readonly<Props>) {
           <Text style={s.grandValue}>{fmt(grandTotal)}</Text>
         </View>
 
-        {/* Footer */}
         <View style={s.footer}>
           <Text style={s.footerLine}>BILLIFY · Cuenta de mesa · Documento de uso interno</Text>
           <Text style={s.footerLine}>Generado con BILLIFY · Software de punto de venta para pequeños negocios</Text>

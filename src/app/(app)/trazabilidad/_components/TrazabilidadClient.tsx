@@ -207,7 +207,6 @@ export function TrazabilidadClient({
 
   return (
     <div className="space-y-5">
-      {/* Tabs */}
       <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-white/5">
         {(["registro", "exportar"] as Tab[]).map((t) => (
           <button
@@ -231,10 +230,8 @@ export function TrazabilidadClient({
         <PlanFeatureLocked feature="exports" title="Exportar a Excel no está en tu plan" />
       )}
 
-      {/* Tab: Registro */}
       {tab === "registro" && canAudit && (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-          {/* Filtro */}
           <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 dark:border-white/10">
             <select
               aria-label="Filtrar por acción"
@@ -310,10 +307,8 @@ export function TrazabilidadClient({
         </div>
       )}
 
-      {/* Tab: Exportar */}
       {tab === "exportar" && canExport && (
         <div className="space-y-4">
-          {/* Selector de período */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
             <h2 className="mb-3 font-semibold text-slate-700 dark:text-slate-200">Período</h2>
             <div className="flex gap-2">
@@ -333,7 +328,6 @@ export function TrazabilidadClient({
             </div>
           </div>
 
-          {/* Botones de exportación */}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
               <h3 className="mb-1 font-semibold text-slate-700 dark:text-slate-200">Ventas</h3>

@@ -40,6 +40,7 @@ async function shopWithData() {
     price: 2000,
     stock: 10,
     barcode: "770123",
+    brand: "Sello Rojo",
   });
   await createProduct(shop.business.id, {
     name: "Avena vieja",
@@ -155,7 +156,11 @@ describe("backup.import", () => {
     const tinto = await db.product.findFirstOrThrow({
       where: { businessId: target.business.id, barcode: "770123" },
     });
-    expect(tinto).toMatchObject({ name: "Tinto", price: 2000, stock: 7 });
+    expect(tinto).toMatchObject({ name: "Tinto", price: 2000, stock: 7, brand: "Sello Rojo" });
+    // Las marcas de los productos cargados quedan en la lista del negocio.
+    await expect(
+      db.business.findUnique({ where: { id: target.business.id } }),
+    ).resolves.toMatchObject({ brands: ["Sello Rojo"] });
     const jairo = await db.customer.findFirstOrThrow({
       where: { businessId: target.business.id, document: "1010" },
     });

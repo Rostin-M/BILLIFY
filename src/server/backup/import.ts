@@ -7,6 +7,7 @@ import { TRPCError } from "@trpc/server";
 
 import { type BackupFile, type BackupImportSummary } from "~/lib/backup/format";
 import { getPlan, type PlanCode } from "~/lib/subscription/catalog";
+import { rememberBrands } from "~/server/lib/brands";
 
 /** Motivo de los movimientos de inventario que crea la importación (ver ProductHistory). */
 export const IMPORT_MOVEMENT_REASON = "IMPORT";
@@ -148,6 +149,7 @@ async function importProducts(
   if (creates.length) await tx.product.createMany({ data: creates });
   if (movements.length)
     await tx.inventoryMovement.createMany({ data: movements });
+  await rememberBrands(tx, ctx.businessId, file.products.map((p) => p.brand));
 
   const max = getPlan(ctx.plan).limits.products;
   if (max !== null) {

@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import { useDialog } from "~/app/_components/ui/useDialog";
 
@@ -23,8 +24,9 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
   );
 
   const addGuest = api.tableSession.addGuest.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (guest) => {
       await utils.tableSession.listActive.invalidate();
+      toast.success(`${guest.name} agregado a la mesa.`);
       onSuccess();
     },
   });
@@ -61,14 +63,13 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
           <button
             onClick={onClose}
             aria-label="Cerrar"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Customer search */}
           <div>
             <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
               Vincular a cliente registrado <span className="font-normal text-slate-500">(opcional)</span>
@@ -85,7 +86,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
                   type="button"
                   onClick={clearCustomer}
                   aria-label="Quitar cliente"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg text-violet-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg text-violet-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                 >
                   ×
                 </button>
@@ -100,7 +101,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
                   onChange={(e) => { setCustomerQuery(e.target.value); setSearchOpen(true); }}
                   onFocus={() => setSearchOpen(true)}
                   onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
                 />
                 {searchOpen && customerQuery.length >= 1 && (
                   <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-800">
@@ -111,7 +112,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
                             <button
                               type="button"
                               onMouseDown={(e) => { e.preventDefault(); selectCustomer(c); }}
-                              className="flex w-full flex-col px-3 py-2 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                              className="flex min-h-11 w-full flex-col justify-center px-3 py-2 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20"
                             >
                               <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{c.name}</span>
                               {(c.document ?? c.phone) && (
@@ -140,13 +141,13 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
 
           <label className="block space-y-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">
-              Nombre <span className="text-slate-500">(opcional — se auto-asigna si no se escribe)</span>
+              Nombre o seña <span className="text-slate-500">(opcional; si no, queda como Cliente N)</span>
             </span>
             <input
               value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
               placeholder="Ej: Carlos, Cliente 1..."
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+              className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
             />
           </label>
 
@@ -158,7 +159,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
               placeholder="Descripción para identificar..."
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+              className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
             />
           </label>
 
@@ -172,7 +173,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
                 value={form.document}
                 onChange={(e) => setForm((p) => ({ ...p, document: e.target.value }))}
                 placeholder="Cédula / documento"
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-lg border border-slate-200 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
               />
               <input
                 aria-label="Teléfono"
@@ -180,7 +181,7 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
                 type="tel"
                 onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
                 placeholder="Teléfono"
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-lg border border-slate-200 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
               />
             </div>
           </div>
@@ -194,14 +195,14 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
               type="submit"
               disabled={addGuest.isPending}
               aria-busy={addGuest.isPending}
-              className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
+              className="min-h-11 flex-1 rounded-xl bg-violet-600 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
             >
               {addGuest.isPending ? "Agregando..." : "Agregar cliente"}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400"
+              className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400"
             >
               Cancelar
             </button>

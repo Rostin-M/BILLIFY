@@ -63,19 +63,15 @@ function LoginForm() {
         <ThemeToggle />
       </div>
 
-      {/* ── Animación de entrada: águila + marca ── */}
       <div className="mb-8 flex flex-col items-center text-center">
-        {/* Águila */}
         <div className="animate-eagle-in">
           <Logo size="lg" className="logo-glow" />
         </div>
 
-        {/* Nombre */}
         <h1 className="animate-text-in mt-3 text-[2rem] font-bold tracking-[0.25em] text-white">
           BILLIFY
         </h1>
 
-        {/* Copyright */}
         <p className="animate-copy-in mt-1 text-xs tracking-[0.05em] text-slate-500">
           © {new Date().getFullYear()} BILLIFY · Todos los derechos reservados
         </p>
@@ -94,7 +90,6 @@ function LoginForm() {
         </p>
       </div>
 
-      {/* ── Formulario de login ── */}
       <section className="animate-form-in w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-sm">
         <header className="mb-5 space-y-1">
           <h2 className="text-lg font-semibold text-white">Iniciar sesión</h2>

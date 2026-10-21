@@ -4,7 +4,6 @@ import { formatCOP } from "~/lib/format/money";
 const s = StyleSheet.create({
   page: { fontSize: 10, paddingVertical: 40, paddingHorizontal: 44, fontFamily: "Helvetica", color: "#1e293b" },
 
-  // Header
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   headerLeft: { flexDirection: "row", alignItems: "flex-start", gap: 10, flex: 1 },
   logo: { width: 52, height: 52, objectFit: "contain" },
@@ -178,7 +177,6 @@ export function CierreCajaPDF({
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        {/* Header */}
         <View style={s.header}>
           <View style={s.headerLeft}>
             {business.logoUrl ? (
@@ -204,7 +202,6 @@ export function CierreCajaPDF({
 
         <View style={s.divider} />
 
-        {/* Resumen */}
         <Text style={s.sectionTitle}>Resumen de caja</Text>
 
         <View style={s.row}>
@@ -245,7 +242,6 @@ export function CierreCajaPDF({
           <Text style={s.grandValue}>{formatCOP(register.totalBalance)}</Text>
         </View>
 
-        {/* Cuadre: lo que se contó contra lo esperado */}
         {register.countedCash == null ? null : (
           <CashCountSection
             counted={register.countedCash}
@@ -254,7 +250,6 @@ export function CierreCajaPDF({
           />
         )}
 
-        {/* Otros medios de pago */}
         {register.nonCashSales.length > 0 ? (
           <>
             <View style={[s.divider, { marginTop: 16 }]} />
@@ -271,7 +266,6 @@ export function CierreCajaPDF({
           </>
         ) : null}
 
-        {/* Movimientos manuales */}
         {manualMovements.length > 0 ? (
           <>
             <View style={[s.divider, { marginTop: 20 }]} />
@@ -298,7 +292,6 @@ export function CierreCajaPDF({
           </>
         ) : null}
 
-        {/* Ventas anuladas */}
         {(register.voidedSales?.length ?? 0) > 0 ? (
           <>
             <View style={[s.divider, { marginTop: 20 }]} />
@@ -323,7 +316,6 @@ export function CierreCajaPDF({
           </>
         ) : null}
 
-        {/* Ventas fiadas */}
         {(register.creditSales?.length ?? 0) > 0 ? (
           <>
             <View style={[s.divider, { marginTop: 20 }]} />
@@ -347,7 +339,6 @@ export function CierreCajaPDF({
           </>
         ) : null}
 
-        {/* Abonos a deudas */}
         {(register.payments?.length ?? 0) > 0 ? (
           <>
             <View style={[s.divider, { marginTop: 20 }]} />
@@ -380,7 +371,6 @@ export function CierreCajaPDF({
           </View>
         ) : null}
 
-        {/* Footer */}
         <View style={s.footer}>
           <Text style={s.footerLine}>BILLIFY · Reporte de caja · Documento de uso interno</Text>
           <Text style={s.footerLine}>Generado con BILLIFY · Software de punto de venta para pequeños negocios</Text>

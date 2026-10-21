@@ -96,7 +96,6 @@ export function AdminShell({
         Saltar al contenido
       </a>
 
-      {/* Escritorio: barra lateral */}
       <aside className="admin-chrome fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-ala-night lg:flex dark:border-r dark:border-white/10 dark:bg-[#040818]">
         <div className="px-4 pb-4 pt-5">
           <Brand />
@@ -147,7 +146,6 @@ export function AdminShell({
         </div>
       </aside>
 
-      {/* Celular y tableta: barra superior */}
       <header className="admin-chrome sticky top-0 z-30 flex h-14 items-center justify-between bg-ala-night px-4 lg:hidden dark:border-b dark:border-white/10 dark:bg-[#040818]">
         <Brand />
         <div className="flex items-center gap-1">
@@ -172,7 +170,6 @@ export function AdminShell({
         </main>
       </div>
 
-      {/* Celular y tableta: pestañas inferiores */}
       <nav
         aria-label="Secciones del panel"
         className="admin-chrome fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/10 bg-ala-night pb-[env(safe-area-inset-bottom)] lg:hidden dark:bg-[#040818]"

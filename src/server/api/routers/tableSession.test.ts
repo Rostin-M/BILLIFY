@@ -229,6 +229,22 @@ describe("cobro de mesa", () => {
     await expect(db.tableSession.findUnique({ where: { id: table.id } })).resolves.toMatchObject({ status: "CLOSED" });
   });
 
+  it("cobrar todo cierra la mesa aunque queden clientes sin pedidos (salen con ella)", async () => {
+    const { table, ana, beto } = await tableWithOrders();
+    const waiting = await caller.tableSession.addGuest({ sessionId: table.id, name: "Carla" });
+    const [before] = await caller.tableSession.listActive();
+    expect(before!._count.sales).toBe(0);
+
+    const result = await caller.tableSession.checkout({
+      sessionId: table.id,
+      groups: [{ guestIds: [ana.id, beto.id], paymentMethod: "CASH" }],
+    });
+
+    expect(result).toMatchObject({ tableClosed: true, message: 'Mesa "Mesa 1" cerrada. 1 venta(s) generada(s).' });
+    await expect(db.tableGuest.findUnique({ where: { id: waiting.id } })).resolves.toBeNull();
+    await expect(caller.tableSession.listActive()).resolves.toEqual([]);
+  });
+
   it("cobro parcial y con keepGuests deja la mesa abierta", async () => {
     const { table, ana, beto } = await tableWithOrders();
 
@@ -244,6 +260,8 @@ describe("cobro de mesa", () => {
 
     expect(partial.message).toBe("Cobro parcial registrado. 1 venta(s) generada(s).");
     expect(kept.message).toBe("Cobro registrado. Los clientes permanecen en mesa. 1 venta(s) generada(s).");
+    const [listed] = await caller.tableSession.listActive();
+    expect(listed!._count.sales).toBe(2);
     await expect(db.tableGuest.findUnique({ where: { id: beto.id } })).resolves.toBeTruthy();
     // Beto sigue en la mesa pero sin rondas: cobrarle otra vez no es posible.
     await expect(

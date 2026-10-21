@@ -71,7 +71,6 @@ export function LogoCard({
       </p>
 
       <div className="flex flex-wrap items-start gap-4">
-        {/* Vista previa */}
         {logoUrl ? (
           <div
             className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-slate-200 dark:border-white/10"
@@ -97,7 +96,6 @@ export function LogoCard({
           </div>
         )}
 
-        {/* Acciones */}
         <div className="flex flex-col gap-2">
           <input
             ref={fileInputRef}

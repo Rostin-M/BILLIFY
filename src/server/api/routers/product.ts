@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
+import { MAX_BRAND_LENGTH, rememberBrand } from "~/server/lib/brands";
 import { adjustStock } from "~/server/lib/inventory";
 import { planHasFeature } from "~/lib/subscription/catalog";
 import { assertCanAddProduct } from "~/server/subscription/quotas";
@@ -28,7 +29,7 @@ const baseProductSchema = z.object({
   category: z.string().trim().max(120).optional(),
   lotNumber: z.string().trim().max(64).optional(),
   barcode: z.string().trim().max(64, "El código de barras es demasiado largo").optional(),
-  brand: z.string().trim().max(120).optional(),
+  brand: z.string().trim().max(MAX_BRAND_LENGTH).optional(),
   presentation: z.string().trim().max(120).optional(),
   openPrice: z.boolean().default(false),
   soldByWeight: z.boolean().default(false),
@@ -213,8 +214,10 @@ export const productRouter = createTRPCRouter({
       await assertBarcodeAvailable(ctx.db, businessId, input.barcode);
     }
 
+    // Una marca nueva queda en la lista del negocio para sugerirla en los siguientes productos.
+    const brand = await rememberBrand(ctx.db, businessId, input.brand);
     const product = await ctx.db.product.create({
-      data: { businessId, ...productData(input) },
+      data: { businessId, ...productData({ ...input, brand }) },
     });
 
     await ctx.db.auditLog.create({
@@ -257,7 +260,8 @@ export const productRouter = createTRPCRouter({
       }
 
       // Sin la función de lotes en el plan, se conservan los valores guardados.
-      const data: Prisma.ProductUpdateInput = productData(input);
+      const brand = await rememberBrand(ctx.db, businessId, input.brand);
+      const data: Prisma.ProductUpdateInput = productData({ ...input, brand });
       if (!planHasFeature(ctx.subscription.billing.plan, "lots")) {
         delete data.lotNumber;
         delete data.expiresAt;

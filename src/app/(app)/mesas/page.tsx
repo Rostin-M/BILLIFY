@@ -53,8 +53,7 @@ export default async function MesasPage() {
     invoiceTaxDetail: business?.invoiceTaxDetail ?? "SUMMARY",
   };
 
-  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
-  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  // Con `await` (no `void`) el HTML del servidor ya trae los datos y no hay error de hidratación.
   await api.tableSession.listActive.prefetch();
 
   return (
@@ -71,7 +70,6 @@ export default async function MesasPage() {
             />
           ) : (
             <>
-              {/* Aviso antes de intentar (antes el error salía solo al tocar "Abrir mesa"). */}
               {!activeRegister && (
                 <div
                   role="status"

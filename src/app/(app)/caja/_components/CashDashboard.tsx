@@ -114,7 +114,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
 
   return (
     <div className="space-y-4">
-      {/* Aviso: caja abierta desde un día anterior */}
       {isStale && (
         <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 dark:border-red-500/30 dark:bg-red-900/10">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
@@ -129,7 +128,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
         </div>
       )}
 
-      {/* Header estado */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/30 dark:bg-emerald-900/10">
         <CircleDot className="h-6 w-6 shrink-0 text-emerald-500" />
         <div className="min-w-0 flex-1">
@@ -155,7 +153,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
         </div>
       </div>
 
-      {/* Cierre con cuadre: contar el efectivo y compararlo con lo esperado */}
       {isClosing && (
         <CashCloseForm
           expected={register.currentBalance}
@@ -165,10 +162,8 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
         />
       )}
 
-      {/* Escritorio: saldo y registro a la izquierda; movimientos a la derecha */}
       <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
       <div className="space-y-4">
-      {/* Saldo */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
         <h2 className="mb-4 font-semibold text-slate-700 dark:text-slate-200">Saldo actual</h2>
         <div className="space-y-2">
@@ -250,7 +245,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           </p>
         ) : (
         <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Tipo */}
           <div className="grid grid-cols-2 gap-2">
             {(["INCOME", "EXPENSE"] as const).map((t) => (
               <button
@@ -273,7 +267,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
             ))}
           </div>
 
-          {/* Monto */}
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Monto</span>
             <div className="relative">
@@ -290,7 +283,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
             </div>
           </label>
 
-          {/* Descripción */}
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Descripción</span>
             <input
@@ -326,7 +318,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
 
       </div>
       <div className="space-y-4">
-      {/* Movimientos del día */}
       {movements.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5">
           <h2 className="px-5 pt-5 font-semibold text-slate-700 dark:text-slate-200">

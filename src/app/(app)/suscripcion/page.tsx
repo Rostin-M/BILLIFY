@@ -13,8 +13,7 @@ export default async function SuscripcionPage() {
   if (!user.businessId) redirect("/");
 
   const isOwner = user.role === "OWNER";
-  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
-  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  // Con `await` (no `void`) el HTML del servidor ya trae los datos y no hay error de hidratación.
   await Promise.all([api.billing.status.prefetch(), isOwner ? api.billing.payments.prefetch() : null]);
 
   return (

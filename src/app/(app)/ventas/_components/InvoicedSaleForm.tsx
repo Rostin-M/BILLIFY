@@ -319,7 +319,6 @@ function FactureBottom({
 }>) {
   return (
     <div className="flex flex-col gap-3">
-      {/* Método de pago */}
       {cart.length > 0 && (
         <div>
           <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -344,7 +343,6 @@ function FactureBottom({
         </div>
       )}
 
-      {/* Nota */}
       {cart.length > 0 && (
         <div>
           <label htmlFor="invoice-note" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -365,7 +363,6 @@ function FactureBottom({
         </div>
       )}
 
-      {/* Desglose fiscal */}
       {cart.length > 0 && (
         <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
           {taxLines.length > 0 && (
@@ -389,14 +386,12 @@ function FactureBottom({
         </div>
       )}
 
-      {/* Error */}
       {errorMessage && (
         <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300">
           {errorMessage}
         </div>
       )}
 
-      {/* Botón confirmar */}
       <button
         onClick={onConfirm}
         aria-keyshortcuts="Control+Enter F12"
@@ -408,7 +403,6 @@ function FactureBottom({
         {confirmButtonLabel}
       </button>
 
-      {/* Limpiar con confirmación */}
       {cart.length > 0 && (
         <>
           {showClearConfirm ? (
@@ -602,7 +596,6 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
     setShowClearConfirm(false);
   }
 
-  /** Avisa cuando ya no hay más unidades (antes el "+" no hacía nada sin explicar). */
   function stockLimitReached(product: Pick<Product, "name" | "stock" | "trackStock">, qtyInCart: number) {
     if (!product.trackStock || qtyInCart < product.stock) return false;
     toast.error(
@@ -741,7 +734,6 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
 
   return (
     <>
-      {/* Modal post-emisión */}
       {completedSale && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
           <div
@@ -789,7 +781,6 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
         </div>
       )}
 
-      {/* Cliente */}
       <div className="mb-3">
         <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
           Cliente{" "}

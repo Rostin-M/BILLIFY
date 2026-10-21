@@ -8,8 +8,7 @@ export const metadata = { title: "Inventario — BILLIFY" };
 export default async function InventarioPage() {
   await requirePageUser();
 
-  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
-  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  // Con `await` (no `void`) el HTML del servidor ya trae los datos y no hay error de hidratación.
   await api.product.search.prefetch();
 
   return (

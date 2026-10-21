@@ -18,8 +18,7 @@ export default async function CajaPage() {
     select: { name: true, document: true, logoUrl: true },
   });
 
-  // Se espera la precarga: así el HTML del servidor ya trae los datos y coincide con el del
-  // cliente (con `void`, a veces llegaban antes de hidratar y React marcaba error de hidratación).
+  // Con `await` (no `void`) el HTML del servidor ya trae los datos y no hay error de hidratación.
   await Promise.all([
     api.cashRegister.getActive.prefetch(),
     isOwner ? api.cashRegister.listHistory.prefetch() : null,

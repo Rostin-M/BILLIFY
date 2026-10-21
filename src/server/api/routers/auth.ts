@@ -156,7 +156,7 @@ export const authRouter = createTRPCRouter({
       ]);
 
       // Un pendiente vencido se sobrescribe; uno vigente bloquea (mismo mensaje que
-      // una cuenta existente para no revelar más información que antes).
+      // una cuenta existente, para no revelar si hay un registro en curso).
       const pendingIsActive = existingPending !== null && existingPending.expiresAt > now;
       if (existingUser || pendingIsActive) {
         throw new TRPCError({
@@ -177,7 +177,6 @@ export const authRouter = createTRPCRouter({
         "Demasiados correos enviados. Espera unos minutos e inténtalo de nuevo.",
       );
 
-      // Hash de contraseña antes de guardar en pending
       const passwordHash = await bcrypt.hash(input.ownerPassword, 12);
       const code = generateNumericCode();
       const data = {

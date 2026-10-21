@@ -20,6 +20,7 @@ export type SettingsForm = {
   autoTax: boolean;
   maxCashRegisters: string;
   categories: string[];
+  brands: string[];
   produceModuleEnabled: boolean;
   cashiersCanEditPrices: boolean;
   cashBlindClose: boolean;
@@ -44,6 +45,7 @@ export type BusinessData = {
   maxCashRegisters: number;
   logoUrl: string | null;
   categories: string[];
+  brands: string[];
   produceModuleEnabled: boolean;
   cashiersCanEditPrices: boolean;
   cashBlindClose: boolean;
@@ -100,9 +102,9 @@ export const SECTIONS: readonly SectionMeta[] = [
   {
     id: "productos",
     label: "Productos e inventario",
-    description: "Categorías sugeridas y venta por peso.",
+    description: "Categorías y marcas sugeridas, y venta por peso.",
     icon: Package,
-    fields: ["categories", "produceModuleEnabled"],
+    fields: ["categories", "brands", "produceModuleEnabled"],
   },
   {
     id: "permisos",
@@ -171,6 +173,7 @@ export function formFromData(data: BusinessData): SettingsForm {
     autoTax: data.autoTax,
     maxCashRegisters: String(data.maxCashRegisters),
     categories: data.categories,
+    brands: data.brands,
     produceModuleEnabled: data.produceModuleEnabled,
     cashiersCanEditPrices: data.cashiersCanEditPrices,
     cashBlindClose: data.cashBlindClose,

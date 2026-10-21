@@ -102,8 +102,6 @@ function SalesHistoryList({ salesQuery }: Readonly<{ salesQuery: SalesQuery }>) 
   );
 }
 
-// Reemplaza la cadena de 5 ternarios anidados que había aquí (cargando / error / con-stock / sin-stock,
-// cada uno con su propio "vacío o lista") por una serie de retornos tempranos, mucho más legible.
 export function ProductHistoryPanel({
   trackStock,
   movementsQuery,

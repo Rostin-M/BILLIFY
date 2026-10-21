@@ -7,6 +7,7 @@ import { type ChangeEvent, useId, useState } from "react";
 
 import { PlanFeatureLocked, usePlanFeature } from "~/app/_components/subscription/PlanFeatureLocked";
 
+import { BrandCombobox } from "./BrandCombobox";
 import { PriceCalculator } from "./PriceCalculator";
 import {
   ADVANCED_FIELDS,
@@ -39,7 +40,9 @@ export function ProductFormFields({
   onExclusiveCheckChange,
   fieldErrors,
   onApplyCalculator,
+  onBrandChange,
   categories,
+  brands,
   businessTaxes,
   produceModuleEnabled,
 }: Readonly<{
@@ -52,7 +55,9 @@ export function ProductFormFields({
   onExclusiveCheckChange: (field: "openPrice" | "soldByWeight") => (e: ChangeEvent<HTMLInputElement>) => void;
   fieldErrors: Record<string, string>;
   onApplyCalculator: (price: number, cost: number, taxSlots: number[]) => void;
+  onBrandChange: (brand: string) => void;
   categories: string[];
+  brands: string[];
   businessTaxes: EnabledTax[];
   produceModuleEnabled: boolean;
 }>) {
@@ -61,6 +66,7 @@ export function ProductFormFields({
   // Al editar un producto que ya usa estos campos, se abren solos para no esconder sus datos.
   const [showMore, setShowMore] = useState(() => hasAdvancedData(form));
   const moreId = useId();
+  const brandId = useId();
   // Si el servidor rechaza un campo de "Más opciones", se muestra aunque esté cerrado.
   const advancedHasError = ADVANCED_FIELDS.some((f) => fieldErrors[f]);
   const moreOpen = showMore || advancedHasError;
@@ -69,7 +75,6 @@ export function ProductFormFields({
 
   return (
     <div className="space-y-3">
-      {/* Lo esencial para vender: nombre, unidad y precio */}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="space-y-1 text-sm sm:col-span-2">
           <span className="text-slate-700 dark:text-slate-300">
@@ -121,7 +126,6 @@ export function ProductFormFields({
           )}
         </label>
 
-        {/* Stock */}
         <div className="space-y-1 text-sm">
           {form.openPrice || form.soldByWeight ? (
             <p className="pt-6 text-xs text-slate-500 dark:text-slate-400">
@@ -165,7 +169,6 @@ export function ProductFormFields({
         </div>
       </div>
 
-      {/* Código de barras */}
       <label className="block space-y-1 text-sm">
         <span className="text-slate-700 dark:text-slate-300">
           Código de barras <span className="text-slate-500">(opc.)</span>
@@ -228,15 +231,10 @@ export function ProductFormFields({
                   ))}
                 </datalist>
               </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-slate-700 dark:text-slate-300">Marca</span>
-                <input
-                  value={form.brand}
-                  onChange={onChange("brand")}
-                  className={INPUT}
-                  placeholder="Ej: Diana"
-                />
-              </label>
+              <div className="space-y-1 text-sm">
+                <label htmlFor={brandId} className="text-slate-700 dark:text-slate-300">Marca</label>
+                <BrandCombobox id={brandId} value={form.brand} brands={brands} onChange={onBrandChange} />
+              </div>
               <label className="space-y-1 text-sm">
                 <span className="text-slate-700 dark:text-slate-300">Presentación</span>
                 <input
@@ -248,7 +246,6 @@ export function ProductFormFields({
               </label>
             </div>
 
-            {/* Costo */}
             <label className="block space-y-1 text-sm sm:max-w-xs">
               <span className="text-slate-700 dark:text-slate-300">Precio de costo</span>
               <input
@@ -295,7 +292,6 @@ export function ProductFormFields({
               )}
             </div>
 
-            {/* Calculadora de precio */}
             <div>
               <button
                 type="button"
@@ -311,7 +307,6 @@ export function ProductFormFields({
               )}
             </div>
 
-            {/* Venta especial: monto libre o por peso */}
             <div className="space-y-2 rounded-xl border border-slate-200 p-3 text-sm dark:border-white/10">
               <span className="text-slate-700 dark:text-slate-300">Venta especial</span>
               <label className="flex cursor-pointer items-center gap-2">
@@ -340,7 +335,6 @@ export function ProductFormFields({
               )}
             </div>
 
-            {/* Lote y vencimiento */}
             {hasLots === false ? (
               <PlanFeatureLocked compact feature="lots" title="Lote y fecha de vencimiento" />
             ) : (

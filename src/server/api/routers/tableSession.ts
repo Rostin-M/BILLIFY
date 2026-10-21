@@ -259,10 +259,11 @@ function assertGuestsStillPending(guestMap: Map<string, CheckoutGuest>, guestIds
   }
 }
 
-/** Cierra la mesa si ya no le quedan clientes. Devuelve true si la cerró. */
-async function closeTableIfEmpty(tx: Prisma.TransactionClient, sessionId: string): Promise<boolean> {
-  const remainingGuests = await tx.tableGuest.count({ where: { tableSessionId: sessionId } });
-  if (remainingGuests > 0) return false;
+/** Cierra la mesa si no queda nada por cobrar; los clientes sin pedidos salen con ella. */
+async function closeTableIfNothingPending(tx: Prisma.TransactionClient, sessionId: string): Promise<boolean> {
+  const pendingOrders = await tx.tableOrder.count({ where: { tableSessionId: sessionId } });
+  if (pendingOrders > 0) return false;
+  await tx.tableGuest.deleteMany({ where: { tableSessionId: sessionId } });
   await tx.tableSession.update({ where: { id: sessionId }, data: { status: "CLOSED", closedAt: new Date() } });
   return true;
 }
@@ -290,6 +291,7 @@ export const tableSessionRouter = createTRPCRouter({
         name: true,
         openedAt: true,
         user: { select: { name: true } },
+        _count: { select: { sales: true } },
         guests: {
           select: {
             id: true,
@@ -675,7 +677,8 @@ export const tableSessionRouter = createTRPCRouter({
   // Checkout — pays for the provided guest groups.
   // keepGuests: when true, orders are cleared but guest records stay so they can order again.
   //             Session stays OPEN regardless.
-  // keepGuests: false (default) — guests are removed after payment; session closes when no guests remain.
+  // keepGuests: false (default) — guests are removed after payment; session closes when nothing is left to charge
+  //             (guests without orders leave with it).
   // idempotencyKey: generada por el cliente al abrir el cobro; cada venta guarda "<clave>:<grupo>".
   checkout: businessProcedure
     .input(z.object({
@@ -755,7 +758,7 @@ export const tableSessionRouter = createTRPCRouter({
             if (sale) sales.push(sale);
           }
 
-          const tableClosed = !input.keepGuests && (await closeTableIfEmpty(tx, locked.id));
+          const tableClosed = !input.keepGuests && (await closeTableIfNothingPending(tx, locked.id));
 
           return { sales, tableClosed, sessionName: locked.name };
         }, { timeout: 60000, maxWait: 20000 });

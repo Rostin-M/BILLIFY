@@ -76,6 +76,20 @@ describe("business settings", () => {
     });
   });
 
+  it("edita las marcas y las conserva si el cliente no las envía", async () => {
+    const { owner, business } = await createShop();
+    await setSubscription(business.id, { plan: "PRO" });
+    const caller = callerFor(owner);
+
+    await caller.business.updateSettings({ ...settings, brands: ["Diana", " Alpina "] });
+    await caller.business.updateSettings(settings);
+
+    await expect(caller.business.getSettings()).resolves.toMatchObject({ brands: ["Diana", "Alpina"] });
+    await expect(
+      caller.business.updateSettings({ ...settings, brands: Array.from({ length: 201 }, (_, i) => `M${i}`) }),
+    ).rejects.toThrow(/200 marcas/);
+  });
+
   it("exige los datos de contacto que se mostrarán en la factura", async () => {
     const { owner } = await createShop();
     const caller = callerFor(owner);

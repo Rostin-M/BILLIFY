@@ -69,7 +69,6 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
 
   return (
     <div className="space-y-4">
-      {/* Resumen del día */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
           <p className="text-xs text-slate-500 dark:text-slate-400">Ventas hoy</p>
@@ -87,7 +86,6 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
         )}
       </div>
 
-      {/* Lista de ventas */}
       {sales.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center dark:border-white/10 dark:bg-white/5">
           <p className="text-slate-500 dark:text-slate-400">No hay ventas registradas hoy.</p>
@@ -102,7 +100,6 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
 
               return (
                 <li key={sale.id} className="p-4">
-                  {/* Fila principal */}
                   <div className="flex items-start justify-between gap-3">
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : sale.id)}
@@ -180,7 +177,6 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                         </div>
                   )}
 
-                  {/* Acciones PDF — bloque expandible bajo la fila principal */}
                   {pdfSaleId === sale.id && !isVoiding && (
                     <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50/50 p-3 dark:border-violet-500/20 dark:bg-violet-900/10">
                       <FacturaPdfActions
@@ -208,7 +204,6 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                     </div>
                   )}
 
-                  {/* Confirmación de anulación */}
                   {isVoiding && (
                     <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-500/30 dark:bg-red-900/10">
                       <p className="mb-2 text-sm font-semibold text-red-700 dark:text-red-300">
@@ -245,7 +240,6 @@ export function SalesHistory({ isOwner, business }: Readonly<Props>) {
                     </div>
                   )}
 
-                  {/* Detalle expandible de ítems */}
                   {isExpanded && !isVoiding && (
                     <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
                       <ul className="divide-y divide-slate-200 dark:divide-white/10">
