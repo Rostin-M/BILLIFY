@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import { MAX_CREDIT_TERMS_LENGTH } from "~/lib/creditTerms";
 import { getPlan } from "~/lib/subscription/catalog";
 import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 import { MAX_BRAND_LENGTH, MAX_BRANDS } from "~/server/lib/brands";
@@ -76,6 +77,9 @@ const updateSettingsSchema = z
     // Cierre de caja (opcionales por la misma razón)
     cashBlindClose: z.boolean().optional(),
     cashCountByDenomination: z.boolean().optional(),
+    // Fiados (opcionales por la misma razón); creditTerms null = texto por defecto.
+    creditSignatureRequired: z.boolean().optional(),
+    creditTerms: z.string().trim().max(MAX_CREDIT_TERMS_LENGTH, `Máximo ${MAX_CREDIT_TERMS_LENGTH} caracteres`).nullable().optional(),
   })
   .refine((data) => data.invoicePhoneSource !== "BUSINESS" || !!data.phone, {
     message: "Ingresa el teléfono del negocio para poder mostrarlo en la factura.",
@@ -116,6 +120,8 @@ export const businessRouter = createTRPCRouter({
           cashiersCanEditPrices: true,
           cashBlindClose: true,
           cashCountByDenomination: true,
+          creditSignatureRequired: true,
+          creditTerms: true,
         },
       }),
       ctx.db.user.findUnique({
@@ -177,6 +183,10 @@ export const businessRouter = createTRPCRouter({
             ...(input.cashCountByDenomination !== undefined && {
               cashCountByDenomination: input.cashCountByDenomination,
             }),
+            ...(input.creditSignatureRequired !== undefined && {
+              creditSignatureRequired: input.creditSignatureRequired,
+            }),
+            ...(input.creditTerms !== undefined && { creditTerms: input.creditTerms?.length ? input.creditTerms : null }),
           },
           select: { id: true, name: true },
         }),
@@ -204,6 +214,8 @@ export const businessRouter = createTRPCRouter({
             cashiersCanEditPrices: input.cashiersCanEditPrices,
             cashBlindClose: input.cashBlindClose,
             cashCountByDenomination: input.cashCountByDenomination,
+            creditSignatureRequired: input.creditSignatureRequired,
+            creditTermsChanged: input.creditTerms !== undefined,
           },
         },
       });

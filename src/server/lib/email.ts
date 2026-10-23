@@ -1,7 +1,8 @@
 import { BrevoClient } from "@getbrevo/brevo";
 import { env } from "~/env";
 import { copyrightNotice, LEGAL_DOCUMENTS, LEGAL_INFO } from "~/lib/legal";
-import { escapeHtml, renderEmail, type EmailSpec } from "./emailLayout";
+import { isSimpleEmail } from "~/lib/simpleEmail";
+import { renderEmail, type EmailSpec } from "./emailLayout";
 
 const brevo = new BrevoClient({ apiKey: env.BREVO_API_KEY });
 
@@ -9,7 +10,7 @@ const FROM = { name: "BILLIFY", email: env.SMTP_FROM };
 
 // ─── Saneamiento ────────────────────────────────────────────────────────────
 
-export { escapeHtml };
+export { escapeHtml } from "./emailLayout";
 
 /** Limpia el asunto: sin saltos de línea (inyección de cabeceras) y máximo 120 caracteres. */
 function safeSubject(value: string): string {
@@ -276,7 +277,7 @@ const ISSUED_AT = new Intl.DateTimeFormat("es-CO", {
 
 /** Correo simple válido para usarlo como "responder a" (evita cabeceras rotas). */
 const looksLikeEmail = (v: string | null | undefined): v is string =>
-  !!v && v.length <= 254 && /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(v);
+  !!v && v.length <= 254 && isSimpleEmail(v, '<>"');
 
 export async function sendInvoiceEmail(
   to: string,
@@ -334,6 +335,63 @@ export async function sendInvoiceEmail(
         "Factura operativa: no tiene validez tributaria ante la DIAN.",
         "Enviada con BILLIFY, software de punto de venta.",
       ],
+    },
+    attachment: [{ name: fileName, content: pdfBuffer.toString("base64") }],
+  });
+}
+
+/** Constancia del acuerdo de fiado firmado, con el PDF adjunto. */
+export async function sendCreditAgreementEmail(
+  to: string,
+  pdfBuffer: Buffer,
+  details: {
+    businessName: string;
+    customerName: string;
+    creditLimitLabel: string;
+    creditTermLabel: string;
+    signedAt: Date;
+    business?: { address?: string | null; phone?: string | null; email?: string | null };
+  },
+) {
+  const fileName = "Acuerdo-de-fiado.pdf";
+  const contact = details.business ?? {};
+  const replyEmail = contact.email?.trim();
+  const contactLines = [
+    contact.address?.trim(),
+    contact.phone?.trim() ? `Tel. ${contact.phone.trim()}` : null,
+    looksLikeEmail(replyEmail) ? replyEmail : null,
+  ].filter((l): l is string => !!l);
+
+  await send({
+    to,
+    sender: { name: safeSenderName(`${details.businessName} vía BILLIFY`), email: env.SMTP_FROM },
+    replyTo: looksLikeEmail(replyEmail) ? { email: replyEmail, name: safeSenderName(details.businessName) } : undefined,
+    subject: `Tu acuerdo de fiado con ${details.businessName}`,
+    spec: {
+      preheader: `Condiciones de tu cuenta de fiado con ${details.businessName}. El PDF firmado va adjunto.`,
+      brand: details.businessName,
+      eyebrow: "Cuenta de fiado",
+      title: "Tu acuerdo de fiado",
+      greeting: greet(details.customerName),
+      blocks: [
+        {
+          kind: "paragraph",
+          content: ["Aceptaste las condiciones de tu cuenta de fiado en ", { strong: details.businessName }, ". Este es el resumen:"],
+        },
+        {
+          kind: "facts",
+          rows: [
+            { label: "Fecha", value: ISSUED_AT.format(details.signedAt) },
+            { label: "Monto máximo", value: details.creditLimitLabel, emphasis: true },
+            { label: "Plazo de pago", value: details.creditTermLabel },
+          ],
+        },
+        { kind: "paragraph", content: ["Las condiciones completas y tu firma van adjuntas en PDF: ", { strong: fileName }, "."] },
+      ],
+      note: looksLikeEmail(replyEmail)
+        ? "¿Tienes alguna pregunta sobre tu cuenta? Responde a este correo y le llegará al negocio."
+        : undefined,
+      footer: [details.businessName, ...contactLines, "Enviado con BILLIFY, software de punto de venta."],
     },
     attachment: [{ name: fileName, content: pdfBuffer.toString("base64") }],
   });

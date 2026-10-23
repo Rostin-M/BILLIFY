@@ -14,10 +14,10 @@ const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 function escapeXml(value: string): string {
   return (
     value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
       // Caracteres de control que XML no admite.
       .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
   );
@@ -27,7 +27,7 @@ function escapeXml(value: string): string {
 function columnName(index: number): string {
   let name = "";
   for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
-    name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+    name = String.fromCodePoint(65 + ((n - 1) % 26)) + name;
   }
   return name;
 }

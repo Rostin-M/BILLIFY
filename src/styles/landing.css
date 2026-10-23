@@ -41,6 +41,7 @@
 }
 
 .landing {
+  interpolate-size: allow-keywords;
   --landing-focus: #1d4ed8;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   scroll-behavior: smooth;
@@ -398,9 +399,6 @@
 }
 .faq-item[open] .faq-icon {
   transform: rotate(45deg);
-}
-.landing {
-  interpolate-size: allow-keywords;
 }
 .faq-item::details-content {
   block-size: 0;

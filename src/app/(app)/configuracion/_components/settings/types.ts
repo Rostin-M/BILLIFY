@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BadgeCheck, DatabaseBackup, Package, Receipt, ShieldCheck, Store, Wallet } from "lucide-react";
+import { BadgeCheck, DatabaseBackup, HandCoins, Package, Receipt, ShieldCheck, Store, Wallet } from "lucide-react";
 
 export type TaxFormItem = { name: string; rate: string; enabled: boolean };
 export type TaxSlots = [TaxFormItem, TaxFormItem, TaxFormItem];
@@ -25,6 +25,8 @@ export type SettingsForm = {
   cashiersCanEditPrices: boolean;
   cashBlindClose: boolean;
   cashCountByDenomination: boolean;
+  creditSignatureRequired: boolean;
+  creditTerms: string;
 };
 
 export type BusinessData = {
@@ -50,6 +52,8 @@ export type BusinessData = {
   cashiersCanEditPrices: boolean;
   cashBlindClose: boolean;
   cashCountByDenomination: boolean;
+  creditSignatureRequired: boolean;
+  creditTerms: string | null;
 };
 
 // Props comunes de cada sección editable
@@ -65,6 +69,7 @@ export type SectionId =
   | "productos"
   | "permisos"
   | "caja"
+  | "fiados"
   | "datos"
   | "plan";
 
@@ -119,6 +124,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     description: "Cajas simultáneas y cómo se cuenta el efectivo al cerrar.",
     icon: Wallet,
     fields: ["maxCashRegisters", "cashBlindClose", "cashCountByDenomination"],
+  },
+  {
+    id: "fiados",
+    label: "Fiados",
+    description: "Firma del cliente al abrirle el fiado y condiciones del acuerdo.",
+    icon: HandCoins,
+    fields: ["creditSignatureRequired", "creditTerms"],
   },
   {
     id: "datos",
@@ -178,6 +190,8 @@ export function formFromData(data: BusinessData): SettingsForm {
     cashiersCanEditPrices: data.cashiersCanEditPrices,
     cashBlindClose: data.cashBlindClose,
     cashCountByDenomination: data.cashCountByDenomination,
+    creditSignatureRequired: data.creditSignatureRequired,
+    creditTerms: data.creditTerms ?? "",
   };
 }
 

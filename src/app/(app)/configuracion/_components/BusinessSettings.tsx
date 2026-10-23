@@ -8,6 +8,7 @@ import { firstErrorMessage } from "~/lib/parseZodError";
 import { api } from "~/trpc/react";
 import { CajaSection } from "./settings/CajaSection";
 import { DatosSection } from "./settings/DatosSection";
+import { FiadosSection } from "./settings/FiadosSection";
 import { FacturacionSection } from "./settings/FacturacionSection";
 import { LogoCard } from "./settings/LogoCard";
 import { NegocioSection } from "./settings/NegocioSection";
@@ -53,6 +54,9 @@ function toInput(form: SettingsForm, maxCashRegisters: number, sendBrands: boole
     cashiersCanEditPrices: form.cashiersCanEditPrices,
     cashBlindClose: form.cashBlindClose,
     cashCountByDenomination: form.cashCountByDenomination,
+    creditSignatureRequired: form.creditSignatureRequired,
+    // Vacío = texto por defecto de la app.
+    creditTerms: form.creditTerms.trim() || null,
   };
 }
 
@@ -200,6 +204,8 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
         return <PermisosSection {...sectionProps} />;
       case "caja":
         return <CajaSection {...sectionProps} />;
+      case "fiados":
+        return <FiadosSection {...sectionProps} businessName={form.name} />;
       default:
         return null;
     }

@@ -37,7 +37,7 @@ export type PasswordStrength = { score: 0 | 1 | 2 | 3 | 4; label: string };
 const STRENGTH_LABELS = ["", "Débil", "Regular", "Buena", "Fuerte"] as const;
 
 const COMMON_SEQUENCES = /0123|1234|2345|3456|4567|5678|6789|abcd|qwer|asdf|zxcv/i;
-const COMMON_WORDS = /password|contrase(ñ|n)a|clave|qwerty|admin|billify/i;
+const COMMON_WORDS = /password|contrase[ñn]a|clave|qwerty|admin|billify/i;
 
 /**
  * Qué tan fuerte es la contraseña, solo como guía visual (lo que se exige es

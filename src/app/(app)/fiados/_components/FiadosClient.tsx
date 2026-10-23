@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { HandCoins } from "lucide-react";
+import { FileSignature, HandCoins } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import { EmptyState } from "~/app/_components/EmptyState";
 import { formatCOP } from "~/lib/format/money";
+import { CreditAccountPanel } from "./CreditAccountPanel";
+import { OpenCreditAccountModal } from "./OpenCreditAccountModal";
 
 const formatDay = (d: Date) =>
   new Date(d).toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: "long", day: "2-digit", month: "long" });
@@ -141,6 +143,7 @@ export function FiadosClient() {
   const [confirmFullId, setConfirmFullId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [openingAccount, setOpeningAccount] = useState(false);
 
   const { data: debtors = [], isPending } = api.customer.listDebtors.useQuery();
 
@@ -178,18 +181,36 @@ export function FiadosClient() {
     return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando fiados...</p>;
   }
 
+  const openAccount = (
+    <>
+      {openingAccount && <OpenCreditAccountModal onClose={() => setOpeningAccount(false)} />}
+      <button
+        type="button"
+        onClick={() => setOpeningAccount(true)}
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 sm:w-auto dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-300"
+      >
+        <FileSignature className="h-4 w-4" aria-hidden />
+        Abrir cuenta de fiado
+      </button>
+    </>
+  );
+
   if (debtors.length === 0) {
     return (
-      <EmptyState
-        icon={HandCoins}
-        title="Sin fiados pendientes"
-        description="Cuando le fíes una venta a un cliente registrado, aparecerá aquí con lo que te debe."
-      />
+      <div className="space-y-2">
+        {openAccount}
+        <EmptyState
+          icon={HandCoins}
+          title="Sin fiados pendientes"
+          description="Cuando le fíes una venta a un cliente registrado, aparecerá aquí con lo que te debe."
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      {openAccount}
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-900/10">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
           Total fiado
@@ -326,6 +347,7 @@ export function FiadosClient() {
                   )}
                 </div>
 
+                <CreditAccountPanel customerId={c.id} />
                 <DebtorDetail customerId={c.id} debtTotal={c.debt} />
               </div>
             )}

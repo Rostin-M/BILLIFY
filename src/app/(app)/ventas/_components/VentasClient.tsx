@@ -12,7 +12,6 @@ import { PlanExpiredScreen } from "~/app/_components/subscription/PlanExpiredScr
 export type TaxConfig = { name: string; rate: number; enabled: boolean };
 
 export type VentasTab = "quick" | "invoiced" | "history";
-type Tab = VentasTab;
 
 type Props = {
   taxes: TaxConfig[];
@@ -23,7 +22,7 @@ type Props = {
   userId: string;
   businessId: string;
   business: BusinessInfoForPdf;
-  initialTab?: Tab;
+  initialTab?: VentasTab;
   /**
    * Cuenta en solo lectura: en lugar de armar ventas se muestra "Tu plan venció".
    * El historial sigue disponible y la cola sin conexión se sigue sincronizando.
@@ -42,10 +41,10 @@ export function VentasClient({
   initialTab = "quick",
   readOnly = null,
 }: Readonly<Props>) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<VentasTab>(initialTab);
 
   // La línea pequeña explica la diferencia sin tener que probar cada pestaña.
-  const tabs: { id: Tab; label: string; hint: string }[] = [
+  const tabs: { id: VentasTab; label: string; hint: string }[] = [
     { id: "quick", label: "Venta rápida", hint: "Sin datos del cliente" },
     { id: "invoiced", label: "Factura", hint: "Con cliente, PDF y correo" },
     { id: "history", label: "Historial", hint: "Ventas de hoy" },

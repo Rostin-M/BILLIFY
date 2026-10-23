@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, CircleDot } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, CircleDot, PackagePlus, StickyNote } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import { formatCOP } from "~/lib/format/money";
 import { CashCloseForm } from "./CashCloseForm";
+import { SupplierPicker, type PickedSupplier } from "~/app/(app)/compras/_components/SupplierPicker";
 
 const CashHistoryPdfButton = dynamic(
   () => import("~/lib/pdf/CashHistoryPdfButton").then((m) => m.CashHistoryPdfButton),
@@ -18,8 +20,10 @@ type Movement = {
   type: string;
   amount: number;
   description: string;
+  note: string | null;
   createdAt: Date;
   user: { name: string | null } | null;
+  supplier: { name: string } | null;
 };
 
 type NonCashEntry = { paymentMethod: string; total: number; count: number };
@@ -64,8 +68,17 @@ const TYPE_ACTIVE_CLASSES: Record<"INCOME" | "EXPENSE", string> = {
   EXPENSE: "border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-900/20 dark:text-red-300",
 };
 
+function descriptionPlaceholder(type: "INCOME" | "EXPENSE", supplier: PickedSupplier | null) {
+  if (type === "INCOME") return "Ej: Préstamo, cambio...";
+  if (supplier) return `Pago a ${supplier.name}`;
+  return "Ej: Pago proveedor, gastos...";
+}
+
 export function CashDashboard({ register, canClose, business }: Readonly<Props>) {
-  const [form, setForm] = useState({ type: "INCOME" as "INCOME" | "EXPENSE", amount: "", description: "" });
+  // Salida por defecto: es lo que más se registra (pagos a proveedores, gastos).
+  const [form, setForm] = useState({ type: "EXPENSE" as "INCOME" | "EXPENSE", amount: "", description: "", note: "" });
+  const [supplier, setSupplier] = useState<PickedSupplier | null>(null);
+  const [showNote, setShowNote] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const blind = register.currentBalance === null;
 
@@ -76,23 +89,37 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
   const movementKeyRef = useRef<string | null>(null);
   useEffect(() => {
     movementKeyRef.current = null;
-  }, [form]);
+  }, [form, supplier]);
 
   const addMovement = api.cashRegister.addMovement.useMutation({
     onSuccess: async (data) => {
       movementKeyRef.current = null;
-      setForm({ type: "INCOME", amount: "", description: "" });
+      setForm({ type: "EXPENSE", amount: "", description: "", note: "" });
+      setSupplier(null);
+      setShowNote(false);
       toast.success(data.message);
       await utils.cashRegister.getActive.invalidate();
     },
   });
+
+  let submitLabel = form.type === "EXPENSE" ? "Registrar salida" : "Registrar entrada";
+  if (addMovement.isPending) submitLabel = "Guardando...";
 
   function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     const amount = Number.parseFloat(form.amount);
     if (Number.isNaN(amount) || amount <= 0 || addMovement.isPending) return;
     movementKeyRef.current ??= crypto.randomUUID();
-    addMovement.mutate({ type: form.type, amount, description: form.description, idempotencyKey: movementKeyRef.current });
+    const isExpense = form.type === "EXPENSE";
+    addMovement.mutate({
+      type: form.type,
+      amount,
+      // Con proveedor, la descripción puede quedar vacía: se usa "Pago a <proveedor>".
+      description: form.description.trim() || (isExpense && supplier ? `Pago a ${supplier.name}` : form.description),
+      note: form.note.trim() || undefined,
+      supplierId: isExpense ? supplier?.id : undefined,
+      idempotencyKey: movementKeyRef.current,
+    });
   }
 
   const formatTime = (d: Date) =>
@@ -246,7 +273,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
         ) : (
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
-            {(["INCOME", "EXPENSE"] as const).map((t) => (
+            {(["EXPENSE", "INCOME"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -283,16 +310,59 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
             </div>
           </label>
 
+          {form.type === "EXPENSE" && (
+            <div className="space-y-1">
+              <span className="flex items-center justify-between gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span>Proveedor <span className="font-normal">(si es un pago a proveedor)</span></span>
+                <Link href="/compras" className="inline-flex items-center gap-1 font-semibold text-sky-700 hover:underline dark:text-sky-300">
+                  <PackagePlus className="h-3.5 w-3.5" aria-hidden />
+                  Compra con productos
+                </Link>
+              </span>
+              <SupplierPicker
+                value={supplier}
+                onChange={setSupplier}
+                inputClassName="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-900 dark:text-white"
+              />
+            </div>
+          )}
+
           <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Descripción</span>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Descripción{form.type === "EXPENSE" && supplier && <span className="font-normal"> (opcional)</span>}
+            </span>
             <input
               type="text"
               value={form.description}
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder={form.type === "INCOME" ? "Ej: Préstamo, cambio..." : "Ej: Pago proveedor, gastos..."}
+              placeholder={descriptionPlaceholder(form.type, supplier)}
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-900 dark:text-white"
             />
           </label>
+
+          {showNote ? (
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Nota</span>
+              <textarea
+                autoFocus
+                rows={2}
+                maxLength={500}
+                value={form.note}
+                onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
+                placeholder="Ej: faltó una caja, pagó Marcela, factura #123..."
+                className="w-full resize-none rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-900 dark:text-white"
+              />
+            </label>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowNote(true)}
+              className="inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              <StickyNote className="h-4 w-4" aria-hidden />
+              Agregar nota
+            </button>
+          )}
 
           {form.type === "EXPENSE" && register.currentBalance !== null && Number.parseFloat(form.amount) > register.currentBalance && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-900/10 dark:text-amber-300">
@@ -306,11 +376,11 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
 
           <button
             type="submit"
-            disabled={!form.amount || !form.description.trim() || addMovement.isPending}
+            disabled={!form.amount || (!form.description.trim() && !(form.type === "EXPENSE" && supplier)) || addMovement.isPending}
             aria-busy={addMovement.isPending}
             className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {addMovement.isPending ? "Guardando..." : "Registrar movimiento"}
+            {submitLabel}
           </button>
         </form>
         )}
@@ -331,7 +401,16 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
                       {m.description}
+                      {m.supplier && !m.description.includes(m.supplier.name) && (
+                        <span className="font-normal text-slate-500 dark:text-slate-400"> · {m.supplier.name}</span>
+                      )}
                     </p>
+                    {m.note && (
+                      <p className="flex items-start gap-1 text-xs text-amber-800 dark:text-amber-300">
+                        <StickyNote className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                        <span className="line-clamp-2">{m.note}</span>
+                      </p>
+                    )}
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {formatTime(m.createdAt)}
                       {m.user?.name ? ` · ${m.user.name}` : ""}

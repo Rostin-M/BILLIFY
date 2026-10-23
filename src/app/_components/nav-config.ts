@@ -11,6 +11,7 @@ import {
   Settings,
   HandCoins,
   CreditCard,
+  Truck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -47,6 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/mesas", label: "Mesas", icon: UtensilsCrossed, color: "amber", roles: "all" },
   { href: "/caja", label: "Caja", icon: Wallet, color: "emerald", roles: "all" },
   { href: "/inventario", label: "Inventario", icon: Package, color: "sky", roles: "all" },
+  { href: "/compras", label: "Compras", icon: Truck, color: "emerald", roles: "all" },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "amber", roles: ["OWNER"] },
   { href: "/productos", label: "Catálogo", icon: Tag, color: "slate", roles: "all" },
   { href: "/clientes", label: "Clientes", icon: Users, color: "sky", roles: ["OWNER"] },

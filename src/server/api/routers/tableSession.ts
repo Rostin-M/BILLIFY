@@ -1,15 +1,17 @@
 import { TRPCError } from "@trpc/server";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { businessProcedure, createTRPCRouter } from "~/server/api/trpc";
 import { adjustStock, stockToRestore } from "~/server/lib/inventory";
 import { assertCashRegisterNotStale, resolveSaleCashRegisterId } from "~/server/lib/cashRegisterGuard";
+import { assertCreditAllowed } from "~/server/lib/credit";
 import { idempotencyKeySchema, runIdempotent } from "~/server/lib/idempotency";
 import { nextInvoiceNumber } from "~/server/lib/invoiceNumber";
 import { computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 import {
   assertReceiptPath,
+  MAX_QUANTITY,
   MAX_SALE_ITEMS,
   resolveSaleItem,
   saleItemInputSchema,
@@ -134,6 +136,18 @@ function aggregateGroupOrders(group: CheckoutGroupInput, guestMap: Map<string, C
   return { itemsMap, groupSubtotal, taxLines, groupTaxAmount, groupTotal: groupSubtotal + groupTaxAmount };
 }
 
+// Un grupo fiado no puede pasar el monto máximo del cliente ni fiarse sin el acuerdo firmado (si se exige).
+async function assertGroupCreditAllowed(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  paymentMethod: PaymentMethod,
+  customerId: string | null | undefined,
+  total: number,
+) {
+  if (paymentMethod !== "CREDIT" || !customerId) return;
+  await assertCreditAllowed(tx, businessId, customerId, total);
+}
+
 // Crea la venta de un grupo de pago (si tiene algo que cobrar) y libera a sus clientes de la mesa.
 // Devuelve la venta creada, o null si el grupo no tenía nada que cobrar.
 async function processCheckoutGroup(params: {
@@ -159,6 +173,7 @@ async function processCheckoutGroup(params: {
     const invoiceNumber = group.invoice ? await nextInvoiceNumber(tx, businessId) : null;
 
     const firstWithCustomer = group.guestIds.map((id) => guestMap.get(id)!).find((g) => g.customerId);
+    await assertGroupCreditAllowed(tx, businessId, group.paymentMethod, firstWithCustomer?.customerId, groupTotal);
     const guestNames = group.guestIds.map((id) => guestMap.get(id)!.name).join(", ");
     const rawNote = group.note?.trim();
     const noteText = rawNote !== undefined && rawNote.length > 0 ? rawNote : `Mesa: ${sessionName} · ${guestNames}`;
@@ -280,6 +295,87 @@ function checkoutMessage(sessionName: string, tableClosed: boolean, keepGuests: 
   return `${verb} ${salesCount} venta(s) generada(s).`;
 }
 
+function assertEditedOrderSize(lineCount: number) {
+  if (lineCount === 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "La ronda quedaría vacía. Si ya no quieren nada, elimina la ronda." });
+  }
+  if (lineCount > MAX_SALE_ITEMS) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Máximo ${MAX_SALE_ITEMS} productos por pedido` });
+  }
+}
+
+type EditableOrderItem = {
+  id: string; productId: string; name: string; unit: string; price: number; quantity: number; stockDeducted: number | null;
+  product: { trackStock: boolean; openPrice: boolean; soldByWeight: boolean; taxSlots: number[] };
+};
+type EditedLine = {
+  productId: string; name: string; unit: string; price: number; quantity: number; taxSlots: number[]; stockDeducted: number;
+};
+
+// Una línea que sigue en la ronda: ajusta el stock por la diferencia de cantidad.
+async function keepOrderLine(
+  tx: Prisma.TransactionClient,
+  ctx: { businessId: string; userId: string; note: string },
+  item: EditableOrderItem,
+  newQty: number,
+): Promise<EditedLine> {
+  const deducted = stockToRestore(item);
+  // Monto libre y por peso son una sola línea con su precio: no se les cambia la cantidad.
+  const special = item.product.openPrice || item.product.soldByWeight;
+  const quantity = special ? item.quantity : newQty;
+  // Solo las líneas que descontaban por unidad siguen la cantidad nueva.
+  const perUnit = deducted > 0 && deducted === item.quantity;
+  const newDeducted = perUnit ? quantity : deducted;
+  const delta = newDeducted - deducted;
+  if (delta !== 0) {
+    await adjustStock({
+      tx, productId: item.productId, businessId: ctx.businessId, userId: ctx.userId,
+      quantity: -delta, reason: delta > 0 ? "TABLE_ORDER" : "TABLE_ORDER_CANCEL", note: ctx.note,
+    });
+  }
+  return { productId: item.productId, name: item.name, unit: item.unit, price: item.price, quantity, taxSlots: item.product.taxSlots, stockDeducted: newDeducted };
+}
+
+/**
+ * Líneas finales de una ronda editada: las que siguen (con su precio original), las nuevas
+ * (al precio actual) y el stock ajustado — lo quitado vuelve, lo agregado se descuenta.
+ */
+async function rebuildOrderLines(
+  tx: Prisma.TransactionClient,
+  params: {
+    businessId: string; userId: string; note: string;
+    current: EditableOrderItem[];
+    keepById: Map<string, number>;
+    added: ReturnType<typeof resolveSaleItem>[];
+  },
+): Promise<EditedLine[]> {
+  const { businessId, userId, note } = params;
+  const lines: EditedLine[] = [];
+
+  for (const item of params.current) {
+    const newQty = params.keepById.get(item.id);
+    if (newQty !== undefined) {
+      lines.push(await keepOrderLine(tx, params, item, newQty));
+      continue;
+    }
+    const deducted = stockToRestore(item);
+    if (deducted > 0) {
+      await adjustStock({ tx, productId: item.productId, businessId, userId, quantity: deducted, reason: "TABLE_ORDER_CANCEL", note });
+    }
+  }
+
+  for (const resolved of params.added) {
+    if (resolved.stockDelta > 0) {
+      await adjustStock({ tx, productId: resolved.productId, businessId, userId, quantity: -resolved.stockDelta, reason: "TABLE_ORDER", note });
+    }
+    lines.push({
+      productId: resolved.productId, name: resolved.name, unit: resolved.unit, price: resolved.price,
+      quantity: resolved.quantity, taxSlots: resolved.taxSlots, stockDeducted: resolved.stockDelta,
+    });
+  }
+  return lines;
+}
+
 export const tableSessionRouter = createTRPCRouter({
   // All OPEN sessions with full nested data
   listActive: businessProcedure.query(({ ctx }) => {
@@ -345,7 +441,11 @@ export const tableSessionRouter = createTRPCRouter({
   create: businessProcedure
     .input(z.object({
       name: z.string().trim().min(1, "El nombre de la mesa es obligatorio").max(120),
-      guests: z.array(z.string().trim().max(120))
+      // Cada comensal: un nombre suelto, o un cliente ya guardado (customerId) para llevar su historial.
+      guests: z.array(z.union([
+        z.string().trim().max(120),
+        z.object({ name: z.string().trim().max(120), customerId: z.string().min(1).max(64).optional() }),
+      ]))
         .min(1)
         .max(MAX_OPENING_GUESTS, `Máximo ${MAX_OPENING_GUESTS} clientes al abrir la mesa`)
         .optional(),
@@ -361,10 +461,21 @@ export const tableSessionRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN", message: "Debes tener una caja abierta para abrir una mesa." });
       }
 
+      const requested = (input.guests ?? []).map((g) => (typeof g === "string" ? { name: g, customerId: undefined } : g));
+      const customerIds = [...new Set(requested.map((g) => g.customerId).filter((id): id is string => !!id))];
+      const customers = customerIds.length > 0
+        ? await ctx.db.customer.findMany({ where: { id: { in: customerIds }, businessId, isActive: true }, select: { id: true, name: true } })
+        : [];
+      if (customers.length !== customerIds.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado." });
+      }
+      const customerNames = new Map(customers.map((c) => [c.id, c.name]));
+
       // addedAt explícito y creciente: la mesa lista a los clientes por addedAt.
       const openedAt = Date.now();
-      const guests = (input.guests ?? []).map((name, i) => ({
-        name: name || `Cliente ${i + 1}`,
+      const guests = requested.map((g, i) => ({
+        name: g.name || (g.customerId ? customerNames.get(g.customerId)! : `Cliente ${i + 1}`),
+        customerId: g.customerId ?? null,
         addedAt: new Date(openedAt + i),
       }));
 
@@ -444,6 +555,9 @@ export const tableSessionRouter = createTRPCRouter({
     .input(z.object({
       guestId: z.string().min(1).max(64),
       name: z.string().trim().min(1, "El nombre no puede estar vacío").max(120),
+      // Con customerId se identifica al comensal con un cliente guardado; null lo desvincula;
+      // sin el campo, el vínculo no cambia.
+      customerId: z.string().min(1).max(64).nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { businessId } = ctx.session.user;
@@ -453,7 +567,18 @@ export const tableSessionRouter = createTRPCRouter({
       });
       if (!guest) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado." });
 
-      await ctx.db.tableGuest.update({ where: { id: guest.id }, data: { name: input.name } });
+      if (input.customerId) {
+        const linked = await ctx.db.customer.findFirst({
+          where: { id: input.customerId, businessId, isActive: true },
+          select: { id: true },
+        });
+        if (!linked) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente no encontrado." });
+      }
+
+      await ctx.db.tableGuest.update({
+        where: { id: guest.id },
+        data: { name: input.name, ...(input.customerId === undefined ? {} : { customerId: input.customerId }) },
+      });
       return { message: "Cliente renombrado." };
     }),
 
@@ -610,6 +735,119 @@ export const tableSessionRouter = createTRPCRouter({
         return guest;
       });
       return { message: `Pedido movido a ${toGuest.name}.` };
+    }),
+
+  // Edit a round (the guest changed their mind): `keep` lists the lines that stay with their
+  // new quantity (lines not listed are removed) and `add` the new products. The stock is
+  // adjusted only by the difference. The request describes the final state, so a retry
+  // does not apply the change twice.
+  updateOrder: businessProcedure
+    .input(z.object({
+      orderId: z.string().min(1).max(64),
+      keep: z.array(z.object({
+        itemId: z.string().min(1).max(64),
+        quantity: z.number().int().positive().max(MAX_QUANTITY, "Cantidad demasiado grande"),
+      })).max(MAX_SALE_ITEMS),
+      add: z.array(saleItemInputSchema).max(MAX_SALE_ITEMS, `Máximo ${MAX_SALE_ITEMS} productos por pedido`),
+      note: z.string().trim().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { businessId, id: userId } = ctx.session.user;
+
+      assertEditedOrderSize(input.keep.length + input.add.length);
+
+      const order = await ctx.db.tableOrder.findFirst({
+        where: { id: input.orderId, tableSession: { businessId, status: "OPEN" } },
+        select: { id: true, tableSessionId: true },
+      });
+      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido no encontrado." });
+
+      const result = await ctx.db.$transaction(async (tx) => {
+        const locked = await lockTableSession(tx, order.tableSessionId, businessId);
+        if (locked?.status !== "OPEN") {
+          throw new TRPCError({ code: "CONFLICT", message: "La mesa ya fue cerrada." });
+        }
+        const current = await tx.tableOrder.findFirst({
+          where: { id: order.id, tableSessionId: order.tableSessionId },
+          select: {
+            id: true, total: true, note: true,
+            tableGuest: { select: { name: true } },
+            items: {
+              select: {
+                id: true, productId: true, name: true, unit: true, price: true, quantity: true, stockDeducted: true,
+                product: { select: { trackStock: true, openPrice: true, soldByWeight: true, taxSlots: true } },
+              },
+            },
+          },
+        });
+        if (!current) throw new TRPCError({ code: "CONFLICT", message: "Este pedido ya fue cobrado o eliminado." });
+
+        const currentById = new Map(current.items.map((i) => [i.id, i]));
+        const keepById = new Map(input.keep.map((k) => [k.itemId, k.quantity]));
+        if ([...keepById.keys()].some((id) => !currentById.has(id))) {
+          throw new TRPCError({ code: "CONFLICT", message: "La ronda cambió mientras la editabas. Ciérrala y vuelve a abrirla." });
+        }
+
+        const [products, business] = await Promise.all([
+          input.add.length > 0
+            ? tx.product.findMany({
+                where: { id: { in: input.add.map((i) => i.productId) }, businessId, isActive: true },
+                select: { id: true, name: true, unit: true, price: true, trackStock: true, taxSlots: true, openPrice: true, soldByWeight: true },
+              })
+            : Promise.resolve([]),
+          tx.business.findUnique({ where: { id: businessId }, select: { taxes: true, autoTax: true } }),
+        ]);
+        if (products.length !== new Set(input.add.map((i) => i.productId)).size) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Uno o más productos no son válidos o están inactivos." });
+        }
+        const productMap = new Map(products.map((p) => [p.id, p]));
+        const added = input.add.map((item) => resolveSaleItem(productMap.get(item.productId)!, item));
+
+        const lines = await rebuildOrderLines(tx, {
+          businessId, userId,
+          note: `Edición de ronda en mesa: ${locked.name}`,
+          current: current.items,
+          keepById,
+          added,
+        });
+
+        const { subtotal, taxAmount, taxLines, total } = computeSaleTotals(
+          lines.map((l) => ({ price: l.price, quantity: l.quantity, taxSlots: l.taxSlots })),
+          (business?.taxes as TaxConfig[]) ?? [],
+          business?.autoTax ?? false,
+        );
+
+        await tx.tableOrderItem.deleteMany({ where: { tableOrderId: current.id } });
+        const updated = await tx.tableOrder.update({
+          where: { id: current.id },
+          data: {
+            subtotal, taxAmount,
+            taxLines: taxLines.length > 0 ? taxLines : Prisma.DbNull,
+            total,
+            note: input.note === undefined ? current.note : input.note || null,
+            items: {
+              create: lines.map(({ taxSlots: _taxSlots, ...l }) => ({ ...l, subtotal: l.price * l.quantity })),
+            },
+          },
+          select: { id: true, total: true },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            businessId, userId, action: "EDIT_TABLE_ORDER", entityType: "TableOrder", entityId: current.id,
+            detail: {
+              tableSessionId: order.tableSessionId,
+              tableName: locked.name,
+              guestName: current.tableGuest.name,
+              before: { total: current.total, items: current.items.map((i) => ({ name: i.name, quantity: i.quantity })) },
+              after: { total, items: lines.map((l) => ({ name: l.name, quantity: l.quantity })) },
+            },
+          },
+        });
+        return updated;
+      }, { timeout: 30000, maxWait: 10000 });
+
+      return { ...result, message: "Ronda actualizada." };
     }),
 
   // Remove a round — re-increments stock

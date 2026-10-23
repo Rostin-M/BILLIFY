@@ -33,6 +33,8 @@ const data: BusinessData = {
   cashiersCanEditPrices: false,
   cashBlindClose: true,
   cashCountByDenomination: false,
+  creditSignatureRequired: false,
+  creditTerms: null,
 };
 
 const section = (id: string) => SECTIONS.find((s) => s.id === id)!;

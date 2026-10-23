@@ -73,7 +73,7 @@ export function applyVat(amountCop: number, vat: VatConfig): ChargeBreakdown {
 
 /** Suma meses de calendario conservando la hora; 31 ene + 1 mes = 28/29 feb. */
 export function addMonths(date: Date, months: number): Date {
-  const result = new Date(date.getTime());
+  const result = new Date(date);
   const day = result.getUTCDate();
   result.setUTCDate(1);
   result.setUTCMonth(result.getUTCMonth() + months);

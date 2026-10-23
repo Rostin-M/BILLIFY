@@ -314,6 +314,83 @@ async function getRegisterActivity(
   return { voidedSales, creditSales, payments };
 }
 
+/**
+ * Registra una entrada o salida en la caja del usuario (su caja abierta; el dueño, si no tiene
+ * la suya, la abierta del negocio), con la caja bloqueada para validar el saldo de las salidas.
+ * La usan los movimientos manuales y los pagos en efectivo a proveedores.
+ */
+export async function recordCashMovement(
+  tx: Prisma.TransactionClient,
+  params: {
+    businessId: string;
+    userId: string;
+    role: string;
+    type: "INCOME" | "EXPENSE";
+    amount: number;
+    description: string;
+    note?: string | null;
+    supplierId?: string | null;
+    idempotencyKey?: string | null;
+  },
+): Promise<{ id: string }> {
+  const { businessId, userId, role } = params;
+  await assertCanManageCash(tx, userId, role, "No tienes permisos para registrar movimientos en caja.");
+  await assertCashRegisterNotStale(tx, businessId, userId);
+
+  let register = await tx.cashRegister.findFirst({
+    where: { businessId, userId, status: "OPEN" },
+    select: { id: true },
+  });
+  if (!register && role === "OWNER") {
+    register = await tx.cashRegister.findFirst({
+      where: { businessId, status: "OPEN" },
+      select: { id: true },
+    });
+  }
+  if (!register) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        role === "OWNER"
+          ? "No hay caja abierta. Abre la caja primero."
+          : "No tienes una caja abierta. Abre tu caja para registrar movimientos.",
+    });
+  }
+
+  if (!(await lockOpenRegister(tx, register.id, businessId))) {
+    throw new TRPCError({ code: "CONFLICT", message: "La caja ya fue cerrada." });
+  }
+
+  if (params.type === "EXPENSE") {
+    const { balance } = await computeRegisterBalance(tx, businessId, register.id);
+    if (params.amount > balance) {
+      // En cierre ciego el cajero no debe enterarse del saldo por este mensaje.
+      const { blind } = await getCashCloseSettings(tx, businessId, role);
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: blind
+          ? "La salida es mayor al efectivo que debería haber en caja. Registra una entrada primero y luego la salida."
+          : `Saldo insuficiente (${fmtCOP(balance)} disponible). Registra una entrada primero y luego la salida.`,
+      });
+    }
+  }
+
+  return tx.cashMovement.create({
+    data: {
+      cashRegisterId: register.id,
+      businessId,
+      userId,
+      type: params.type,
+      amount: params.amount,
+      description: params.description,
+      note: params.note ?? null,
+      supplierId: params.supplierId ?? null,
+      idempotencyKey: params.idempotencyKey ?? null,
+    },
+    select: { id: true },
+  });
+}
+
 export const cashRegisterRouter = createTRPCRouter({
   // Caja activa del negocio con saldo calculado en tiempo real
   getActive: businessProcedure.query(async ({ ctx }) => {
@@ -341,8 +418,10 @@ export const cashRegisterRouter = createTRPCRouter({
           type: true,
           amount: true,
           description: true,
+          note: true,
           createdAt: true,
           user: { select: { name: true } },
+          supplier: { select: { name: true } },
         },
         orderBy: { createdAt: "asc" as const },
       },
@@ -496,6 +575,9 @@ export const cashRegisterRouter = createTRPCRouter({
           .trim()
           .min(3, "La descripción es obligatoria (mín. 3 caracteres)")
           .max(500, "La descripción es demasiado larga (máx. 500 caracteres)"),
+        note: z.string().trim().max(500, "La nota es demasiado larga (máx. 500 caracteres)").optional(),
+        // Salidas: proveedor al que se le pagó, para su historial.
+        supplierId: z.string().min(1).max(64).optional(),
         idempotencyKey: idempotencyKeySchema,
       }),
     )
@@ -503,63 +585,27 @@ export const cashRegisterRouter = createTRPCRouter({
       const { businessId, id: userId, role } = ctx.session.user;
 
       const registerMovement = async () => {
-        await assertCanManageCash(ctx.db, userId, role, "No tienes permisos para registrar movimientos en caja.");
-        await assertCashRegisterNotStale(ctx.db, businessId, userId);
-
-        let register = await ctx.db.cashRegister.findFirst({
-          where: { businessId, userId, status: "OPEN" },
-          select: { id: true },
-        });
-
-        if (!register && role === "OWNER") {
-          register = await ctx.db.cashRegister.findFirst({
-            where: { businessId, status: "OPEN" },
+        if (input.supplierId) {
+          const supplier = await ctx.db.supplier.findFirst({
+            where: { id: input.supplierId, businessId },
             select: { id: true },
           });
+          if (!supplier) throw new TRPCError({ code: "NOT_FOUND", message: "Proveedor no encontrado." });
         }
 
-        if (!register) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message:
-              role === "OWNER"
-                ? "No hay caja abierta. Abre la caja primero."
-                : "No tienes una caja abierta. Abre tu caja para registrar movimientos.",
-          });
-        }
-        const registerId = register.id;
-
-        await ctx.db.$transaction(async (tx) => {
-          if (!(await lockOpenRegister(tx, registerId, businessId))) {
-            throw new TRPCError({ code: "CONFLICT", message: "La caja ya fue cerrada." });
-          }
-
-          if (input.type === "EXPENSE") {
-            const { balance } = await computeRegisterBalance(tx, businessId, registerId);
-            if (input.amount > balance) {
-              // En cierre ciego el cajero no debe enterarse del saldo por este mensaje.
-              const { blind } = await getCashCloseSettings(tx, businessId, role);
-              throw new TRPCError({
-                code: "BAD_REQUEST",
-                message: blind
-                  ? "La salida es mayor al efectivo que debería haber en caja. Registra una entrada primero y luego la salida."
-                  : `Saldo insuficiente (${fmtCOP(balance)} disponible). Registra una entrada primero y luego la salida.`,
-              });
-            }
-          }
-
-          await tx.cashMovement.create({
-            data: {
-              cashRegisterId: registerId,
-              businessId,
-              userId,
-              type: input.type,
-              amount: input.amount,
-              description: input.description,
-              idempotencyKey: input.idempotencyKey ?? null,
-            },
-          });
-        });
+        await ctx.db.$transaction((tx) =>
+          recordCashMovement(tx, {
+            businessId,
+            userId,
+            role,
+            type: input.type,
+            amount: input.amount,
+            description: input.description,
+            note: input.note?.length ? input.note : null,
+            supplierId: input.type === "EXPENSE" ? (input.supplierId ?? null) : null,
+            idempotencyKey: input.idempotencyKey ?? null,
+          }),
+        );
 
         return { message: movementMessage(input.type) };
       };
@@ -737,8 +783,9 @@ export const cashRegisterRouter = createTRPCRouter({
           user: { select: { name: true } },
           movements: {
             select: {
-              id: true, type: true, amount: true, description: true, createdAt: true,
+              id: true, type: true, amount: true, description: true, note: true, createdAt: true,
               user: { select: { name: true } },
+              supplier: { select: { name: true } },
             },
             orderBy: { createdAt: "asc" },
           },

@@ -1,12 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ArrowRightLeft, ChevronDown, ChevronRight, Clock, FileText, Pencil, Plus, StickyNote, Trash2, UserMinus, X } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, ChevronRight, Clock, FileText, Pencil, Plus, StickyNote, Trash2, UserCheck, UserMinus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import { AddGuestModal } from "./AddGuestModal";
 import { AddOrderModal } from "./AddOrderModal";
+import { GuestNameInput, type LinkedCustomer } from "./GuestNameInput";
 import { CheckoutModal } from "./CheckoutModal";
 import { elapsedLabel, guestTotal, itemCount, LONG_OPEN_MINUTES, minutesSince, plural, tableStatus, type TableStatus } from "./mesaStatus";
 import type { MesaForPdf, TableGuestForPdf, TaxLineForPdf } from "~/lib/pdf/MesaPDF";
@@ -61,6 +62,8 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
   const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
   const [renamingGuestId, setRenamingGuestId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameCustomer, setRenameCustomer] = useState<LinkedCustomer | null>(null);
+  const [editingOrder, setEditingOrder] = useState<{ guestName: string; index: number; order: Order } | null>(null);
   const [movingOrderId, setMovingOrderId] = useState<string | null>(null);
   const [moveTargetGuestId, setMoveTargetGuestId] = useState("");
 
@@ -230,6 +233,14 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
               {order.user?.name && <> · {order.user.name}</>}
             </p>
           </div>
+          <button
+            onClick={() => { setEditingOrder({ guestName: guest.name, index, order }); setMovingOrderId(null); setConfirmDeleteOrder(null); }}
+            className={iconButton}
+            title="Editar ronda"
+            aria-label={`Editar la ronda ${index + 1}`}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
           {session.guests.length > 1 && (
             <button
               onClick={() => { setMovingOrderId(order.id); setMoveTargetGuestId(""); setConfirmDeleteOrder(null); }}
@@ -301,18 +312,22 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
               e.preventDefault();
               const trimmed = renameValue.trim();
               if (!trimmed) return;
-              renameGuest.mutate({ guestId: guest.id, name: trimmed });
+              renameGuest.mutate({ guestId: guest.id, name: trimmed, customerId: renameCustomer?.id ?? null });
             }}
             className="flex flex-wrap items-center gap-2"
           >
-            <input
-              aria-label={`Nuevo nombre para ${guest.name}`}
-              autoFocus
-              value={renameValue}
-              maxLength={120}
-              onChange={(e) => setRenameValue(e.target.value)}
-              className="min-h-11 min-w-0 flex-1 basis-40 rounded-lg border border-violet-300 bg-white px-3 text-base outline-none focus:ring-2 focus:ring-violet-500 sm:text-sm dark:border-violet-500/50 dark:bg-slate-800 dark:text-white"
-            />
+            <div className="min-w-0 flex-1 basis-40">
+              <GuestNameInput
+                ariaLabel={`Nuevo nombre para ${guest.name}`}
+                autoFocus
+                value={renameValue}
+                onChange={setRenameValue}
+                customer={renameCustomer}
+                onCustomerChange={setRenameCustomer}
+                placeholder="Nombre, seña o cliente guardado"
+                className="min-h-11 w-full rounded-lg border border-violet-300 bg-white px-3 text-base outline-none focus:ring-2 focus:ring-violet-500 sm:text-sm dark:border-violet-500/50 dark:bg-slate-800 dark:text-white"
+              />
+            </div>
             <button
               type="submit"
               disabled={renameGuest.isPending || !renameValue.trim()}
@@ -345,6 +360,9 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
               <span className="min-w-0">
                 <span className="block break-words font-semibold text-slate-800 dark:text-slate-100">
                   {guest.name}
+                  {guest.customerId && (
+                    <UserCheck className="ml-1 inline h-3.5 w-3.5 align-[-2px] text-emerald-600 dark:text-emerald-400" aria-label="Cliente guardado" />
+                  )}
                   {guest.description && (
                     <span className="ml-1.5 text-xs font-normal text-slate-500 dark:text-slate-400">· {guest.description}</span>
                   )}
@@ -397,9 +415,16 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => { setRenamingGuestId(guest.id); setRenameValue(guest.name); }} className={smallGhost}>
+                <button
+                  onClick={() => {
+                    setRenamingGuestId(guest.id);
+                    setRenameValue(guest.name);
+                    setRenameCustomer(guest.customerId ? { id: guest.customerId, name: guest.name } : null);
+                  }}
+                  className={smallGhost}
+                >
                   <Pencil className="h-4 w-4" aria-hidden />
-                  Renombrar
+                  {guest.customerId ? "Cambiar cliente" : "Renombrar o identificar"}
                 </button>
                 {!hasOrders && (
                   <button
@@ -422,6 +447,15 @@ export function TableCard({ session, business, expanded, onToggleExpanded, now, 
     <>
       {addingGuest && (
         <AddGuestModal sessionId={session.id} onClose={() => setAddingGuest(false)} onSuccess={() => setAddingGuest(false)} />
+      )}
+      {editingOrder && (
+        <AddOrderModal
+          guestId={null}
+          guestName={editingOrder.guestName}
+          editing={{ orderId: editingOrder.order.id, index: editingOrder.index, note: editingOrder.order.note, items: editingOrder.order.items }}
+          onClose={() => setEditingOrder(null)}
+          onSuccess={() => setEditingOrder(null)}
+        />
       )}
       {addingOrderFor && (
         <AddOrderModal guestId={addingOrderFor.id} guestName={addingOrderFor.name} onClose={() => setAddingOrderFor(null)} onSuccess={() => setAddingOrderFor(null)} />

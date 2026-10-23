@@ -16,7 +16,46 @@ const ACTION_META: Record<string, { label: string; color: string }> = {
   CLOSE_CASH_REGISTER: { label: "Cierre caja", color: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
   CASH_COUNT: { label: "Conteo de caja", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
   CREATE_CUSTOMER_PAYMENT: { label: "Abono fiado", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" },
+  CREATE_PURCHASE: { label: "Compra", color: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300" },
+  CREATE_SUPPLIER_PAYMENT: { label: "Pago a proveedor", color: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300" },
+  EDIT_TABLE_ORDER: { label: "Ronda editada", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
+  REMOVE_TABLE_ORDER: { label: "Ronda eliminada", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  SIGN_CREDIT_AGREEMENT: { label: "Acuerdo de fiado", color: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" },
 };
+
+type Fmt = (v: unknown) => string;
+
+// Compras, pagos a proveedores, rondas de mesa y acuerdos de fiado (null = otra acción).
+function comprasYMesasSummary(action: string, d: Record<string, unknown>, cop: Fmt, str: Fmt): string | null {
+  switch (action) {
+    case "CREATE_PURCHASE": {
+      const supplier = d.supplierName ? str(d.supplierName) : "Sin proveedor";
+      const pending = Number(d.total) - Number(d.paidNow);
+      const debt = pending > 0 ? " · Quedó debiendo " + cop(pending) : "";
+      return `${supplier}: ${cop(d.total)} · Pagó ${cop(d.paidNow)}${debt}`;
+    }
+    case "CREATE_SUPPLIER_PAYMENT": {
+      const supplier = d.supplierName ? str(d.supplierName) : "Proveedor";
+      const method = PAYMENT_LABELS[str(d.paymentMethod)] ?? str(d.paymentMethod);
+      return `${supplier}: ${cop(d.amount)} · ${method} · Debía ${cop(d.balanceBefore)}`;
+    }
+    case "EDIT_TABLE_ORDER": {
+      const before = d.before as { total?: number } | undefined;
+      const after = d.after as { total?: number } | undefined;
+      return `${str(d.tableName)} · ${str(d.guestName)}: ${cop(before?.total)} → ${cop(after?.total)}`;
+    }
+    case "REMOVE_TABLE_ORDER":
+      return `${str(d.tableName)} · ${str(d.guestName)}: ${cop(d.total)}`;
+    case "SIGN_CREDIT_AGREEMENT": {
+      const limit = d.creditLimit ? cop(d.creditLimit) : "sin límite";
+      const term = d.creditTermDays ? str(d.creditTermDays) + " días" : "sin fecha";
+      const signed = d.signed ? " · Firmado" : "";
+      return `${str(d.customerName)} · Límite: ${limit} · Plazo: ${term}${signed}`;
+    }
+    default:
+      return null;
+  }
+}
 
 const MOVEMENT_TYPE_LABELS: Record<string, string> = { OPENING: "Fondo inicial", INCOME: "Entrada", EXPENSE: "Salida" };
 const PAYMENT_LABELS: Record<string, string> = { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER: "Transferencia", CREDIT: "Fiado" };
@@ -191,7 +230,7 @@ export function TrazabilidadClient({
       case "CASH_COUNT":
         return `Contado: ${cop(d.countedCash)} · Esperado: ${cop(d.expected)} · ${countResult(d.difference)}`;
       default:
-        return JSON.stringify(d);
+        return comprasYMesasSummary(action, d, cop, str) ?? JSON.stringify(d);
     }
   }
 
@@ -203,6 +242,11 @@ export function TrazabilidadClient({
     { value: "CLOSE_CASH_REGISTER", label: "Cierre de caja" },
     { value: "CASH_COUNT", label: "Conteos de caja" },
     { value: "CREATE_CUSTOMER_PAYMENT", label: "Abonos de fiado" },
+    { value: "SIGN_CREDIT_AGREEMENT", label: "Acuerdos de fiado" },
+    { value: "CREATE_PURCHASE", label: "Compras" },
+    { value: "CREATE_SUPPLIER_PAYMENT", label: "Pagos a proveedores" },
+    { value: "EDIT_TABLE_ORDER", label: "Rondas editadas" },
+    { value: "REMOVE_TABLE_ORDER", label: "Rondas eliminadas" },
   ];
 
   return (

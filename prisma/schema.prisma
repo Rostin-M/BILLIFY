@@ -140,6 +140,9 @@ model User {
   cashRegisters       CashRegister[]
   cashMovements       CashMovement[]
   customerPayments    CustomerPayment[]
+  creditAgreements    CreditAgreement[]
+  purchases           Purchase[]
+  supplierPayments    SupplierPayment[]
   tableSessions       TableSession[]
   tableOrders         TableOrder[]
   passwordResetTokens PasswordResetToken[]
@@ -175,6 +178,10 @@ model Business {
   // Cierre de caja: el cajero cuenta sin ver el saldo esperado; conteo por billetes y monedas
   cashBlindClose          Boolean               @default(true) @map("cash_blind_close")
   cashCountByDenomination Boolean               @default(false) @map("cash_count_by_denomination")
+  // Fiados: exigir que el cliente firme el acuerdo antes de fiarle, y el texto de condiciones
+  // del acuerdo (null = texto por defecto de la app).
+  creditSignatureRequired Boolean               @default(false) @map("credit_signature_required")
+  creditTerms             String?               @map("credit_terms")
   logoUrl                 String?               @map("logo_url")
   users                   User[]
   auditLogs               AuditLog[]
@@ -183,6 +190,10 @@ model Business {
   sales                   Sale[]
   customers               Customer[]
   customerPayments        CustomerPayment[]
+  creditAgreements        CreditAgreement[]
+  suppliers               Supplier[]
+  purchases               Purchase[]
+  supplierPayments        SupplierPayment[]
   cashRegisters           CashRegister[]
   cashMovements           CashMovement[]
   tableSessions           TableSession[]
@@ -223,6 +234,7 @@ model Product {
   inventoryMovements InventoryMovement[]
   saleItems          SaleItem[]
   tableOrderItems    TableOrderItem[]
+  purchaseItems      PurchaseItem[]
 
   @@unique([businessId, barcode])
   @@index([businessId])
@@ -329,21 +341,25 @@ model LegalConsent {
 }
 
 model Customer {
-  id         String   @id @default(cuid())
-  businessId String   @map("business_id")
-  name       String
-  alias      String?
-  document   String?
-  email      String?
-  phone      String?
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  businessId     String   @map("business_id")
+  name           String
+  alias          String?
+  document       String?
+  email          String?
+  phone          String?
+  isActive       Boolean  @default(true) @map("is_active")
+  // Fiado: monto máximo que puede deber (null = sin límite) y plazo para pagar en días (null = sin fecha).
+  creditLimit    Float?   @map("credit_limit")
+  creditTermDays Int?     @map("credit_term_days")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  business    Business          @relation(fields: [businessId], references: [id])
-  sales       Sale[]
-  tableGuests TableGuest[]
-  payments    CustomerPayment[]
+  business         Business          @relation(fields: [businessId], references: [id])
+  sales            Sale[]
+  tableGuests      TableGuest[]
+  payments         CustomerPayment[]
+  creditAgreements CreditAgreement[]
 
   @@index([businessId])
   @@map("customers")
@@ -374,6 +390,120 @@ model CustomerPayment {
   @@index([customerId])
   @@index([cashRegisterId])
   @@map("customer_payments")
+}
+
+// Acuerdo de fiado firmado por el cliente: condiciones vigentes al firmar y la firma (PNG en data URL).
+model CreditAgreement {
+  id             String    @id @default(cuid())
+  businessId     String    @map("business_id")
+  customerId     String    @map("customer_id")
+  userId         String    @map("user_id")
+  creditLimit    Float?    @map("credit_limit")
+  creditTermDays Int?      @map("credit_term_days")
+  terms          String
+  signerName     String    @map("signer_name")
+  signerDocument String?   @map("signer_document")
+  signature      String?
+  emailedTo      String?   @map("emailed_to")
+  emailedAt      DateTime? @map("emailed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([customerId])
+  @@map("credit_agreements")
+}
+
+model Supplier {
+  id          String   @id @default(cuid())
+  businessId  String   @map("business_id")
+  name        String
+  document    String?
+  phone       String?
+  contactName String?  @map("contact_name")
+  note        String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  business      Business       @relation(fields: [businessId], references: [id])
+  purchases     Purchase[]
+  cashMovements CashMovement[]
+
+  @@index([businessId])
+  @@map("suppliers")
+}
+
+// Compra a un proveedor: suma al inventario lo recibido. Puede quedar con saldo pendiente
+// (pedido a crédito / se paga en la próxima entrega) que se va abonando.
+model Purchase {
+  id             String    @id @default(cuid())
+  businessId     String    @map("business_id")
+  supplierId     String?   @map("supplier_id")
+  userId         String    @map("user_id")
+  total          Float
+  note           String?
+  // Fecha acordada para pagar el saldo (null = sin fecha / próxima entrega).
+  dueDate        DateTime? @map("due_date")
+  idempotencyKey String?   @map("idempotency_key")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  business Business          @relation(fields: [businessId], references: [id])
+  supplier Supplier?         @relation(fields: [supplierId], references: [id])
+  user     User              @relation(fields: [userId], references: [id])
+  items    PurchaseItem[]
+  payments SupplierPayment[]
+
+  @@unique([businessId, idempotencyKey])
+  @@index([businessId])
+  @@index([supplierId])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String  @id @default(cuid())
+  purchaseId String  @map("purchase_id")
+  productId  String? @map("product_id")
+  name       String
+  quantity   Int
+  unitCost   Float   @map("unit_cost")
+  subtotal   Float
+  // Unidades que entraron al inventario (0 si el producto no controla stock).
+  stockAdded Int     @default(0) @map("stock_added")
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product? @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+  @@index([productId])
+  @@map("purchase_items")
+}
+
+// Pago (total o abono) de una compra. En efectivo sale de la caja como una salida (cashMovementId).
+model SupplierPayment {
+  id             String        @id @default(cuid())
+  businessId     String        @map("business_id")
+  purchaseId     String        @map("purchase_id")
+  userId         String        @map("user_id")
+  amount         Float
+  paymentMethod  PaymentMethod @default(CASH) @map("payment_method")
+  cashMovementId String?       @unique @map("cash_movement_id")
+  note           String?
+  idempotencyKey String?       @map("idempotency_key")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  business     Business      @relation(fields: [businessId], references: [id])
+  purchase     Purchase      @relation(fields: [purchaseId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  cashMovement CashMovement? @relation(fields: [cashMovementId], references: [id])
+
+  @@unique([businessId, idempotencyKey])
+  @@index([businessId])
+  @@index([purchaseId])
+  @@map("supplier_payments")
 }
 
 model Sale {
@@ -472,16 +602,22 @@ model CashMovement {
   type           CashMovementType
   amount         Float
   description    String
+  note           String?
+  // Proveedor al que se le pagó (salidas); también lo llenan los pagos de compras en efectivo.
+  supplierId     String?          @map("supplier_id")
   idempotencyKey String?          @map("idempotency_key")
   createdAt      DateTime         @default(now()) @map("created_at")
 
-  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id])
-  business     Business     @relation(fields: [businessId], references: [id])
-  user         User         @relation(fields: [userId], references: [id])
+  cashRegister    CashRegister     @relation(fields: [cashRegisterId], references: [id])
+  business        Business         @relation(fields: [businessId], references: [id])
+  user            User             @relation(fields: [userId], references: [id])
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id])
+  supplierPayment SupplierPayment?
 
   @@unique([businessId, idempotencyKey])
   @@index([cashRegisterId])
   @@index([businessId])
+  @@index([supplierId])
   @@map("cash_movements")
 }
 

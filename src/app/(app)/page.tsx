@@ -310,7 +310,6 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 to-white px-4 py-8 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-white">
       <div className="mx-auto max-w-2xl space-y-6">
-        <>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
             {business?.name && (
               <p className="mb-0.5 text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
@@ -342,7 +341,6 @@ export default async function Home() {
               gridClass="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
             />
           )}
-        </>
       </div>
     </main>
   );

@@ -56,6 +56,30 @@ describe("apertura de mesas y clientes", () => {
     await expect(caller.tableSession.addGuest({ sessionId: table.id })).resolves.toMatchObject({ name: "Cliente 4" });
   });
 
+  it("al abrir, un comensal puede identificarse con un cliente guardado", async () => {
+    const registered = await createCustomer(shop.business.id, { name: "Natalia Ruiz" });
+    const outsider = await createCustomer((await createShop()).business.id);
+
+    const table = await caller.tableSession.create({
+      name: "Mesa 1",
+      guests: [{ name: "", customerId: registered.id }, { name: "El del sombrero" }],
+    });
+
+    expect(table.guests.map((g) => g.name)).toEqual(["Natalia Ruiz", "El del sombrero"]);
+    const guests = await db.tableGuest.findMany({ where: { tableSessionId: table.id }, orderBy: { addedAt: "asc" } });
+    expect(guests.map((g) => g.customerId)).toEqual([registered.id, null]);
+    await expect(
+      caller.tableSession.create({ name: "Mesa 2", guests: [{ name: "X", customerId: outsider.id }] }),
+    ).rejects.toThrow("Cliente no encontrado.");
+
+    // Identificarlo después, desde "Renombrar o identificar", y desvincularlo.
+    const second = guests[1]!;
+    await caller.tableSession.renameGuest({ guestId: second.id, name: "Natalia", customerId: registered.id });
+    await expect(db.tableGuest.findUniqueOrThrow({ where: { id: second.id } })).resolves.toMatchObject({ customerId: registered.id });
+    await caller.tableSession.renameGuest({ guestId: second.id, name: "Natalia", customerId: null });
+    await expect(db.tableGuest.findUniqueOrThrow({ where: { id: second.id } })).resolves.toMatchObject({ customerId: null });
+  });
+
   it("sin clientes la mesa abre vacía, y limita cuántos se crean al abrir", async () => {
     const empty = await openTable();
     expect(empty.guests).toEqual([]);
@@ -173,6 +197,60 @@ describe("rondas", () => {
     await expect(caller.tableSession.moveOrder({ orderId: "no-existe", toGuestId: beto.id })).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
+  });
+
+  it("editar una ronda ajusta el stock solo por la diferencia y recalcula el total", async () => {
+    const cerveza = await createProduct(shop.business.id, { price: 5400, stock: 10, taxSlots: [0] });
+    const gaseosa = await createProduct(shop.business.id, { price: 2160, stock: 10, taxSlots: [0] });
+    const papas = await createProduct(shop.business.id, { price: 3240, stock: 5, taxSlots: [0] });
+    const table = await openTable();
+    const guest = await caller.tableSession.addGuest({ sessionId: table.id, name: "Ana" });
+    const order = await caller.tableSession.addOrder({
+      guestId: guest.id,
+      items: [{ productId: cerveza.id, quantity: 3 }, { productId: gaseosa.id, quantity: 1 }],
+    });
+    const items = await db.tableOrderItem.findMany({ where: { tableOrderId: order.id } });
+    const cervezaLine = items.find((i) => i.productId === cerveza.id)!;
+
+    // Una cerveza menos, sin la gaseosa y con papas nuevas.
+    const edit = { orderId: order.id, keep: [{ itemId: cervezaLine.id, quantity: 2 }], add: [{ productId: papas.id, quantity: 2 }], note: "sin sal" };
+    const updated = await caller.tableSession.updateOrder(edit);
+
+    expect(updated.total).toBe(5400 * 2 + 3240 * 2);
+    expect(await stockOf(cerveza.id)).toBe(8);
+    expect(await stockOf(gaseosa.id)).toBe(10);
+    expect(await stockOf(papas.id)).toBe(3);
+    const [active] = await caller.tableSession.listActive();
+    expect(active!.guests[0]!.orders[0]).toMatchObject({ note: "sin sal", taxAmount: 1280, subtotal: 16000 });
+    await expect(db.auditLog.count({ where: { action: "EDIT_TABLE_ORDER" } })).resolves.toBe(1);
+
+    // Cancelar después devuelve exactamente lo que quedó descontado.
+    await caller.tableSession.removeOrder({ orderId: order.id });
+    expect(await stockOf(cerveza.id)).toBe(10);
+    expect(await stockOf(papas.id)).toBe(5);
+  });
+
+  it("editar una ronda valida stock, ronda vacía y líneas de otra versión", async () => {
+    const product = await createProduct(shop.business.id, { stock: 3 });
+    const table = await openTable();
+    const guest = await caller.tableSession.addGuest({ sessionId: table.id });
+    const order = await caller.tableSession.addOrder({ guestId: guest.id, items: [{ productId: product.id, quantity: 2 }] });
+    const [line] = await db.tableOrderItem.findMany({ where: { tableOrderId: order.id } });
+
+    await expect(caller.tableSession.updateOrder({ orderId: order.id, keep: [], add: [] })).rejects.toThrow(
+      "La ronda quedaría vacía",
+    );
+    await expect(
+      caller.tableSession.updateOrder({ orderId: order.id, keep: [{ itemId: line!.id, quantity: 4 }], add: [] }),
+    ).rejects.toThrow("Stock insuficiente");
+    expect(await stockOf(product.id)).toBe(1);
+    await expect(
+      caller.tableSession.updateOrder({ orderId: order.id, keep: [{ itemId: "otra", quantity: 1 }], add: [] }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    // Subir a 3 usa la unidad que quedaba.
+    await caller.tableSession.updateOrder({ orderId: order.id, keep: [{ itemId: line!.id, quantity: 3 }], add: [] });
+    expect(await stockOf(product.id)).toBe(0);
   });
 
   it("eliminar una ronda devuelve el stock y queda auditada", async () => {

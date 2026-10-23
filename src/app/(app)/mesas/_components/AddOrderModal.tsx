@@ -15,23 +15,92 @@ type Product = {
 type CartItem = {
   cartItemId: string; productId: string; name: string; price: number; quantity: number;
   weightKg?: number; customAmount?: number;
+  /** Línea que ya estaba en la ronda que se edita (conserva su precio original). */
+  existingItemId?: string;
+};
+
+type EditingOrder = {
+  orderId: string;
+  index: number;
+  note: string | null;
+  items: { id: string; productId: string; name: string; price: number; quantity: number }[];
 };
 
 const LOW_STOCK = 5;
 
-type Props = { guestId: string; guestName: string; onClose: () => void; onSuccess: () => void };
+type Props = {
+  /** Cliente al que se le agrega la ronda (null al editar una existente). */
+  guestId: string | null;
+  guestName: string;
+  /** Ronda a editar: el carrito arranca con sus productos. */
+  editing?: EditingOrder;
+  onClose: () => void;
+  onSuccess: () => void;
+};
 
-export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readonly<Props>) {
-  const [cart, setCart] = useState<CartItem[]>([]);
+function initialCart(editing: EditingOrder | undefined): CartItem[] {
+  return (editing?.items ?? []).map((i) => ({
+    cartItemId: `existing:${i.id}`, existingItemId: i.id, productId: i.productId, name: i.name, price: i.price, quantity: i.quantity,
+  }));
+}
+
+// Monto libre y por peso: una línea con su precio, solo se puede quitar.
+function isSpecialLine(item: CartItem, products: Product[]): boolean {
+  if (item.weightKg != null || item.customAmount != null) return true;
+  if (!item.existingItemId) return false;
+  const p = products.find((x) => x.id === item.productId);
+  return !!p && (p.openPrice || p.soldByWeight);
+}
+
+// Unidades de un producto en el carrito (sin contar líneas de monto libre o por peso).
+function unitsInCart(items: CartItem[], productId: string, products: Product[]): number {
+  return items.filter((i) => i.productId === productId && !isSpecialLine(i, products)).reduce((n, i) => n + i.quantity, 0);
+}
+
+// Al editar, lo que ya tiene la ronda está descontado del stock: cuenta como disponible.
+function availableUnits(p: Product, editing: EditingOrder | undefined): number {
+  const inOrder = (editing?.items ?? []).filter((i) => i.productId === p.id).reduce((n, i) => n + i.quantity, 0);
+  return p.stock + inOrder;
+}
+
+const toItemInput = (i: CartItem) => ({ productId: i.productId, quantity: i.quantity, weightKg: i.weightKg, customAmount: i.customAmount });
+
+// Edición: las líneas que ya estaban se envían por id (con su cantidad) y las nuevas como productos.
+function editPayload(cart: CartItem[]) {
+  return {
+    keep: cart.filter((i) => i.existingItemId).map((i) => ({ itemId: i.existingItemId!, quantity: i.quantity })),
+    add: cart.filter((i) => !i.existingItemId).map(toItemInput),
+  };
+}
+
+function confirmLabelFor(editing: boolean, pending: boolean, subtotal: number, empty: boolean): string {
+  if (editing) {
+    if (pending) return "Guardando...";
+    return empty ? "Guardar cambios" : `Guardar cambios · ${fmt(subtotal)}`;
+  }
+  if (pending) return "Registrando...";
+  return empty ? "Confirmar pedido" : `Confirmar pedido · ${fmt(subtotal)}`;
+}
+
+function discardQuestion(editing: EditingOrder | undefined, guestName: string, units: number): string {
+  if (editing) return `¿Descartar los cambios a la ronda ${editing.index + 1}?`;
+  const noun = units === 1 ? "producto" : "productos";
+  return `¿Descartar el pedido de ${guestName}? Tiene ${units} ${noun} sin confirmar.`;
+}
+
+export function AddOrderModal({ guestId, guestName, editing, onClose, onSuccess }: Readonly<Props>) {
+  const [cart, setCart] = useState<CartItem[]>(() => initialCart(editing));
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(editing?.note ?? "");
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [specialPrompt, setSpecialPrompt] = useState<{ product: Product; mode: "weight" | "amount" } | null>(null);
   const cartListRef = useRef<HTMLUListElement>(null);
   const [flash, setFlash] = useState<{ key: string; n: number } | null>(null);
-  const requestClose = () => (cart.length > 0 ? setConfirmDiscard(true) : onClose());
+  const [initialSnapshot] = useState(() => JSON.stringify([initialCart(editing), editing?.note ?? ""]));
+  const dirty = editing ? JSON.stringify([cart, note]) !== initialSnapshot : cart.length > 0;
+  const requestClose = () => (dirty ? setConfirmDiscard(true) : onClose());
   const dialogRef = useDialog(requestClose);
   // Clave de idempotencia del pedido: se reutiliza en reintentos y se descarta si cambia el pedido.
   const orderKeyRef = useRef<string | null>(null);
@@ -41,6 +110,17 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
 
   const { data: products = [], isLoading } = api.product.search.useQuery();
   const utils = api.useUtils();
+
+  const updateOrder = api.tableSession.updateOrder.useMutation({
+    onSuccess: async (order) => {
+      await utils.tableSession.listActive.invalidate();
+      await utils.product.search.invalidate();
+      await utils.product.list.invalidate();
+      toast.success(`Ronda de ${guestName} actualizada · ${fmt(order.total)}`);
+      onSuccess();
+    },
+    onError: (e) => setError(e.message),
+  });
 
   const addOrder = api.tableSession.addOrder.useMutation({
     onSuccess: async (order) => {
@@ -54,6 +134,9 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   });
 
   const allProducts = products as Product[];
+  const available = (p: Product) => availableUnits(p, editing);
+  const isSpecial = (item: CartItem) => isSpecialLine(item, allProducts);
+  const unitsOf = (items: CartItem[], productId: string) => unitsInCart(items, productId, allProducts);
   const categories = [...new Set(allProducts.map((p) => p.category).filter((c): c is string => !!c))].sort((a, b) =>
     a.localeCompare(b, "es"),
   );
@@ -70,13 +153,14 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   }
 
   function addToCart(p: Product) {
-    const inCart = cart.find((i) => i.cartItemId === p.id)?.quantity ?? 0;
-    if (p.trackStock && inCart >= p.stock) {
-      toast.error(p.stock === 0 ? `${p.name} no tiene unidades disponibles.` : `Solo hay ${p.stock} de ${p.name}.`);
+    if (p.trackStock && unitsOf(cart, p.id) >= available(p)) {
+      toast.error(available(p) === 0 ? `${p.name} no tiene unidades disponibles.` : `Solo hay ${available(p)} de ${p.name}.`);
       return;
     }
     setCart((prev) => {
-      const ex = prev.find((i) => i.cartItemId === p.id);
+      // Si el producto ya estaba en la ronda que se edita, se suma a esa línea (conserva su precio).
+      const ex = prev.find((i) => i.productId === p.id && i.existingItemId && !isSpecial(i))
+        ?? prev.find((i) => i.cartItemId === p.id);
       // Al final del arreglo = arriba en la lista.
       if (ex) return [...prev.filter((i) => i !== ex), { ...ex, quantity: ex.quantity + 1 }];
       return [...prev, { cartItemId: p.id, productId: p.id, name: p.name, price: p.price, quantity: 1 }];
@@ -112,7 +196,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
         const newQty = i.quantity + delta;
         if (delta > 0) {
           const p = allProducts.find((p) => p.id === i.productId);
-          if (p?.trackStock && newQty > p.stock) return i;
+          if (p?.trackStock && unitsOf(prev, p.id) + delta > available(p)) return i;
         }
         return { ...i, quantity: newQty };
       }).filter((i) => i.quantity > 0),
@@ -124,12 +208,17 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
   }
 
   function confirm() {
-    if (cart.length === 0 || addOrder.isPending) return;
+    if (cart.length === 0 || addOrder.isPending || updateOrder.isPending) return;
     setError(null);
+    if (editing) {
+      updateOrder.mutate({ orderId: editing.orderId, ...editPayload(cart), note: note.trim() });
+      return;
+    }
+    if (!guestId) return;
     orderKeyRef.current ??= crypto.randomUUID();
     addOrder.mutate({
       guestId,
-      items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity, weightKg: i.weightKg, customAmount: i.customAmount })),
+      items: cart.map(toItemInput),
       note: note.trim() || undefined,
       idempotencyKey: orderKeyRef.current,
     });
@@ -137,7 +226,8 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
 
   const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const units = cart.reduce((s, i) => s + i.quantity, 0);
-  const confirmLabel = addOrder.isPending ? "Registrando..." : `Confirmar pedido · ${fmt(subtotal)}`;
+  const pending = addOrder.isPending || updateOrder.isPending;
+  const confirmLabel = confirmLabelFor(!!editing, pending, subtotal, cart.length === 0);
 
   const chipClass = (active: boolean) =>
     `min-h-9 shrink-0 rounded-full border px-3 text-sm font-medium transition ${
@@ -161,12 +251,14 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`Agregar pedido para ${guestName}`}
+        aria-label={editing ? `Editar ronda ${editing.index + 1} de ${guestName}` : `Agregar pedido para ${guestName}`}
         className="flex h-[100dvh] w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-4xl sm:rounded-2xl dark:bg-slate-900"
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-white/10">
           <h2 className="min-w-0 font-semibold text-slate-800 dark:text-white">
-            <span className="block text-xs font-medium text-slate-500 dark:text-slate-400">Pedido para</span>
+            <span className="block text-xs font-medium text-slate-500 dark:text-slate-400">
+              {editing ? `Editando ronda ${editing.index + 1} de` : "Pedido para"}
+            </span>
             <span className="block truncate text-lg text-violet-700 dark:text-violet-300">{guestName}</span>
           </h2>
           <button
@@ -277,12 +369,14 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
               {cart.length > 0 && <span className="tabular-nums">{fmt(subtotal)}</span>}
             </p>
             {cart.length === 0 ? (
-              <p className="py-1 text-sm text-slate-500 dark:text-slate-400">Toca un producto para agregarlo.</p>
+              <p className="py-1 text-sm text-slate-500 dark:text-slate-400">
+                {editing ? "La ronda quedó vacía. Agrega un producto o, si ya no quieren nada, elimina la ronda." : "Toca un producto para agregarlo."}
+              </p>
             ) : (
               <ul ref={cartListRef} className="max-h-36 divide-y divide-slate-200 overflow-y-auto overscroll-contain lg:max-h-none lg:flex-1 dark:divide-white/10">
                 {/* Lo último que se agregó va arriba. */}
                 {[...cart].reverse().map((item) => {
-                  const isSpecial = item.weightKg != null || item.customAmount != null;
+                  const special = isSpecial(item);
                   const flashed = flash?.key === item.cartItemId;
                   return (
                     <li
@@ -293,7 +387,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
                         <span className="line-clamp-2 text-sm text-slate-800 dark:text-slate-100">{item.name}</span>
                         <span className="block text-xs tabular-nums text-slate-500">{fmt(item.price * item.quantity)}</span>
                       </span>
-                      {isSpecial ? (
+                      {special ? (
                         <button
                           onClick={() => removeFromCart(item.cartItemId)}
                           aria-label={`Quitar ${item.name}`}
@@ -340,7 +434,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
             {confirmDiscard ? (
               <div role="alertdialog" aria-label="Descartar pedido" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-500/40 dark:bg-amber-900/20">
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                  ¿Descartar el pedido de {guestName}? Tiene {units} {units === 1 ? "producto" : "productos"} sin confirmar.
+                  {discardQuestion(editing, guestName, units)}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -348,7 +442,7 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
                     autoFocus
                     className="min-h-11 flex-1 rounded-xl bg-violet-600 px-3 text-sm font-bold text-white hover:bg-violet-700"
                   >
-                    Seguir pidiendo
+                    {editing ? "Seguir editando" : "Seguir pidiendo"}
                   </button>
                   <button
                     onClick={onClose}
@@ -361,11 +455,11 @@ export function AddOrderModal({ guestId, guestName, onClose, onSuccess }: Readon
             ) : (
               <button
                 onClick={confirm}
-                disabled={cart.length === 0 || addOrder.isPending}
-                aria-busy={addOrder.isPending}
+                disabled={cart.length === 0 || pending || (!!editing && !dirty)}
+                aria-busy={pending}
                 className="min-h-12 w-full rounded-xl bg-violet-600 text-base font-bold text-white shadow-lg transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-violet-400 disabled:shadow-none dark:disabled:bg-violet-900"
               >
-                {cart.length === 0 ? "Confirmar pedido" : confirmLabel}
+                {confirmLabel}
               </button>
             )}
           </div>

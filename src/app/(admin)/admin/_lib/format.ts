@@ -4,10 +4,10 @@
  */
 
 import { type PlatformSubscriptionSummary } from "~/lib/platform/contract";
-import { formatDate } from "~/lib/subscription/notices";
 import { days, formatShortDate } from "~/app/_components/subscription/labels";
 
-export { formatDate, formatShortDate, days };
+export { formatDate } from "~/lib/subscription/notices";
+export { days, formatShortDate } from "~/app/_components/subscription/labels";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

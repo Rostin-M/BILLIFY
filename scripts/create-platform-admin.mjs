@@ -22,7 +22,13 @@ const BCRYPT_COST = 12;
 const MIN_PASSWORD_LENGTH = 14;
 // bcrypt ignora lo que pase de 72 bytes; el login acepta máximo 128 caracteres.
 const MAX_PASSWORD_BYTES = 72;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Misma regla que isSimpleEmail (src/lib/simpleEmail.ts): sin regex con cuantificadores encadenados.
+function isSimpleEmail(value) {
+  const at = value.indexOf("@");
+  if (at <= 0 || at !== value.lastIndexOf("@") || /\s/.test(value)) return false;
+  const domain = value.slice(at + 1);
+  return domain.length >= 3 && domain.slice(1, -1).includes(".");
+}
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -160,7 +166,7 @@ async function main() {
   }
 
   const email = (await readEmail(interactive)).trim().toLowerCase();
-  if (!EMAIL_PATTERN.test(email) || email.length > 254) fail("Correo electrónico inválido.");
+  if (!isSimpleEmail(email) || email.length > 254) fail("Correo electrónico inválido.");
   if (!allowed.has(email)) {
     fail(`${email} no está en PLATFORM_ADMIN_EMAILS. Agrégalo a esa variable antes de crear la cuenta.`);
   }

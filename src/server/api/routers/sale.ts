@@ -8,6 +8,7 @@ import { idempotencyKeySchema, runIdempotent } from "~/server/lib/idempotency";
 import { nextInvoiceNumber } from "~/server/lib/invoiceNumber";
 import { enforceRateLimits, RATE_LIMITS } from "~/server/lib/rateLimit";
 import { bogotaStartOfDay, getPeriodRangeBogota } from "~/server/lib/bogotaTime";
+import { assertCreditAllowed } from "~/server/lib/credit";
 import { sendInvoiceEmail } from "~/server/lib/email";
 import { generateFacturaPdfBuffer } from "~/server/lib/generateFacturaPdf";
 import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig, type TaxLine } from "~/lib/pricing";
@@ -139,6 +140,11 @@ export const saleRouter = createTRPCRouter({
         );
 
         const sale = await ctx.db.$transaction(async (tx) => {
+          // Una venta fiada hecha sin conexión ya ocurrió: no se rechaza por límite o firma.
+          if (input.paymentMethod === "CREDIT" && input.customerId && !input.offlineCreatedAt) {
+            await assertCreditAllowed(tx, businessId, input.customerId, total);
+          }
+
           let invoiceNumber: string | null = null;
           if (input.saleType === "INVOICED") {
             // Consecutivo compartido con los cobros de mesa, reservado atómicamente

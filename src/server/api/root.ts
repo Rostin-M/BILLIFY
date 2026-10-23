@@ -9,7 +9,9 @@ import { customerRouter } from "~/server/api/routers/customer";
 import { dashboardRouter } from "~/server/api/routers/dashboard";
 import { platformRouter } from "~/server/api/routers/platform";
 import { productRouter } from "~/server/api/routers/product";
+import { purchaseRouter } from "~/server/api/routers/purchase";
 import { saleRouter } from "~/server/api/routers/sale";
+import { supplierRouter } from "~/server/api/routers/supplier";
 import { tableSessionRouter } from "~/server/api/routers/tableSession";
 import { usersRouter } from "~/server/api/routers/users";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
@@ -31,7 +33,9 @@ export const appRouter = createTRPCRouter({
   dashboard: dashboardRouter,
   platform: platformRouter,
   product: productRouter,
+  purchase: purchaseRouter,
   sale: saleRouter,
+  supplier: supplierRouter,
   tableSession: tableSessionRouter,
   user: usersRouter,
 });

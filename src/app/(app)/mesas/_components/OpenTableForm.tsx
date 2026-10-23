@@ -3,6 +3,7 @@
 import { Minus, Plus, Users } from "lucide-react";
 import { useId, useState } from "react";
 import { api, type RouterOutputs } from "~/trpc/react";
+import { GuestNameInput, type LinkedCustomer } from "./GuestNameInput";
 
 type OpenedTable = RouterOutputs["tableSession"]["create"];
 
@@ -25,6 +26,7 @@ export function OpenTableForm({ suggestedName, onCancel, onOpened }: Readonly<Pr
   // Texto libre para poder borrarlo y escribir otro número; vacío equivale a 1.
   const [countText, setCountText] = useState("1");
   const [guestNames, setGuestNames] = useState<string[]>([]);
+  const [guestCustomers, setGuestCustomers] = useState<(LinkedCustomer | null)[]>([]);
 
   const parsed = Number.parseInt(countText, 10);
   const count = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), MAX_GUESTS) : 1;
@@ -50,11 +52,22 @@ export function OpenTableForm({ suggestedName, onCancel, onOpened }: Readonly<Pr
     });
   }
 
+  function setGuestCustomer(index: number, customer: LinkedCustomer | null) {
+    setGuestCustomers((prev) => {
+      const next = [...prev];
+      next[index] = customer;
+      return next;
+    });
+  }
+
   function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     createSession.mutate({
       name: name.trim() || suggestedName,
-      guests: Array.from({ length: count }, (_, i) => guestNames[i]?.trim() ?? ""),
+      guests: Array.from({ length: count }, (_, i) => ({
+        name: guestNames[i]?.trim() ?? "",
+        customerId: guestCustomers[i]?.id,
+      })),
     });
   }
 
@@ -112,11 +125,12 @@ export function OpenTableForm({ suggestedName, onCancel, onOpened }: Readonly<Pr
               <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
                 {i + 1}
               </span>
-              <input
-                aria-label={`Nombre o seña del cliente ${i + 1}`}
+              <GuestNameInput
+                ariaLabel={`Nombre o seña del cliente ${i + 1}`}
                 value={guestNames[i] ?? ""}
-                onChange={(e) => setGuestName(i, e.target.value)}
-                maxLength={120}
+                onChange={(v) => setGuestName(i, v)}
+                customer={guestCustomers[i] ?? null}
+                onCustomerChange={(c) => setGuestCustomer(i, c)}
                 placeholder={`Cliente ${i + 1} · nombre o seña`}
                 className={inputClass}
               />
@@ -124,7 +138,8 @@ export function OpenTableForm({ suggestedName, onCancel, onOpened }: Readonly<Pr
           ))}
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Si no escribes nada, quedan como Cliente 1, Cliente 2… y puedes renombrarlos después.
+          Al escribir verás los clientes guardados que coinciden: elige uno para identificarlo, o deja el nombre que
+          escribiste. Si no escribes nada, quedan como Cliente 1, Cliente 2… y puedes cambiarlos después.
         </p>
       </fieldset>
 

@@ -63,7 +63,7 @@ export async function runSubscriptionJob(db: PrismaClient, now = new Date()): Pr
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
     if (rows.length === 0) break;
-    cursor = rows[rows.length - 1]!.id;
+    cursor = rows.at(-1)!.id;
 
     for (const row of rows) {
       report.scanned++;

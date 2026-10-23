@@ -155,7 +155,7 @@ export const platformRouter = createTRPCRouter({
       const filters: Prisma.BusinessWhereInput[] = [];
       if (input.search) {
         // Prisma no escapa los comodines de LIKE: "100%" o "a_b" deben buscarse como texto.
-        const literal = input.search.replace(/[\\%_]/g, "\\$&");
+        const literal = input.search.replace(/[\\%_]/g, String.raw`\$&`);
         const contains = { contains: literal, mode: "insensitive" as const };
         filters.push({
           OR: [
@@ -178,7 +178,7 @@ export const platformRouter = createTRPCRouter({
       });
 
       const items = rows.slice(0, limit).map((row) => toBusinessRow(row, now));
-      return { items, nextCursor: rows.length > limit ? (items[items.length - 1]?.id ?? null) : null };
+      return { items, nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null };
     }),
 
   getBusiness: platformAdminProcedure
@@ -289,7 +289,7 @@ export const platformRouter = createTRPCRouter({
 
       // Sin `revokePreview`: esa vista previa solo se calcula en el detalle de un negocio.
       const items = await toPaymentRows(ctx.db, rows.slice(0, limit));
-      return { items, nextCursor: rows.length > limit ? (items[items.length - 1]?.id ?? null) : null };
+      return { items, nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null };
     }),
 
   /** Bitácora del panel (de todos los negocios o de uno), de lo más reciente a lo más antiguo. */
@@ -306,7 +306,7 @@ export const platformRouter = createTRPCRouter({
       });
 
       const items = rows.slice(0, limit).map(toAuditRow);
-      return { items, nextCursor: rows.length > limit ? (items[items.length - 1]?.id ?? null) : null };
+      return { items, nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null };
     }),
 
   // ─── Acciones (cada una queda en PlatformAuditLog con ip y navegador) ──────

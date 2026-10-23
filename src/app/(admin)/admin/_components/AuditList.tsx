@@ -41,7 +41,7 @@ const FALLBACK = {
 
 /** Acción que el panel aún no conoce: "SOME_NEW_ACTION" → "Some new action". */
 function readableAction(action: string): string {
-  const text = action.replace(/_/g, " ").trim().toLowerCase();
+  const text = action.replaceAll("_", " ").trim().toLowerCase();
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : "Acción";
 }
 
