@@ -11,7 +11,7 @@ import type { ScanResult } from "~/app/_components/ContinuousScanPanel";
 import { SpecialItemPrompt } from "~/app/_components/SpecialItemPrompt";
 import { computeItemTaxBreakdown, computeSaleTotals, type TaxConfig } from "~/lib/pricing";
 import { matchesSearch, pickOnEnter, usePosShortcuts } from "./usePosShortcuts";
-import { useDialog } from "~/app/_components/ui/useDialog";
+import { Modal } from "~/app/_components/ui/Modal";
 import { formatCOP } from "~/lib/format/money";
 
 type PaymentMethod = "CASH" | "CARD" | "CREDIT" | "TRANSFER";
@@ -465,7 +465,6 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   const [continuousScan, setContinuousScan] = useState(false);
   const [specialPrompt, setSpecialPrompt] = useState<{ product: Product; mode: "weight" | "amount" } | null>(null);
   const [completedSale, setCompletedSale] = useState<{ saleId: string; invoiceNumber: string; total: number; customerEmail?: string | null; saleForPdf: SaleForPdf } | null>(null);
-  const doneDialogRef = useDialog(() => setCompletedSale(null), completedSale !== null);
 
   useEffect(() => {
     setCart(loadLS<CartItem[]>(CART_KEY, []));
@@ -612,10 +611,11 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
 
   function stockLimitReached(product: Pick<Product, "name" | "stock" | "trackStock">, qtyInCart: number) {
     if (!product.trackStock || qtyInCart < product.stock) return false;
+    const units = product.stock === 1 ? "unidad" : "unidades";
     toast.error(
       product.stock === 0
         ? `${product.name} no tiene unidades disponibles.`
-        : `Solo hay ${product.stock} ${product.stock === 1 ? "unidad" : "unidades"} de ${product.name}.`,
+        : `Solo hay ${product.stock} ${units} de ${product.name}.`,
     );
     return true;
   }
@@ -752,50 +752,47 @@ export function InvoicedSaleForm({ taxes, autoTax, business, userName }: Readonl
   return (
     <>
       {completedSale && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
-          <div
-            ref={doneDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="invoice-done-title"
-            className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
-          >
-            <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-              <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <h2 id="invoice-done-title" className="mt-3 text-lg font-bold text-slate-800 dark:text-white">
-              Factura emitida
-            </h2>
-            <p className="mt-1 text-sm font-semibold text-violet-600 dark:text-violet-400">
-              {completedSale.invoiceNumber}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Total: {formatCOP(completedSale.total)}
-            </p>
-
-            <div className="mt-5">
-              <p className="mb-3 text-sm font-medium text-slate-600 dark:text-slate-300">
-                ¿Qué quieres hacer con la factura?
-              </p>
-              <FacturaPdfActions
-                saleId={completedSale.saleId}
-                business={business}
-                sale={completedSale.saleForPdf}
-                fileName={`${completedSale.invoiceNumber}.pdf`}
-                onClose={() => setCompletedSale(null)}
-                defaultEmail={completedSale.customerEmail}
-                hideClose
-              />
-            </div>
-
-            <button
-              onClick={() => setCompletedSale(null)}
-              className="mt-4 min-h-11 w-full rounded-xl border border-slate-200 text-center text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
-            >
-              Listo, nueva venta
-            </button>
+        <Modal
+          onClose={() => setCompletedSale(null)}
+          overlayClassName="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+          aria-labelledby="invoice-done-title"
+          className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+        >
+          <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+            <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
           </div>
-        </div>
+          <h2 id="invoice-done-title" className="mt-3 text-lg font-bold text-slate-800 dark:text-white">
+            Factura emitida
+          </h2>
+          <p className="mt-1 text-sm font-semibold text-violet-600 dark:text-violet-400">
+            {completedSale.invoiceNumber}
+          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Total: {formatCOP(completedSale.total)}
+          </p>
+
+          <div className="mt-5">
+            <p className="mb-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+              ¿Qué quieres hacer con la factura?
+            </p>
+            <FacturaPdfActions
+              saleId={completedSale.saleId}
+              business={business}
+              sale={completedSale.saleForPdf}
+              fileName={`${completedSale.invoiceNumber}.pdf`}
+              onClose={() => setCompletedSale(null)}
+              defaultEmail={completedSale.customerEmail}
+              hideClose
+            />
+          </div>
+
+          <button
+            onClick={() => setCompletedSale(null)}
+            className="mt-4 min-h-11 w-full rounded-xl border border-slate-200 text-center text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
+          >
+            Listo, nueva venta
+          </button>
+        </Modal>
       )}
 
       <div className="mb-3">

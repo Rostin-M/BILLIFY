@@ -301,6 +301,7 @@ export async function grantPlan(
 
   const { updated, period, reference } = applied;
   const planName = getPlan(plan).name;
+  const receipt = externalReference ? ` (comprobante ${externalReference})` : "";
   const ownerNotified =
     input.notifyOwner &&
     (await notifyOwner(db, businessId, {
@@ -311,7 +312,7 @@ export async function grantPlan(
           ? `Tu plan actual de ${business.name} sigue hasta el ${formatDate(period.periodStart)}. Ese día empieza el plan ${planName}, que va hasta el ${formatDate(period.periodEnd)} (${daysLabel(days)}).`
           : `Activamos el plan ${planName} de ${business.name} por ${daysLabel(days)}: va hasta el ${formatDate(period.periodEnd)}.`,
         amountCop > 0
-          ? `Recibimos tu pago de ${formatCop(amountCop)}${externalReference ? ` (comprobante ${externalReference})` : ""}. Referencia: ${reference}.`
+          ? `Recibimos tu pago de ${formatCop(amountCop)}${receipt}. Referencia: ${reference}.`
           : `Referencia: ${reference}.`,
         "Este correo es un comprobante; no es una factura electrónica.",
       ],
@@ -464,7 +465,8 @@ export async function revokeGrant(
       entityId: payment.id,
       summary:
         `Revocó la activación ${payment.reference} (plan ${getPlan(payment.plan).name}` +
-        `${payment.grantDays ? `, ${daysLabel(payment.grantDays)}` : ""}): ${input.note}`,
+        (payment.grantDays ? ", " + daysLabel(payment.grantDays) : "") +
+        `): ${input.note}`,
       detail: {
         reference: payment.reference,
         note: input.note,
@@ -480,6 +482,7 @@ export async function revokeGrant(
   }, TX_OPTIONS);
 
   const subscription = summarizeSubscription(updated, now);
+  const accessUntil = subscription.endsAt ? " hasta el " + formatDate(subscription.endsAt) : "";
   const ownerNotified =
     input.notifyOwner &&
     (await notifyOwner(db, business.id, {
@@ -489,7 +492,7 @@ export async function revokeGrant(
         `Anulamos la activación del plan ${getPlan(payment.plan).name} de ${business.name} registrada el ${formatDate(payment.createdAt)} (referencia ${payment.reference}).`,
         subscription.phase === "READ_ONLY"
           ? "Tu cuenta quedó en solo lectura: puedes consultar tu historial y exportar tus datos, pero no registrar ventas hasta que actives un plan. No se borra nada."
-          : `Tu acceso sigue vigente${subscription.endsAt ? ` hasta el ${formatDate(subscription.endsAt)}` : ""} con el plan ${getPlan(subscription.plan).name}.`,
+          : `Tu acceso sigue vigente${accessUntil} con el plan ${getPlan(subscription.plan).name}.`,
         "Si crees que es un error, escríbenos.",
       ],
       ctaLabel: "Ver mi suscripción",

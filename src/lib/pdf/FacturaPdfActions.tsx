@@ -50,10 +50,10 @@ export function FacturaPdfActions({ saleId, business, sale, fileName, onClose, l
 
   if (instance.loading) {
     return (
-      <span role="status" className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+      <output className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
         <span aria-hidden className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />
-        Preparando el PDF…
-      </span>
+        <span>Preparando el PDF…</span>
+      </output>
     );
   }
 
@@ -110,9 +110,9 @@ export function FacturaPdfActions({ saleId, business, sale, fileName, onClose, l
       </div>
 
       {emailSent && (
-        <p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">
+        <output className="block text-sm text-emerald-600 dark:text-emerald-400">
           Factura enviada a {emailSent}.
-        </p>
+        </output>
       )}
 
       {showEmailForm && (

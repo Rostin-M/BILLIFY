@@ -340,7 +340,6 @@ export async function sendInvoiceEmail(
   });
 }
 
-/** Constancia del acuerdo de fiado firmado, con el PDF adjunto. */
 export async function sendCreditAgreementEmail(
   to: string,
   pdfBuffer: Buffer,

@@ -344,6 +344,17 @@ describe("cron diario", () => {
     await expect(db.subscriptionNotice.findFirstOrThrow()).resolves.toMatchObject({ kind: "renewal_7d" });
   });
 
+  it("sin dueño activo con correo actualiza el estado pero no registra aviso", async () => {
+    const { owner } = await expiredTrialShop();
+    await db.user.update({ where: { id: owner.id }, data: { isActive: false } });
+
+    const report = await runSubscriptionJob(db);
+
+    expect(report).toMatchObject({ statusUpdated: 1, noticesSent: 0, noticeErrors: 0 });
+    await expect(db.subscriptionNotice.count()).resolves.toBe(0);
+    expect(sendSubscriptionEmail).not.toHaveBeenCalled();
+  });
+
   it("si el correo falla, libera el aviso para reintentar al día siguiente", async () => {
     await expiredTrialShop();
     vi.mocked(sendSubscriptionEmail).mockRejectedValueOnce(new Error("Brevo caído"));

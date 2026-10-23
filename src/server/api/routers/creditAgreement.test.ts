@@ -9,7 +9,7 @@ import {
   db,
 } from "../../../../tests/integration/helpers";
 
-// PNG de 1×1 válido: basta para probar que la firma se guarda y entra al PDF.
+// PNG de 1×1 válido.
 const SIGNATURE =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
@@ -41,7 +41,6 @@ describe("acuerdo de fiado", () => {
     expect(agreement).toMatchObject({ creditLimit: 200000, creditTermDays: 15, emailedTo: "ana@example.com", signature: SIGNATURE });
     expect(agreement.terms).toContain("Ana Pérez");
     expect(agreement.terms).toContain("15 días");
-    // El correo y la cédula quedan en la ficha del cliente.
     await expect(db.customer.findUniqueOrThrow({ where: { id: customer.id } })).resolves.toMatchObject({
       creditLimit: 200000, creditTermDays: 15, email: "ana@example.com", document: "1020304050",
     });
@@ -89,7 +88,6 @@ describe("acuerdo de fiado", () => {
       caller.tableSession.checkout({ sessionId: table.id, groups: [{ guestIds: [table.guests[0]!.id], paymentMethod: "CREDIT" }] }),
     ).rejects.toThrow("Se pasa del monto máximo");
 
-    // Subir el límite (sin volver a firmar) permite fiar.
     await caller.customer.updateCreditTerms({ customerId: customer.id, creditLimit: 20000, creditTermDays: 8 });
     await expect(
       caller.tableSession.checkout({ sessionId: table.id, groups: [{ guestIds: [table.guests[0]!.id], paymentMethod: "CREDIT" }] }),

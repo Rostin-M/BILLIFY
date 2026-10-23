@@ -93,7 +93,7 @@ export function OpenTableForm({ suggestedName, onCancel, onOpened }: Readonly<Pr
           <span id={countLabelId} className="block font-medium text-slate-700 dark:text-slate-200">
             ¿Cuántos clientes?
           </span>
-          <div role="group" aria-labelledby={countLabelId} className="flex items-center gap-2">
+          <fieldset aria-labelledby={countLabelId} className="flex min-w-0 items-center gap-2">
             <button type="button" onClick={() => setCount(count - 1)} disabled={count <= 1} aria-label="Un cliente menos" className={stepClass}>
               <Minus className="h-4 w-4" />
             </button>
@@ -109,7 +109,7 @@ export function OpenTableForm({ suggestedName, onCancel, onOpened }: Readonly<Pr
             <button type="button" onClick={() => setCount(count + 1)} disabled={count >= MAX_GUESTS} aria-label="Un cliente más" className={stepClass}>
               <Plus className="h-4 w-4" />
             </button>
-          </div>
+          </fieldset>
         </div>
       </div>
 

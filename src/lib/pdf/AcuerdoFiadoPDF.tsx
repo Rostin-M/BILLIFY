@@ -56,7 +56,6 @@ export type BusinessForAgreementPdf = {
 };
 
 export function AcuerdoFiadoPDF({ business, agreement }: Readonly<{ business: BusinessForAgreementPdf; agreement: CreditAgreementForPdf }>) {
-  // Cada párrafo lleva su posición en la clave: dos párrafos pueden tener el mismo texto.
   const paragraphs = agreement.terms
     .split(/\n+/)
     .map((p) => p.trim())

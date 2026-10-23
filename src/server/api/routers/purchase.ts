@@ -8,7 +8,6 @@ import { adjustStock } from "~/server/lib/inventory";
 import { idempotencyKeySchema, runIdempotent } from "~/server/lib/idempotency";
 import { MAX_MONEY, MAX_QUANTITY, MAX_SALE_ITEMS } from "~/server/lib/resolveSaleItem";
 
-// Cómo se le paga al proveedor. Solo el efectivo sale de la caja (como una salida).
 const PAY_METHODS = ["CASH", "TRANSFER", "CARD"] as const;
 type PayMethod = (typeof PAY_METHODS)[number];
 
@@ -17,7 +16,6 @@ const money = z.number().finite().max(MAX_MONEY, "Monto demasiado grande");
 const fmtCOP = (v: number) =>
   v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
-/** Pago a un proveedor: si es en efectivo, sale de la caja como una salida ligada al pago. */
 async function registerSupplierPayment(
   tx: Prisma.TransactionClient,
   params: {
@@ -64,7 +62,6 @@ async function registerSupplierPayment(
   });
 }
 
-// Compras con saldo pendiente (lo que se le debe a los proveedores).
 async function pendingPurchaseIds(db: Prisma.TransactionClient, businessId: string, supplierId?: string) {
   const rows = await db.$queryRaw<{ id: string }[]>`
     SELECT p."id"
@@ -99,7 +96,6 @@ function withBalance(p: PurchaseRow) {
 
 type PurchaseProduct = { id: string; name: string; trackStock: boolean; openPrice: boolean; soldByWeight: boolean };
 
-// Guarda los productos de la compra, los suma al inventario y, si se pide, actualiza su costo.
 async function receivePurchaseItems(
   tx: Prisma.TransactionClient,
   params: {
@@ -137,7 +133,6 @@ async function receivePurchaseItems(
   }
 }
 
-/** Total de la compra (productos o monto suelto) validado contra lo que se paga ahora. */
 function purchaseTotals(input: {
   items: { quantity: number; unitCost: number }[];
   amount?: number;
@@ -166,8 +161,6 @@ function paymentMessage(balance: number) {
 }
 
 export const purchaseRouter = createTRPCRouter({
-  // Registrar la compra de un pedido: suma al inventario lo recibido y registra lo que se pagó.
-  // Lo que no se pague ahora queda como saldo pendiente con el proveedor.
   create: businessProcedure
     .input(z.object({
       supplierId: z.string().min(1).max(64).optional(),
@@ -176,13 +169,11 @@ export const purchaseRouter = createTRPCRouter({
         quantity: z.number().int().positive("La cantidad debe ser mayor a cero").max(MAX_QUANTITY, "Cantidad demasiado grande"),
         unitCost: money.nonnegative("El costo no puede ser negativo"),
       })).max(MAX_SALE_ITEMS, `Máximo ${MAX_SALE_ITEMS} productos por compra`),
-      // Total cuando la compra no lleva productos del catálogo (p. ej. insumos, servicios).
       amount: money.positive("El monto debe ser mayor a cero").optional(),
       note: z.string().trim().max(500).optional(),
       paidNow: money.nonnegative("El pago no puede ser negativo"),
       paymentMethod: z.enum(PAY_METHODS).default("CASH"),
       dueDate: z.string().date("Fecha inválida").optional(),
-      // Guardar el costo unitario de esta compra como costo del producto.
       updateCosts: z.boolean().default(true),
       idempotencyKey: idempotencyKeySchema,
     }))
@@ -284,7 +275,6 @@ export const purchaseRouter = createTRPCRouter({
       });
     }),
 
-  // Abono o pago del saldo de una compra.
   addPayment: businessProcedure
     .input(z.object({
       purchaseId: z.string().min(1).max(64),
@@ -348,7 +338,6 @@ export const purchaseRouter = createTRPCRouter({
       });
     }),
 
-  // Compras recientes, o solo las que tienen saldo pendiente (las vencidas primero).
   list: businessProcedure
     .input(z.object({
       pendingOnly: z.boolean().default(false),
@@ -368,7 +357,6 @@ export const purchaseRouter = createTRPCRouter({
       return purchases.map(withBalance);
     }),
 
-  // Total por pagar a proveedores y cuántas compras ya pasaron su fecha de pago.
   payablesSummary: businessProcedure.query(async ({ ctx }) => {
     const { businessId } = ctx.session.user;
     const ids = await pendingPurchaseIds(ctx.db, businessId);
@@ -383,7 +371,6 @@ export const purchaseRouter = createTRPCRouter({
     };
   }),
 
-  // Productos de la última compra a un proveedor, con su costo, para repetir el pedido de siempre.
   lastForSupplier: businessProcedure
     .input(z.object({ supplierId: z.string().min(1).max(64) }))
     .query(async ({ ctx, input }) => {

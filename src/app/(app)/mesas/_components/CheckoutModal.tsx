@@ -6,7 +6,7 @@ import { api } from "~/trpc/react";
 import { useSession } from "next-auth/react";
 import { CashChange } from "~/app/_components/CashChange";
 import { ReceiptPhotoButton } from "~/app/_components/ReceiptPhotoButton";
-import { useDialog } from "~/app/_components/ui/useDialog";
+import { Modal } from "~/app/_components/ui/Modal";
 import { formatCOP as fmt } from "~/lib/format/money";
 import { guestTotal, plural } from "./mesaStatus";
 
@@ -44,7 +44,6 @@ function creditProblem(guests: Guest[]): string | null {
 }
 
 export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSuccess }: Readonly<Props>) {
-  const dialogRef = useDialog(onClose);
   const { data: session } = useSession();
   const cashierName = session?.user?.name ?? "Cajero";
 
@@ -245,7 +244,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
           <span className="shrink-0 text-lg font-bold tabular-nums text-slate-900 dark:text-white">{fmt(amount)}</span>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label={`Forma de pago de ${members.map((g) => g.name).join(" + ")}`}>
+        <fieldset className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4" aria-label={`Forma de pago de ${members.map((g) => g.name).join(" + ")}`}>
           {PAYMENT_ORDER.map((m) => (
             <button
               key={m}
@@ -261,7 +260,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
               {PAYMENT_LABELS[m]}
             </button>
           ))}
-        </div>
+        </fieldset>
 
         {creditError && <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">{creditError}</p>}
         {grp.paymentMethod === "TRANSFER" && (
@@ -281,7 +280,7 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
               onChange={(e) => updateGroup(grp.id, { invoice: e.target.checked })}
               className="h-5 w-5 cursor-pointer accent-violet-600"
             />
-            Generar factura
+            <span>Generar factura</span>
           </label>
           {grp.paymentMethod === "CASH" && activeGroups.length > 1 && (
             <button type="button" onClick={() => toggleChange(grp.id)} className="min-h-10 text-sm font-medium text-violet-700 underline-offset-4 hover:underline dark:text-violet-300">
@@ -299,124 +298,121 @@ export function CheckoutModal({ sessionId, sessionName, guests, onClose, onSucce
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-2 pt-6 sm:p-4 sm:pt-10">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Cobrar ${sessionName}`} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-white/10">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Cobrar {sessionName}</h2>
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">Cobra: {cashierName}</p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
-          >
-            <X className="h-5 w-5" />
-          </button>
+    <Modal onClose={onClose} overlayClassName="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-2 pt-6 sm:p-4 sm:pt-10" aria-label={`Cobrar ${sessionName}`} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-white/10">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Cobrar {sessionName}</h2>
+          <p className="truncate text-xs text-slate-500 dark:text-slate-400">Cobra: {cashierName}</p>
         </div>
+        <button
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
-        <div className="space-y-4 p-4 sm:p-5">
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                {joining ? "Elige quiénes pagan juntos" : "¿Quién paga y cómo?"}
-              </p>
-              {canJoin && !joining && (
-                <button
-                  type="button"
-                  onClick={() => setJoining(true)}
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
-                >
-                  <Combine className="h-4 w-4" aria-hidden />
-                  Juntar cuentas
-                </button>
-              )}
-            </div>
-            <ul className="space-y-2">{activeGroups.map(renderGroup)}</ul>
-            {joining && (
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={joinSelected}
-                  disabled={selectedGroups.size < 2}
-                  className="min-h-11 flex-1 rounded-xl bg-violet-600 px-3 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50"
-                >
-                  {selectedGroups.size < 2 ? "Elige al menos 2" : `Pagar juntos (${selectedGroups.size})`}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setJoining(false); setSelectedGroups(new Set()); }}
-                  className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
-                >
-                  Cancelar
-                </button>
-              </div>
+      <div className="space-y-4 p-4 sm:p-5">
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+              {joining ? "Elige quiénes pagan juntos" : "¿Quién paga y cómo?"}
+            </p>
+            {canJoin && !joining && (
+              <button
+                type="button"
+                onClick={() => setJoining(true)}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+              >
+                <Combine className="h-4 w-4" aria-hidden />
+                Juntar cuentas
+              </button>
             )}
           </div>
-
-          {excludedGuests.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Cobrar más tarde</p>
-              {excludedGuests.map((guest) => (
-                <label key={guest.id} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 dark:border-white/15 dark:bg-white/5">
-                  <input
-                    type="checkbox"
-                    checked={false}
-                    onChange={() => includeGuest(guest.id)}
-                    aria-label={`Cobrar a ${guest.name} ahora`}
-                    className="h-5 w-5 shrink-0 cursor-pointer accent-violet-600"
-                  />
-                  <span className="min-w-0 flex-1 text-sm text-slate-600 dark:text-slate-300">{guest.name}</span>
-                  <span className="text-sm tabular-nums text-slate-500">{fmt(guestTotal(guest))}</span>
-                </label>
-              ))}
+          <ul className="space-y-2">{activeGroups.map(renderGroup)}</ul>
+          {joining && (
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={joinSelected}
+                disabled={selectedGroups.size < 2}
+                className="min-h-11 flex-1 rounded-xl bg-violet-600 px-3 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50"
+              >
+                {selectedGroups.size < 2 ? "Elige al menos 2" : `Pagar juntos (${selectedGroups.size})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setJoining(false); setSelectedGroups(new Set()); }}
+                className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
+              >
+                Cancelar
+              </button>
             </div>
           )}
+        </div>
 
-          <div className="flex items-center justify-between rounded-xl bg-slate-900 px-4 py-3 text-white dark:bg-white/10">
-            <span className="font-semibold">{allIncluded ? "Total mesa" : "Total a cobrar ahora"}</span>
-            <span className="text-2xl font-bold tabular-nums">{fmt(grandTotal)}</span>
+        {excludedGuests.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Cobrar más tarde</p>
+            {excludedGuests.map((guest) => (
+              <label key={guest.id} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 dark:border-white/15 dark:bg-white/5">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => includeGuest(guest.id)}
+                  aria-label={`Cobrar a ${guest.name} ahora`}
+                  className="h-5 w-5 shrink-0 cursor-pointer accent-violet-600"
+                />
+                <span className="min-w-0 flex-1 text-sm text-slate-600 dark:text-slate-300">{guest.name}</span>
+                <span className="text-sm tabular-nums text-slate-500">{fmt(guestTotal(guest))}</span>
+              </label>
+            ))}
           </div>
+        )}
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/5">
-            <input
-              type="checkbox"
-              checked={keepGuests}
-              onChange={(e) => setKeepGuests(e.target.checked)}
-              className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-violet-600"
-            />
-            <span>
-              <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Mantener clientes en mesa</span>
-              <span className="block text-xs text-slate-500 dark:text-slate-400">
-                Cobra lo pedido y deja a los clientes sentados para que sigan pidiendo.
-              </span>
+        <div className="flex items-center justify-between rounded-xl bg-slate-900 px-4 py-3 text-white dark:bg-white/10">
+          <span className="font-semibold">{allIncluded ? "Total mesa" : "Total a cobrar ahora"}</span>
+          <span className="text-2xl font-bold tabular-nums">{fmt(grandTotal)}</span>
+        </div>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/5">
+          <input
+            type="checkbox"
+            checked={keepGuests}
+            onChange={(e) => setKeepGuests(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-violet-600"
+          />
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            Mantener clientes en mesa<span className="block text-xs font-normal text-slate-500 dark:text-slate-400">
+              Cobra lo pedido y deja a los clientes sentados para que sigan pidiendo.
             </span>
-          </label>
+          </span>
+        </label>
 
-          <p role="status" className={`rounded-lg px-3 py-2 text-sm ${wouldCloseTable ? "bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200" : "bg-slate-50 text-slate-600 dark:bg-white/5 dark:text-slate-300"}`}>
-            {outcome}
-          </p>
+        <output className={`block rounded-lg px-3 py-2 text-sm ${wouldCloseTable ? "bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200" : "bg-slate-50 text-slate-600 dark:bg-white/5 dark:text-slate-300"}`}>
+          {outcome}
+        </output>
 
-          {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-          <div className="sticky bottom-0 -mx-4 -mb-4 flex gap-2 rounded-b-2xl border-t border-slate-100 bg-white px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5 dark:border-white/10 dark:bg-slate-900">
-            <button
-              onClick={confirm}
-              disabled={checkout.isPending || joining || activeGroups.length === 0 || creditErrors.size > 0}
-              aria-busy={checkout.isPending}
-              className="min-h-12 flex-1 rounded-xl bg-violet-600 px-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {confirmLabel}
-            </button>
-            <button
-              onClick={onClose}
-              className="min-h-12 rounded-xl border border-slate-200 px-4 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
-            >
-              Cancelar
-            </button>
-          </div>
+        <div className="sticky bottom-0 -mx-4 -mb-4 flex gap-2 rounded-b-2xl border-t border-slate-100 bg-white px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5 dark:border-white/10 dark:bg-slate-900">
+          <button
+            onClick={confirm}
+            disabled={checkout.isPending || joining || activeGroups.length === 0 || creditErrors.size > 0}
+            aria-busy={checkout.isPending}
+            className="min-h-12 flex-1 rounded-xl bg-violet-600 px-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {confirmLabel}
+          </button>
+          <button
+            onClick={onClose}
+            className="min-h-12 rounded-xl border border-slate-200 px-4 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
+          >
+            Cancelar
+          </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

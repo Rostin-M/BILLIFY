@@ -9,7 +9,6 @@ export type LinkedCustomer = { id: string; name: string };
 type Props = {
   value: string;
   onChange: (value: string) => void;
-  /** Cliente guardado con el que se identificó al comensal (null = solo nombre o seña). */
   customer: LinkedCustomer | null;
   onCustomerChange: (customer: LinkedCustomer | null) => void;
   placeholder?: string;
@@ -20,11 +19,6 @@ type Props = {
 
 const MIN_QUERY = 2;
 
-/**
- * Nombre o seña del comensal. Mientras se escribe, sugiere clientes guardados que coinciden;
- * elegir uno lo identifica (queda vinculado para fiados e historial). Si no se elige ninguno,
- * queda como nombre suelto.
- */
 export function GuestNameInput({ value, onChange, customer, onCustomerChange, placeholder, ariaLabel, autoFocus, className }: Readonly<Props>) {
   const listId = useId();
   const [open, setOpen] = useState(false);

@@ -72,7 +72,6 @@ describe("apertura de mesas y clientes", () => {
       caller.tableSession.create({ name: "Mesa 2", guests: [{ name: "X", customerId: outsider.id }] }),
     ).rejects.toThrow("Cliente no encontrado.");
 
-    // Identificarlo después, desde "Renombrar o identificar", y desvincularlo.
     const second = guests[1]!;
     await caller.tableSession.renameGuest({ guestId: second.id, name: "Natalia", customerId: registered.id });
     await expect(db.tableGuest.findUniqueOrThrow({ where: { id: second.id } })).resolves.toMatchObject({ customerId: registered.id });
@@ -212,7 +211,6 @@ describe("rondas", () => {
     const items = await db.tableOrderItem.findMany({ where: { tableOrderId: order.id } });
     const cervezaLine = items.find((i) => i.productId === cerveza.id)!;
 
-    // Una cerveza menos, sin la gaseosa y con papas nuevas.
     const edit = { orderId: order.id, keep: [{ itemId: cervezaLine.id, quantity: 2 }], add: [{ productId: papas.id, quantity: 2 }], note: "sin sal" };
     const updated = await caller.tableSession.updateOrder(edit);
 
@@ -224,7 +222,6 @@ describe("rondas", () => {
     expect(active!.guests[0]!.orders[0]).toMatchObject({ note: "sin sal", taxAmount: 1280, subtotal: 16000 });
     await expect(db.auditLog.count({ where: { action: "EDIT_TABLE_ORDER" } })).resolves.toBe(1);
 
-    // Cancelar después devuelve exactamente lo que quedó descontado.
     await caller.tableSession.removeOrder({ orderId: order.id });
     expect(await stockOf(cerveza.id)).toBe(10);
     expect(await stockOf(papas.id)).toBe(5);
@@ -248,7 +245,6 @@ describe("rondas", () => {
       caller.tableSession.updateOrder({ orderId: order.id, keep: [{ itemId: "otra", quantity: 1 }], add: [] }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
 
-    // Subir a 3 usa la unidad que quedaba.
     await caller.tableSession.updateOrder({ orderId: order.id, keep: [{ itemId: line!.id, quantity: 3 }], add: [] });
     expect(await stockOf(product.id)).toBe(0);
   });

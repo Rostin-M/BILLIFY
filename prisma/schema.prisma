@@ -178,9 +178,8 @@ model Business {
   // Cierre de caja: el cajero cuenta sin ver el saldo esperado; conteo por billetes y monedas
   cashBlindClose          Boolean               @default(true) @map("cash_blind_close")
   cashCountByDenomination Boolean               @default(false) @map("cash_count_by_denomination")
-  // Fiados: exigir que el cliente firme el acuerdo antes de fiarle, y el texto de condiciones
-  // del acuerdo (null = texto por defecto de la app).
   creditSignatureRequired Boolean               @default(false) @map("credit_signature_required")
+  // null = texto por defecto del acuerdo
   creditTerms             String?               @map("credit_terms")
   logoUrl                 String?               @map("logo_url")
   users                   User[]
@@ -349,7 +348,7 @@ model Customer {
   email          String?
   phone          String?
   isActive       Boolean  @default(true) @map("is_active")
-  // Fiado: monto máximo que puede deber (null = sin límite) y plazo para pagar en días (null = sin fecha).
+  // Fiado: null = sin límite / sin plazo
   creditLimit    Float?   @map("credit_limit")
   creditTermDays Int?     @map("credit_term_days")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -392,7 +391,6 @@ model CustomerPayment {
   @@map("customer_payments")
 }
 
-// Acuerdo de fiado firmado por el cliente: condiciones vigentes al firmar y la firma (PNG en data URL).
 model CreditAgreement {
   id             String    @id @default(cuid())
   businessId     String    @map("business_id")
@@ -437,8 +435,6 @@ model Supplier {
   @@map("suppliers")
 }
 
-// Compra a un proveedor: suma al inventario lo recibido. Puede quedar con saldo pendiente
-// (pedido a crédito / se paga en la próxima entrega) que se va abonando.
 model Purchase {
   id             String    @id @default(cuid())
   businessId     String    @map("business_id")
@@ -446,7 +442,7 @@ model Purchase {
   userId         String    @map("user_id")
   total          Float
   note           String?
-  // Fecha acordada para pagar el saldo (null = sin fecha / próxima entrega).
+  // null = sin fecha (próxima entrega)
   dueDate        DateTime? @map("due_date")
   idempotencyKey String?   @map("idempotency_key")
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -471,7 +467,7 @@ model PurchaseItem {
   quantity   Int
   unitCost   Float   @map("unit_cost")
   subtotal   Float
-  // Unidades que entraron al inventario (0 si el producto no controla stock).
+  // 0 si el producto no controla stock
   stockAdded Int     @default(0) @map("stock_added")
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
@@ -482,7 +478,6 @@ model PurchaseItem {
   @@map("purchase_items")
 }
 
-// Pago (total o abono) de una compra. En efectivo sale de la caja como una salida (cashMovementId).
 model SupplierPayment {
   id             String        @id @default(cuid())
   businessId     String        @map("business_id")
@@ -603,7 +598,6 @@ model CashMovement {
   amount         Float
   description    String
   note           String?
-  // Proveedor al que se le pagó (salidas); también lo llenan los pagos de compras en efectivo.
   supplierId     String?          @map("supplier_id")
   idempotencyKey String?          @map("idempotency_key")
   createdAt      DateTime         @default(now()) @map("created_at")

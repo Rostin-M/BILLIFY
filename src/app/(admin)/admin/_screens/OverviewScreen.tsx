@@ -202,11 +202,11 @@ export function OverviewScreen() {
 
             <Card title="Negocios por estado">
               {overview.isPending && (
-                <div role="status" aria-label="Cargando" className="animate-pulse space-y-4 motion-reduce:animate-none">
+                <output aria-label="Cargando" className="block animate-pulse space-y-4 motion-reduce:animate-none">
                   <div className="h-8 w-40 rounded-md bg-slate-200 dark:bg-white/10" />
                   <div className="h-3 rounded-full bg-slate-200 dark:bg-white/10" />
                   <div className="h-16 rounded-md bg-slate-200 dark:bg-white/10" />
-                </div>
+                </output>
               )}
               {overview.error && <ErrorState compact message={overview.error} onRetry={overview.refetch} />}
               {data && <PhaseBreakdown overview={data} />}

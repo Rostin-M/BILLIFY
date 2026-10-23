@@ -618,11 +618,12 @@ export function PointOfSale({ taxes, autoTax, userId, businessId }: Readonly<POS
 
   function stockLimitReached(product: Pick<Product, "name" | "stock" | "trackStock">, qtyInCart: number) {
     if (!product.trackStock || qtyInCart < product.stock) return false;
+    const units = product.stock === 1 ? "unidad" : "unidades";
     showMessage(
       "error",
       product.stock === 0
         ? `${product.name} no tiene unidades disponibles.`
-        : `Solo hay ${product.stock} ${product.stock === 1 ? "unidad" : "unidades"} de ${product.name}.`,
+        : `Solo hay ${product.stock} ${units} de ${product.name}.`,
     );
     return true;
   }

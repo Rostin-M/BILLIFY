@@ -69,61 +69,88 @@ export async function runSubscriptionJob(db: PrismaClient, now = new Date()): Pr
       report.scanned++;
       const { business, updatedAt, ...subRow } = row;
       const sub = effectiveSubscription(subRow, now);
-
-      const scheduleDue = subRow.scheduledFrom !== null && subRow.scheduledFrom <= now;
-      if (scheduleDue || subRow.status !== sub.access.phase) {
-        // Concurrencia optimista: si un pago cambió la fila después de leerla,
-        // no se pisa (la próxima ejecución la verá actualizada).
-        await db.subscription.updateMany({
-          where: { id: subRow.id, updatedAt },
-          data: {
-            status: sub.access.phase,
-            ...(scheduleDue
-              ? {
-                  plan: sub.billing.plan,
-                  billingCycle: sub.billing.billingCycle,
-                  currentPeriodStart: sub.billing.currentPeriodStart,
-                  scheduledPlan: null,
-                  scheduledCycle: null,
-                  scheduledFrom: null,
-                }
-              : {}),
-          },
-        });
-        if (scheduleDue) report.scheduledApplied++;
-        if (subRow.status !== sub.access.phase) report.statusUpdated++;
-      }
-
-      const notice = dueNotice(sub.access, now);
-      const owner = business.users[0];
-      if (!notice || !owner?.email) continue;
-
-      // Se registra ANTES de enviar: si dos ejecuciones corren a la vez, solo una envía.
-      try {
-        await db.subscriptionNotice.create({
-          data: { subscriptionId: subRow.id, kind: notice.kind, dueAt: notice.dueAt },
-        });
-      } catch (err) {
-        if (isUniqueViolation(err)) continue;
-        throw err;
-      }
-
-      try {
-        await sendSubscriptionEmail(owner.email, owner.name, noticeContent(notice, sub.access, business.name));
-        report.noticesSent++;
-      } catch (err) {
-        // Se libera para reintentar mañana.
-        report.noticeErrors++;
-        await db.subscriptionNotice.deleteMany({
-          where: { subscriptionId: subRow.id, kind: notice.kind, dueAt: notice.dueAt },
-        });
-        console.error("[cron:subscriptions] aviso no enviado", err instanceof Error ? err.message : err);
-      }
+      await syncSubscriptionRow(db, subRow, sub, updatedAt, now, report);
+      await sendDueNotice(db, subRow.id, sub, business, now, report);
     }
   }
 
   await reconcilePendingPayments(db, now, report);
   return report;
+}
+
+type SubscriptionRow = Parameters<typeof effectiveSubscription>[0] & { id: string };
+type Effective = ReturnType<typeof effectiveSubscription>;
+type JobBusiness = { name: string; users: { email: string | null; name: string | null }[] };
+
+/** Guarda la fase calculada y consolida el cambio de plan programado si ya empezó. */
+async function syncSubscriptionRow(
+  db: PrismaClient,
+  subRow: SubscriptionRow,
+  sub: Effective,
+  updatedAt: Date,
+  now: Date,
+  report: JobReport,
+): Promise<void> {
+  const scheduleDue = subRow.scheduledFrom !== null && subRow.scheduledFrom <= now;
+  const statusChanged = subRow.status !== sub.access.phase;
+  if (!scheduleDue && !statusChanged) return;
+
+  // Concurrencia optimista: si un pago cambió la fila después de leerla,
+  // no se pisa (la próxima ejecución la verá actualizada).
+  await db.subscription.updateMany({
+    where: { id: subRow.id, updatedAt },
+    data: {
+      status: sub.access.phase,
+      ...(scheduleDue
+        ? {
+            plan: sub.billing.plan,
+            billingCycle: sub.billing.billingCycle,
+            currentPeriodStart: sub.billing.currentPeriodStart,
+            scheduledPlan: null,
+            scheduledCycle: null,
+            scheduledFrom: null,
+          }
+        : {}),
+    },
+  });
+  if (scheduleDue) report.scheduledApplied++;
+  if (statusChanged) report.statusUpdated++;
+}
+
+/** Envía el aviso que toca hoy, una sola vez aunque el cron corra dos veces. */
+async function sendDueNotice(
+  db: PrismaClient,
+  subscriptionId: string,
+  sub: Effective,
+  business: JobBusiness,
+  now: Date,
+  report: JobReport,
+): Promise<void> {
+  const notice = dueNotice(sub.access, now);
+  const owner = business.users[0];
+  if (!notice || !owner?.email) return;
+
+  // Se registra ANTES de enviar: si dos ejecuciones corren a la vez, solo una envía.
+  try {
+    await db.subscriptionNotice.create({
+      data: { subscriptionId, kind: notice.kind, dueAt: notice.dueAt },
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) return;
+    throw err;
+  }
+
+  try {
+    await sendSubscriptionEmail(owner.email, owner.name, noticeContent(notice, sub.access, business.name));
+    report.noticesSent++;
+  } catch (err) {
+    // Se libera para reintentar mañana.
+    report.noticeErrors++;
+    await db.subscriptionNotice.deleteMany({
+      where: { subscriptionId, kind: notice.kind, dueAt: notice.dueAt },
+    });
+    console.error("[cron:subscriptions] aviso no enviado", err instanceof Error ? err.message : err);
+  }
 }
 
 async function reconcilePendingPayments(db: PrismaClient, now: Date, report: JobReport): Promise<void> {

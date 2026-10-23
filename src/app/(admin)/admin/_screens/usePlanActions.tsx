@@ -86,7 +86,7 @@ function GrantPlanFlow({
       {detail.error ? (
         <ErrorState compact message={detail.error} onRetry={detail.refetch} />
       ) : (
-        <div role="status" aria-label="Cargando los datos del negocio" className="animate-pulse space-y-6 motion-reduce:animate-none">
+        <output aria-label="Cargando los datos del negocio" className="block animate-pulse space-y-6 motion-reduce:animate-none">
           <div className="h-16 rounded-xl bg-slate-200 dark:bg-white/10" />
           <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-3">
             <div className="h-20 rounded-xl bg-slate-200 dark:bg-white/10" />
@@ -95,7 +95,7 @@ function GrantPlanFlow({
           </div>
           <div className="h-10 rounded-lg bg-slate-200 dark:bg-white/10" />
           <div className="h-28 rounded-xl bg-slate-200 dark:bg-white/10" />
-        </div>
+        </output>
       )}
     </Dialog>
   );
@@ -147,12 +147,11 @@ export function usePlanActions(): {
             const until = result.periodEnd ? ` hasta el ${formatDate(result.periodEnd)}` : "";
             // El plan mostrado es el que quedó vigente; si el cambio quedó programado, se dice.
             const current = getPlan(result.subscription.plan).name;
+            const startsOn = result.periodStart ? formatDate(result.periodStart) : "día programado";
             const what =
               current === plan
                 ? `${business.name} tiene ${plan}${until}.`
-                : `${business.name} sigue en ${current} y pasa a ${plan} el ${
-                    result.periodStart ? formatDate(result.periodStart) : "día programado"
-                  }; queda con acceso${until}.`;
+                : `${business.name} sigue en ${current} y pasa a ${plan} el ${startsOn}; queda con acceso${until}.`;
             if (input.notifyOwner && !result.ownerNotified) {
               toast.warning("Plan activado, pero el correo no salió", {
                 description: `${what} Avísale tú al dueño.`,

@@ -1,6 +1,3 @@
-// Acuerdo de fiado: texto de condiciones que el cliente acepta y firma.
-// El dueño puede reemplazarlo en Configuración; estos marcadores se llenan al firmar.
-
 export const CREDIT_TERMS_PLACEHOLDERS = ["{negocio}", "{cliente}", "{limite}", "{plazo}"] as const;
 
 export const DEFAULT_CREDIT_TERMS = `1. {negocio} le abre a {cliente} una cuenta de fiado para llevar productos y pagarlos después.
@@ -23,7 +20,6 @@ export function creditTermLabel(days: number | null | undefined): string {
   return `dentro de los ${days} días siguientes a la compra`;
 }
 
-/** Texto final del acuerdo con los datos de este cliente. */
 export function renderCreditTerms(
   template: string | null | undefined,
   data: { businessName: string; customerName: string; creditLimit: number | null; creditTermDays: number | null },

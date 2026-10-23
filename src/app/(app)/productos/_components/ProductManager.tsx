@@ -368,7 +368,7 @@ export function ProductManager({ userRole }: Readonly<{ userRole: "OWNER" | "CAS
         )}
 
         {listStatusMessage ? (
-          <p role="status" className="text-sm text-slate-500 dark:text-slate-400">{listStatusMessage}</p>
+          <output className="block text-sm text-slate-500 dark:text-slate-400">{listStatusMessage}</output>
         ) : (
           <>
             <div className="mb-1 hidden grid-cols-12 gap-2 px-1 text-xs font-medium text-slate-500 sm:grid dark:text-slate-400">

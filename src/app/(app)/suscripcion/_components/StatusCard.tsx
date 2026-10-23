@@ -23,7 +23,7 @@ function headline(s: Status): string {
     case "ACTIVE":
       return date ? `Vence el ${date}. Quedan ${days(s.daysLeft)}.` : "Tu plan está activo.";
     case "PAST_DUE":
-      return `Tu plan venció${date ? ` el ${date}` : ""}. Te quedan ${days(s.graceDaysLeft)} de gracia con acceso completo.`;
+      return `Tu plan venció${date ? " el " + date : ""}. Te quedan ${days(s.graceDaysLeft)} de gracia con acceso completo.`;
     case "CANCELED":
       return date ? `Cancelaste la renovación. Tienes acceso hasta el ${date}.` : "Cancelaste la renovación.";
     case "READ_ONLY":
@@ -99,14 +99,13 @@ export function StatusCard({ status }: Readonly<{ status: Status }>) {
 
       {progress && (
         <div className="mt-4">
-          <div
-            className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"
-            role="progressbar"
+          <progress
+            className="sr-only"
             aria-label="Tiempo usado del período"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={now === null ? undefined : Math.round(progress.pct)}
-          >
+            value={now === null ? undefined : Math.round(progress.pct)}
+            max={100}
+          />
+          <div aria-hidden className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
             <div className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${BAR_COLOR[status.phase]}`} style={{ width: now === null ? 0 : `${progress.pct}%` }} />
           </div>
           <div className="mt-1.5 flex justify-between text-xs text-slate-500 dark:text-slate-400">

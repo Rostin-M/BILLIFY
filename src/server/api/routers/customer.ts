@@ -26,10 +26,8 @@ const customerSchema = z.object({
 });
 
 
-// ~300 KB: una firma dibujada en PNG pesa bastante menos.
 const MAX_SIGNATURE_LENGTH = 400_000;
 
-// Nombre de archivo seguro: solo letras y números, separados por guiones.
 const slug = (v: string) =>
   v.normalize("NFD").split(/[^A-Za-z0-9]+/).filter(Boolean).join("-").slice(0, 40) || "cliente";
 
@@ -52,7 +50,6 @@ async function loadAgreementForPdf(db: Prisma.TransactionClient, businessId: str
   return { business, agreement: { ...rest, registeredBy: user.name } };
 }
 
-/** Genera el PDF y lo envía; marca el acuerdo como enviado. Devuelve false si el envío falla. */
 async function emailAgreement(
   db: Prisma.TransactionClient,
   params: {
@@ -464,7 +461,6 @@ export const customerRouter = createTRPCRouter({
       });
     }),
 
-  // Cuenta de fiado de un cliente: monto máximo, plazo, deuda y acuerdos firmados.
   creditAccount: businessProcedure
     .input(z.object({ customerId: z.string().min(1).max(64) }))
     .query(async ({ ctx, input }) => {
@@ -487,12 +483,10 @@ export const customerRouter = createTRPCRouter({
       return {
         ...rest,
         debt,
-        // La firma no viaja en la lista (pesa); solo si la tiene.
         agreements: creditAgreements.map(({ signature, ...a }) => ({ ...a, signed: !!signature })),
       };
     }),
 
-  // Configuración del negocio para abrir cuentas de fiado (texto del acuerdo y si la firma es obligatoria).
   creditSettings: businessProcedure.query(async ({ ctx }) => {
     const business = await ctx.db.business.findUniqueOrThrow({
       where: { id: ctx.session.user.businessId },
@@ -501,8 +495,6 @@ export const customerRouter = createTRPCRouter({
     return business;
   }),
 
-  // Abrir (o renovar) la cuenta de fiado: el cliente acepta las condiciones y firma.
-  // Ambos roles: el mesero o cajero define el monto máximo y el plazo.
   signCreditAgreement: businessProcedure
     .input(z.object({
       customerId: z.string().min(1).max(64),
@@ -510,7 +502,6 @@ export const customerRouter = createTRPCRouter({
       creditTermDays: z.number().int().positive("El plazo debe ser de al menos un día").max(365, "Máximo 365 días").nullable(),
       signerName: z.string().trim().min(2, "Escribe el nombre de quien firma").max(120),
       signerDocument: z.string().trim().max(20).optional(),
-      // Firma dibujada en pantalla, como PNG.
       signature: z
         .string()
         .max(MAX_SIGNATURE_LENGTH, "La firma es demasiado grande")
@@ -550,7 +541,6 @@ export const customerRouter = createTRPCRouter({
           data: {
             creditLimit: input.creditLimit,
             creditTermDays: input.creditTermDays,
-            // El correo y el documento que da al firmar quedan en su ficha si no los tenía.
             ...(email && !customer.email ? { email } : {}),
             ...(input.signerDocument && !customer.document ? { document: input.signerDocument } : {}),
           },
@@ -583,7 +573,7 @@ export const customerRouter = createTRPCRouter({
         return created;
       });
 
-      // El correo va después de guardar: si falla, el acuerdo queda firmado y se puede reenviar.
+      // Si el correo falla, el acuerdo ya quedó guardado y se puede reenviar.
       let emailed = false;
       if (email) {
         emailed = await emailAgreement(ctx.db, {
@@ -599,7 +589,6 @@ export const customerRouter = createTRPCRouter({
       return { id: agreement.id, emailed, message };
     }),
 
-  // Cambiar el monto máximo o el plazo sin firmar de nuevo (el acuerdo firmado conserva lo que se aceptó).
   updateCreditTerms: businessProcedure
     .input(z.object({
       customerId: z.string().min(1).max(64),
@@ -631,7 +620,6 @@ export const customerRouter = createTRPCRouter({
       return { message: "Condiciones de fiado actualizadas." };
     }),
 
-  // PDF del acuerdo (base64) para descargarlo o compartirlo.
   creditAgreementPdf: businessProcedure
     .input(z.object({ agreementId: z.string().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {

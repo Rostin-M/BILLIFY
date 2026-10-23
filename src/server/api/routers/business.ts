@@ -77,7 +77,6 @@ const updateSettingsSchema = z
     // Cierre de caja (opcionales por la misma razón)
     cashBlindClose: z.boolean().optional(),
     cashCountByDenomination: z.boolean().optional(),
-    // Fiados (opcionales por la misma razón); creditTerms null = texto por defecto.
     creditSignatureRequired: z.boolean().optional(),
     creditTerms: z.string().trim().max(MAX_CREDIT_TERMS_LENGTH, `Máximo ${MAX_CREDIT_TERMS_LENGTH} caracteres`).nullable().optional(),
   })

@@ -72,6 +72,169 @@ function DifferenceLine({ difference }: Readonly<{ difference: number }>) {
   );
 }
 
+/** Lo contado: por billetes y monedas o el total escrito. */
+function summarizeCount(counts: Record<number, string>, amount: string, byDenomination: boolean) {
+  const breakdown: CashBreakdown = Object.fromEntries(
+    Object.entries(counts)
+      .map(([d, c]) => [d, Number.parseInt(c, 10) || 0] as const)
+      .filter(([, c]) => c > 0),
+  );
+  const countedFromBreakdown = Object.entries(breakdown).reduce((s, [d, c]) => s + Number(d) * c, 0);
+  const counted = byDenomination ? countedFromBreakdown : Number.parseFloat(amount);
+  const hasCount = byDenomination ? Object.keys(counts).some((d) => counts[Number(d)] !== "") : amount !== "";
+  const validCount = hasCount && !Number.isNaN(counted) && counted >= 0;
+  return { breakdown, countedFromBreakdown, counted, validCount };
+}
+
+function closedMessage(difference: number): string {
+  if (difference === 0) return "Caja cerrada. El efectivo cuadró exacto.";
+  const kind = difference < 0 ? "faltante" : "sobrante";
+  return `Caja cerrada con ${kind} de ${formatCOP(Math.abs(difference))}.`;
+}
+
+type CountFieldsProps = {
+  byDenomination: boolean;
+  blind: boolean;
+  counts: Record<number, string>;
+  setCounts: React.Dispatch<React.SetStateAction<Record<number, string>>>;
+  amount: string;
+  setAmount: (value: string) => void;
+  countedFromBreakdown: number;
+};
+
+function CountFields({ byDenomination, blind, counts, setCounts, amount, setAmount, countedFromBreakdown }: Readonly<CountFieldsProps>) {
+  return (
+    <>
+      <p className="mb-4 mt-1 text-sm text-slate-500 dark:text-slate-400">
+        {byDenomination
+          ? "Cuenta cuántos billetes y monedas hay de cada valor."
+          : "Cuenta todo el efectivo que hay en el cajón y escribe el total."}
+        {blind && " Después verás si cuadra con lo que registró el sistema."}
+      </p>
+
+      {byDenomination ? (
+        <div className="grid gap-x-8 sm:grid-cols-2">
+          <fieldset>
+            <legend className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Billetes</legend>
+            <ul className="divide-y divide-slate-100 dark:divide-white/5">
+              {COP_BILLS.map((d) => (
+                <DenominationRow key={d} value={d} count={counts[d] ?? ""} onChange={(c) => setCounts((p) => ({ ...p, [d]: c }))} />
+              ))}
+            </ul>
+          </fieldset>
+          <fieldset className="mt-3 sm:mt-0">
+            <legend className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Monedas</legend>
+            <ul className="divide-y divide-slate-100 dark:divide-white/5">
+              {COP_COINS.map((d) => (
+                <DenominationRow key={d} value={d} count={counts[d] ?? ""} onChange={(c) => setCounts((p) => ({ ...p, [d]: c }))} />
+              ))}
+            </ul>
+          </fieldset>
+          <p className="mt-3 flex items-baseline justify-between border-t border-slate-200 pt-3 sm:col-span-2 dark:border-white/10">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Total contado</span>
+            <span className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">{formatCOP(countedFromBreakdown)}</span>
+          </p>
+        </div>
+      ) : (
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Efectivo contado</span>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              step="50"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0"
+              autoFocus
+              className={`${INPUT} pl-7 text-lg font-semibold`}
+            />
+          </div>
+        </label>
+      )}
+    </>
+  );
+}
+
+function BlindCountReview({ preview }: Readonly<{ preview: Preview }>) {
+  return (
+    <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-4 text-sm dark:bg-white/5" aria-live="polite">
+      <p className="flex justify-between text-slate-500 dark:text-slate-400">
+        <span>Esperado por el sistema</span>
+        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{formatCOP(preview.expected)}</span>
+      </p>
+      <p className="flex justify-between text-slate-500 dark:text-slate-400">
+        <span>Contado</span>
+        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{formatCOP(preview.countedCash)}</span>
+      </p>
+      <div className="border-t border-slate-200 pt-2 dark:border-white/10">
+        <DifferenceLine difference={preview.difference} />
+      </div>
+    </div>
+  );
+}
+
+type CloseActionsProps = {
+  countFirst: boolean;
+  reviewing: boolean;
+  onCount: () => void;
+  countDisabled: boolean;
+  counting: boolean;
+  onConfirm: () => void;
+  confirmDisabled: boolean;
+  closing: boolean;
+  onRecount: () => void;
+  onCancel: () => void;
+};
+
+function CloseActions({
+  countFirst, reviewing, onCount, countDisabled, counting, onConfirm, confirmDisabled, closing, onRecount, onCancel,
+}: Readonly<CloseActionsProps>) {
+  return (
+    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+      {countFirst ? (
+        <button
+          type="button"
+          onClick={onCount}
+          disabled={countDisabled}
+          aria-busy={counting}
+          className="min-h-11 flex-1 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {counting ? "Revisando…" : "Continuar"}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={confirmDisabled}
+          aria-busy={closing}
+          className="min-h-11 flex-1 rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {closing ? "Cerrando…" : "Confirmar cierre"}
+        </button>
+      )}
+      {reviewing && (
+        <button
+          type="button"
+          onClick={onRecount}
+          className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+        >
+          Volver a contar
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onCancel}
+        className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+      >
+        Cancelar
+      </button>
+    </div>
+  );
+}
+
 /**
  * Cierre de caja con cuadre: se cuenta el efectivo (total o por billetes y monedas) y se
  * compara con lo esperado. En cierre ciego primero se cuenta y después se ve el resultado.
@@ -86,16 +249,7 @@ export function CashCloseForm({ registerId, expected, byDenomination, ownerName,
 
   const utils = api.useUtils();
 
-  const breakdown: CashBreakdown = Object.fromEntries(
-    Object.entries(counts)
-      .map(([d, c]) => [d, Number.parseInt(c, 10) || 0] as const)
-      .filter(([, c]) => c > 0),
-  );
-  const countedFromBreakdown = Object.entries(breakdown).reduce((s, [d, c]) => s + Number(d) * c, 0);
-  const parsedAmount = Number.parseFloat(amount);
-  const counted = byDenomination ? countedFromBreakdown : parsedAmount;
-  const hasCount = byDenomination ? Object.keys(counts).some((d) => counts[Number(d)] !== "") : amount !== "";
-  const validCount = hasCount && !Number.isNaN(counted) && counted >= 0;
+  const { breakdown, countedFromBreakdown, counted, validCount } = summarizeCount(counts, amount, byDenomination);
 
   const countInput = {
     registerId,
@@ -109,11 +263,7 @@ export function CashCloseForm({ registerId, expected, byDenomination, ownerName,
 
   const closeRegister = api.cashRegister.close.useMutation({
     onSuccess: async (data) => {
-      toast.success(
-        data.difference === 0
-          ? "Caja cerrada. El efectivo cuadró exacto."
-          : `Caja cerrada con ${data.difference < 0 ? "faltante" : "sobrante"} de ${formatCOP(Math.abs(data.difference))}.`,
-      );
+      toast.success(closedMessage(data.difference));
       await Promise.all([
         utils.cashRegister.getActive.invalidate(),
         utils.cashRegister.listHistory.invalidate(),
@@ -147,55 +297,15 @@ export function CashCloseForm({ registerId, expected, byDenomination, ownerName,
 
         {!reviewing && (
           <>
-            <p className="mb-4 mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {byDenomination
-                ? "Cuenta cuántos billetes y monedas hay de cada valor."
-                : "Cuenta todo el efectivo que hay en el cajón y escribe el total."}
-              {blind && " Después verás si cuadra con lo que registró el sistema."}
-            </p>
-
-            {byDenomination ? (
-              <div className="grid gap-x-8 sm:grid-cols-2">
-                <fieldset>
-                  <legend className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Billetes</legend>
-                  <ul className="divide-y divide-slate-100 dark:divide-white/5">
-                    {COP_BILLS.map((d) => (
-                      <DenominationRow key={d} value={d} count={counts[d] ?? ""} onChange={(c) => setCounts((p) => ({ ...p, [d]: c }))} />
-                    ))}
-                  </ul>
-                </fieldset>
-                <fieldset className="mt-3 sm:mt-0">
-                  <legend className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Monedas</legend>
-                  <ul className="divide-y divide-slate-100 dark:divide-white/5">
-                    {COP_COINS.map((d) => (
-                      <DenominationRow key={d} value={d} count={counts[d] ?? ""} onChange={(c) => setCounts((p) => ({ ...p, [d]: c }))} />
-                    ))}
-                  </ul>
-                </fieldset>
-                <p className="mt-3 flex items-baseline justify-between border-t border-slate-200 pt-3 sm:col-span-2 dark:border-white/10">
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Total contado</span>
-                  <span className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">{formatCOP(countedFromBreakdown)}</span>
-                </p>
-              </div>
-            ) : (
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Efectivo contado</span>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    step="50"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0"
-                    autoFocus
-                    className={`${INPUT} pl-7 text-lg font-semibold`}
-                  />
-                </div>
-              </label>
-            )}
+            <CountFields
+              byDenomination={byDenomination}
+              blind={blind}
+              counts={counts}
+              setCounts={setCounts}
+              amount={amount}
+              setAmount={setAmount}
+              countedFromBreakdown={countedFromBreakdown}
+            />
 
             {!blind && (
               <div className="mt-4 space-y-1 rounded-xl bg-slate-50 p-3 text-sm dark:bg-white/5" aria-live="polite">
@@ -209,21 +319,7 @@ export function CashCloseForm({ registerId, expected, byDenomination, ownerName,
           </>
         )}
 
-        {reviewing && (
-          <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-4 text-sm dark:bg-white/5" aria-live="polite">
-            <p className="flex justify-between text-slate-500 dark:text-slate-400">
-              <span>Esperado por el sistema</span>
-              <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{formatCOP(preview.expected)}</span>
-            </p>
-            <p className="flex justify-between text-slate-500 dark:text-slate-400">
-              <span>Contado</span>
-              <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{formatCOP(preview.countedCash)}</span>
-            </p>
-            <div className="border-t border-slate-200 pt-2 dark:border-white/10">
-              <DifferenceLine difference={preview.difference} />
-            </div>
-          </div>
-        )}
+        {reviewing && <BlindCountReview preview={preview} />}
 
         {(reviewing || !blind) && (
           <label className="mt-4 block space-y-1">
@@ -246,45 +342,18 @@ export function CashCloseForm({ registerId, expected, byDenomination, ownerName,
           <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{error.message}</p>
         )}
 
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          {blind && !reviewing ? (
-            <button
-              type="button"
-              onClick={() => countCash.mutate(countInput)}
-              disabled={!validCount || countCash.isPending}
-              aria-busy={countCash.isPending}
-              className="min-h-11 flex-1 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {countCash.isPending ? "Revisando…" : "Continuar"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={confirmClose}
-              disabled={!canConfirm || closeRegister.isPending}
-              aria-busy={closeRegister.isPending}
-              className="min-h-11 flex-1 rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {closeRegister.isPending ? "Cerrando…" : "Confirmar cierre"}
-            </button>
-          )}
-          {reviewing && (
-            <button
-              type="button"
-              onClick={() => { setPreview(null); setNote(""); closeRegister.reset(); }}
-              className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
-            >
-              Volver a contar
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
-          >
-            Cancelar
-          </button>
-        </div>
+        <CloseActions
+          countFirst={blind && !reviewing}
+          reviewing={reviewing}
+          onCount={() => countCash.mutate(countInput)}
+          countDisabled={!validCount || countCash.isPending}
+          counting={countCash.isPending}
+          onConfirm={confirmClose}
+          confirmDisabled={!canConfirm || closeRegister.isPending}
+          closing={closeRegister.isPending}
+          onRecount={() => { setPreview(null); setNote(""); closeRegister.reset(); }}
+          onCancel={onCancel}
+        />
       </div>
     </div>
   );

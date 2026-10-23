@@ -325,15 +325,14 @@ async function notifyPaymentApproved(db: PrismaClient, paymentId: string): Promi
   if (!payment || !owner?.email) return;
 
   const plan = getPlan(payment.plan);
+  const until = payment.periodEnd ? ` hasta el ${formatDate(payment.periodEnd)}` : "";
   await sendSubscriptionEmail(owner.email, owner.name, {
     subject: "Pago recibido",
     title: "¡Pago recibido!",
     paragraphs: [
       payment.kind === "UPGRADE"
         ? `${payment.business.name} ya tiene el plan ${plan.name}.`
-        : `Renovamos el plan ${plan.name} (${CYCLE_LABELS[payment.billingCycle].toLowerCase()}) de ${payment.business.name}${
-            payment.periodEnd ? ` hasta el ${formatDate(payment.periodEnd)}` : ""
-          }.`,
+        : `Renovamos el plan ${plan.name} (${CYCLE_LABELS[payment.billingCycle].toLowerCase()}) de ${payment.business.name}${until}.`,
       `Valor: ${formatCop(payment.amountInCents / 100)}. Referencia: ${payment.reference}.`,
       "Este correo es un comprobante de pago; no es una factura electrónica.",
     ],

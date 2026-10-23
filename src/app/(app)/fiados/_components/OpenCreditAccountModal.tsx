@@ -4,7 +4,7 @@ import { UserCheck, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
-import { useDialog } from "~/app/_components/ui/useDialog";
+import { Modal } from "~/app/_components/ui/Modal";
 import { renderCreditTerms } from "~/lib/creditTerms";
 import { formatCOP } from "~/lib/format/money";
 import { SignaturePad } from "./SignaturePad";
@@ -12,7 +12,6 @@ import { SignaturePad } from "./SignaturePad";
 type Customer = { id: string; name: string; document: string | null; email: string | null };
 
 type Props = {
-  /** Cliente ya elegido (renovar o cambiar condiciones); sin él se busca o se crea. */
   customer?: Customer & { creditLimit: number | null; creditTermDays: number | null };
   onClose: () => void;
 };
@@ -168,7 +167,6 @@ function LimitAndTermFields({
   );
 }
 
-// Monto máximo y plazo tal como quedarían guardados, y si son válidos.
 function creditFormValues(f: { noLimit: boolean; limit: string; useCustomTerm: boolean; customTerm: string; termDays: number | null }) {
   const limitValue = f.noLimit ? null : Number.parseFloat(f.limit);
   const limitValid = limitValue === null || (Number.isFinite(limitValue) && limitValue > 0);
@@ -180,7 +178,6 @@ function creditFormValues(f: { noLimit: boolean; limit: string; useCustomTerm: b
 const isPresetTerm = (days: number | null | undefined) => !days || [8, 15, 30].includes(days);
 
 export function OpenCreditAccountModal({ customer: initialCustomer, onClose }: Readonly<Props>) {
-  const dialogRef = useDialog(onClose);
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer ?? null);
   const [noLimit, setNoLimit] = useState(initialCustomer ? initialCustomer.creditLimit == null : false);
   const [limit, setLimit] = useState(initialCustomer?.creditLimit ? String(initialCustomer.creditLimit) : "");
@@ -230,103 +227,100 @@ export function OpenCreditAccountModal({ customer: initialCustomer, onClose }: R
   if (sign.isPending) submitLabel = "Guardando...";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 sm:items-center sm:p-4">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Abrir cuenta de fiado"
-        className="flex h-[100dvh] w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-2xl sm:rounded-2xl dark:bg-slate-900"
-      >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-white/10">
-          <h2 className="font-semibold text-slate-800 dark:text-white">
-            {initialCustomer ? `Acuerdo de fiado · ${initialCustomer.name}` : "Abrir cuenta de fiado"}
-          </h2>
-          <button onClick={onClose} aria-label="Cerrar" className="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <Modal
+      onClose={onClose}
+      overlayClassName="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 sm:items-center sm:p-4"
+      aria-label="Abrir cuenta de fiado"
+      className="flex h-[100dvh] w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-2xl sm:rounded-2xl dark:bg-slate-900"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-white/10">
+        <h2 className="font-semibold text-slate-800 dark:text-white">
+          {initialCustomer ? `Acuerdo de fiado · ${initialCustomer.name}` : "Abrir cuenta de fiado"}
+        </h2>
+        <button onClick={onClose} aria-label="Cerrar" className="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-5">
-          {customer ? (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-500/40 dark:bg-emerald-900/20">
-              <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-300" aria-hidden />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-emerald-800 dark:text-emerald-200">{customer.name}</span>
-              {!initialCustomer && (
-                <button type="button" onClick={() => setCustomer(null)} className="text-xs font-semibold text-emerald-700 underline dark:text-emerald-300">Cambiar</button>
-              )}
-            </div>
-          ) : (
-            <CustomerStep onPick={pickCustomer} />
-          )}
-
-          {customer && (
-            <>
-              <LimitAndTermFields
-                noLimit={noLimit} setNoLimit={setNoLimit}
-                limit={limit} setLimit={setLimit} limitValue={limitValue}
-                termDays={termDays} setTermDays={setTermDays}
-                useCustomTerm={useCustomTerm} setUseCustomTerm={setUseCustomTerm}
-                customTerm={customTerm} setCustomTerm={setCustomTerm}
-              />
-
-              <section className="space-y-1.5">
-                <span className={labelClass}>Condiciones que acepta el cliente</span>
-                <div className="max-h-48 space-y-1.5 overflow-y-auto whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                  {terms}
-                </div>
-              </section>
-
-              <section className="grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1"><span className={labelClass}>Nombre de quien firma</span>
-                  <input value={signerName} onChange={(e) => setSignerName(e.target.value)} maxLength={120} className={inputClass} />
-                </label>
-                <label className="space-y-1"><span className={labelClass}>Cédula de quien firma</span>
-                  <input value={signerDocument} onChange={(e) => setSignerDocument(e.target.value)} maxLength={20} inputMode="numeric" className={inputClass} />
-                </label>
-              </section>
-
-              <section className="space-y-1.5">
-                <span className={labelClass}>
-                  Firma del cliente {signatureRequired ? "(obligatoria)" : "(opcional)"}
-                </span>
-                <SignaturePad onChange={setSignature} />
-              </section>
-
-              <label className="block space-y-1">
-                <span className={labelClass}>Enviar copia en PDF al correo</span>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
-              </label>
-            </>
-          )}
-        </div>
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-5">
+        {customer ? (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-500/40 dark:bg-emerald-900/20">
+            <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-300" aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-emerald-800 dark:text-emerald-200">{customer.name}</span>
+            {!initialCustomer && (
+              <button type="button" onClick={() => setCustomer(null)} className="text-xs font-semibold text-emerald-700 underline dark:text-emerald-300">Cambiar</button>
+            )}
+          </div>
+        ) : (
+          <CustomerStep onPick={pickCustomer} />
+        )}
 
         {customer && (
-          <div className="shrink-0 space-y-2 border-t border-slate-100 px-4 py-3 sm:px-5 dark:border-white/10">
-            {sign.error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{sign.error.message}</p>}
-            {signatureRequired && !signature && <p className="text-xs text-slate-500">El negocio exige la firma: pídele al cliente que firme en el recuadro.</p>}
-            <button
-              type="button"
-              disabled={!canSubmit || sign.isPending}
-              aria-busy={sign.isPending}
-              onClick={() =>
-                sign.mutate({
-                  customerId: customer.id,
-                  creditLimit: limitValue,
-                  creditTermDays: term,
-                  signerName: signerName.trim(),
-                  signerDocument: signerDocument.trim() || undefined,
-                  signature: signature ?? undefined,
-                  email: email.trim() || undefined,
-                })
-              }
-              className="min-h-12 w-full rounded-xl bg-violet-600 text-base font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitLabel}
-            </button>
-          </div>
+          <>
+            <LimitAndTermFields
+              noLimit={noLimit} setNoLimit={setNoLimit}
+              limit={limit} setLimit={setLimit} limitValue={limitValue}
+              termDays={termDays} setTermDays={setTermDays}
+              useCustomTerm={useCustomTerm} setUseCustomTerm={setUseCustomTerm}
+              customTerm={customTerm} setCustomTerm={setCustomTerm}
+            />
+
+            <section className="space-y-1.5">
+              <span className={labelClass}>Condiciones que acepta el cliente</span>
+              <div className="max-h-48 space-y-1.5 overflow-y-auto whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                {terms}
+              </div>
+            </section>
+
+            <section className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1"><span className={labelClass}>Nombre de quien firma</span>
+                <input value={signerName} onChange={(e) => setSignerName(e.target.value)} maxLength={120} className={inputClass} />
+              </label>
+              <label className="space-y-1"><span className={labelClass}>Cédula de quien firma</span>
+                <input value={signerDocument} onChange={(e) => setSignerDocument(e.target.value)} maxLength={20} inputMode="numeric" className={inputClass} />
+              </label>
+            </section>
+
+            <section className="space-y-1.5">
+              <span className={labelClass}>
+                Firma del cliente {signatureRequired ? "(obligatoria)" : "(opcional)"}
+              </span>
+              <SignaturePad onChange={setSignature} />
+            </section>
+
+            <label className="block space-y-1">
+              <span className={labelClass}>Enviar copia en PDF al correo</span>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
+            </label>
+          </>
         )}
       </div>
-    </div>
+
+      {customer && (
+        <div className="shrink-0 space-y-2 border-t border-slate-100 px-4 py-3 sm:px-5 dark:border-white/10">
+          {sign.error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{sign.error.message}</p>}
+          {signatureRequired && !signature && <p className="text-xs text-slate-500">El negocio exige la firma: pídele al cliente que firme en el recuadro.</p>}
+          <button
+            type="button"
+            disabled={!canSubmit || sign.isPending}
+            aria-busy={sign.isPending}
+            onClick={() =>
+              sign.mutate({
+                customerId: customer.id,
+                creditLimit: limitValue,
+                creditTermDays: term,
+                signerName: signerName.trim(),
+                signerDocument: signerDocument.trim() || undefined,
+                signature: signature ?? undefined,
+                email: email.trim() || undefined,
+              })
+            }
+            className="min-h-12 w-full rounded-xl bg-violet-600 text-base font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitLabel}
+          </button>
+        </div>
+      )}
+    </Modal>
   );
 }

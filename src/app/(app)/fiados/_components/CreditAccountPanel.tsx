@@ -24,7 +24,6 @@ function downloadBase64Pdf(base64: string, fileName: string) {
 const smallButton =
   "inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5";
 
-/** Monto máximo, plazo y acuerdo firmado de la cuenta de fiado de un cliente. */
 export function CreditAccountPanel({ customerId }: Readonly<{ customerId: string }>) {
   const { data: account } = api.customer.creditAccount.useQuery({ customerId });
   const [editing, setEditing] = useState(false);

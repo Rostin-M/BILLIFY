@@ -2,7 +2,7 @@ import Image from "next/image";
 
 export default function Loading() {
   return (
-    <div role="status" aria-label="Cargando" className="fixed inset-0 z-50 bg-slate-950">
+    <output aria-label="Cargando" className="fixed inset-0 z-50 bg-slate-950">
 
       <div
         className="pointer-events-none absolute inset-0"
@@ -41,6 +41,6 @@ export default function Loading() {
           </p>
         </div>
       </div>
-    </div>
+    </output>
   );
 }

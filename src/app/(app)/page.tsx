@@ -212,14 +212,8 @@ function FirstSteps({ steps }: Readonly<{ steps: Step[] }>) {
           {doneCount} de {required.length}
         </span>
       </div>
-      <div
-        className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"
-        role="progressbar"
-        aria-label="Avance de los primeros pasos"
-        aria-valuemin={0}
-        aria-valuemax={required.length}
-        aria-valuenow={doneCount}
-      >
+      <progress className="sr-only" aria-label="Avance de los primeros pasos" value={doneCount} max={required.length} />
+      <div aria-hidden className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
         <div className="h-full rounded-full bg-violet-600" style={{ width: `${(doneCount / required.length) * 100}%` }} />
       </div>
       <ol className="mt-4 space-y-2">

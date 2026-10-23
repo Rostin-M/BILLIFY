@@ -183,10 +183,9 @@ export function EmptyBlock({
 /** Filas fantasma mientras carga una lista. */
 export function ListSkeleton({ rows = 4 }: Readonly<{ rows?: number }>) {
   return (
-    <div
-      role="status"
+    <output
       aria-label="Cargando"
-      className="animate-pulse divide-y divide-slate-100 motion-reduce:animate-none dark:divide-white/5"
+      className="block animate-pulse divide-y divide-slate-100 motion-reduce:animate-none dark:divide-white/5"
     >
       {Array.from({ length: rows }, (_, i) => `sk-${i}`).map((key) => (
         <div key={key} className="flex items-center gap-4 px-4 py-4 sm:px-5">
@@ -197,7 +196,7 @@ export function ListSkeleton({ rows = 4 }: Readonly<{ rows?: number }>) {
           <div className="h-6 w-20 rounded-full bg-slate-200 dark:bg-white/10" />
         </div>
       ))}
-    </div>
+    </output>
   );
 }
 
@@ -249,7 +248,7 @@ export function FilterChips<T extends string>({
   onChange,
 }: Readonly<{ label: string; options: FilterOption<T>[]; value: T; onChange: (value: T) => void }>) {
   return (
-    <div role="group" aria-label={label} className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+    <fieldset aria-label={label} className="-mx-4 flex min-w-0 gap-2 overflow-x-auto px-4 py-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -273,7 +272,7 @@ export function FilterChips<T extends string>({
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }
 

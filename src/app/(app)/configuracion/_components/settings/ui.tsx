@@ -33,7 +33,7 @@ export function Unsaved({ show }: Readonly<{ show: boolean }>) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
       <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
-      Sin guardar
+      <span>Sin guardar</span>
     </span>
   );
 }
@@ -188,7 +188,7 @@ export function SectionCard({
             : `${dividerClass} pt-4`
         }`}
       >
-        <p role="status" aria-live="polite" className="flex min-h-5 items-center gap-2 text-sm">
+        <output aria-live="polite" className="flex min-h-5 items-center gap-2 text-sm">
           {dirty && (
             <>
               <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
@@ -200,7 +200,7 @@ export function SectionCard({
               <Check className="h-4 w-4" aria-hidden /> Cambios guardados
             </span>
           )}
-        </p>
+        </output>
         <div className="flex gap-2 sm:shrink-0">
           {dirty && (
             <button

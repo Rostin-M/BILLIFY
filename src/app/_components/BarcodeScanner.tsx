@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, ChecksumException, DecodeHintType, FormatException, NotFoundException } from "@zxing/library";
-import { useDialog } from "~/app/_components/ui/useDialog";
+import { Modal } from "~/app/_components/ui/Modal";
 
 // Chrome on Android ships a native BarcodeDetector backed by the OS's own barcode
 // engine (Google Play Services vision APIs) — it is far more accurate than a
@@ -94,7 +94,7 @@ export function BarcodeScanner({
   variant = "modal",
 }: Readonly<Props>) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const dialogRef = useDialog(onClose, variant === "modal");
+
   const [error, setError] = useState<string | null>(null);
   const [justScanned, setJustScanned] = useState(false);
 
@@ -298,7 +298,7 @@ export function BarcodeScanner({
   }
 
   return (
-    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Escanear código de barras" className="fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-y-auto bg-black/90 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <Modal onClose={onClose} aria-label="Escanear código de barras" className="fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-y-auto bg-black/90 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       {videoBox}
       {error ? (
         <p className="mt-4 max-w-xs text-center text-sm text-red-400">{error}</p>
@@ -312,6 +312,6 @@ export function BarcodeScanner({
       >
         Cancelar
       </button>
-    </div>
+    </Modal>
   );
 }

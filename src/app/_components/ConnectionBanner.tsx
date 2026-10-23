@@ -40,8 +40,7 @@ export function ConnectionBanner() {
   if (online || pathname.startsWith("/ventas")) return null;
 
   return (
-    <div
-      role="status"
+    <output
       className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-200"
     >
       <WifiOff aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
@@ -49,6 +48,6 @@ export function ConnectionBanner() {
         <strong className="font-semibold">Sin conexión a internet.</strong> Lo que cambies aquí no se guardará
         hasta que vuelva la señal. Te avisamos cuando regrese.
       </p>
-    </div>
+    </output>
   );
 }

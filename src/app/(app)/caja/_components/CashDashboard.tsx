@@ -75,7 +75,6 @@ function descriptionPlaceholder(type: "INCOME" | "EXPENSE", supplier: PickedSupp
 }
 
 export function CashDashboard({ register, canClose, business }: Readonly<Props>) {
-  // Salida por defecto: es lo que más se registra (pagos a proveedores, gastos).
   const [form, setForm] = useState({ type: "EXPENSE" as "INCOME" | "EXPENSE", amount: "", description: "", note: "" });
   const [supplier, setSupplier] = useState<PickedSupplier | null>(null);
   const [showNote, setShowNote] = useState(false);
@@ -114,7 +113,6 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
     addMovement.mutate({
       type: form.type,
       amount,
-      // Con proveedor, la descripción puede quedar vacía: se usa "Pago a <proveedor>".
       description: form.description.trim() || (isExpense && supplier ? `Pago a ${supplier.name}` : form.description),
       note: form.note.trim() || undefined,
       supplierId: isExpense ? supplier?.id : undefined,
@@ -216,7 +214,7 @@ export function CashDashboard({ register, canClose, business }: Readonly<Props>)
           {register.cashPaymentsCount > 0 && (
             <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
               <span>
-                Abonos de fiado
+                <span>Abonos de fiado</span>
                 <span className="ml-1 text-xs">({register.cashPaymentsCount})</span>
               </span>
               {register.cashPaymentsTotal === null ? (

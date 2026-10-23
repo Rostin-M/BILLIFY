@@ -35,11 +35,13 @@ const RECEIPT = [
 
 export function AppPreview() {
   return (
-    <div
-      role="img"
-      aria-label="Vista de BILLIFY: la cuenta de la mesa 4 pasa del cuaderno a la app, con tres comensales y el cobro dividido en efectivo y transferencia. Al cobrar sale el recibo. Aviso: sin conexión, las ventas se guardan y se sincronizan solas."
-      className="hero-stage relative mx-auto h-[42rem] w-full max-w-[25rem] sm:h-[40rem] sm:max-w-[34rem] lg:mx-0 lg:ml-auto"
-    >
+    <figure className="hero-stage relative mx-auto h-[42rem] w-full max-w-[25rem] sm:h-[40rem] sm:max-w-[34rem] lg:mx-0 lg:ml-auto">
+      <figcaption className="sr-only">
+        Vista de BILLIFY: la cuenta de la mesa 4 pasa del cuaderno a la app, con tres comensales y el cobro dividido en
+        efectivo y transferencia. Al cobrar sale el recibo. Aviso: sin conexión, las ventas se guardan y se sincronizan
+        solas.
+      </figcaption>
+
       {/* Capa 1: la hoja del cuaderno, detrás */}
       <div
         aria-hidden="true"
@@ -89,6 +91,7 @@ export function AppPreview() {
 
       {/* Capa 2: la app */}
       <div
+        aria-hidden="true"
         data-depth
         style={cssVars({ "--depth": 14 })}
         className="absolute top-0 right-0 z-10 w-[86%] sm:w-[68%]"
@@ -219,6 +222,6 @@ export function AppPreview() {
           </p>
         </div>
       </div>
-    </div>
+    </figure>
   );
 }

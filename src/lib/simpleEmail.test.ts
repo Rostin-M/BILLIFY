@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { isSimpleEmail } from "./simpleEmail";
 
-// [correo, válido como "responder a" (sin < > "), válido para el script de admin].
-// Mismos resultados que daban las expresiones regulares que esta función reemplaza.
+// [correo, válido como "responder a", válido en el script de admin]
 const CASES: [string, boolean, boolean][] = [
   ["ana@example.com", true, true],
   ["a@b.co", true, true],

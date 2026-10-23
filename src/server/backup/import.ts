@@ -59,6 +59,60 @@ function matcher<T extends { id: string; name: string }>(
   };
 }
 
+type ProductEntry = BackupFile["products"][number];
+type ExistingProduct = Awaited<ReturnType<Prisma.TransactionClient["product"]["findMany"]>>[number];
+type ProductMatcher = ReturnType<typeof matcher<ExistingProduct>>;
+
+const productFields = (p: ProductEntry) => ({
+  name: p.name,
+  price: p.price,
+  cost: p.cost,
+  unit: p.unit,
+  taxSlots: p.taxSlots,
+  trackStock: p.trackStock,
+  isActive: p.isActive,
+  category: p.category,
+  lotNumber: p.lotNumber,
+  expiresAt: p.expiresAt,
+  brand: p.brand,
+  presentation: p.presentation,
+  openPrice: p.openPrice,
+  soldByWeight: p.soldByWeight,
+});
+
+function importMovement(ctx: ImportContext, productId: string, quantity: number, stockAfter: number, note: string) {
+  return { businessId: ctx.businessId, productId, userId: ctx.userId, quantity, reason: IMPORT_MOVEMENT_REASON, note, stockAfter };
+}
+
+async function updateMatchedProduct(
+  tx: Prisma.TransactionClient,
+  p: ProductEntry,
+  match: ExistingProduct,
+  products: ProductMatcher,
+) {
+  // Sin código en el archivo se conserva el que ya tenía; tampoco se le quita a otro producto.
+  const owner = p.barcode ? products.byKey.get(p.barcode) : undefined;
+  const barcode = p.barcode && (!owner || owner.id === match.id) ? p.barcode : match.barcode;
+  await tx.product.update({
+    where: { id: match.id },
+    data: { ...productFields(p), barcode, stock: p.stock },
+  });
+}
+
+async function assertProductLimit(tx: Prisma.TransactionClient, ctx: ImportContext, activeBefore: number) {
+  const max = getPlan(ctx.plan).limits.products;
+  if (max === null) return;
+  const activeAfter = await tx.product.count({
+    where: { businessId: ctx.businessId, isActive: true },
+  });
+  if (activeAfter > max && activeAfter > activeBefore) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `Con este archivo tendrías ${activeAfter.toLocaleString("es-CO")} productos activos y tu plan ${getPlan(ctx.plan).name} permite ${max.toLocaleString("es-CO")}. Sube de plan o desactiva productos en el archivo.`,
+    });
+  }
+}
+
 async function importProducts(
   tx: Prisma.TransactionClient,
   ctx: ImportContext,
@@ -75,46 +129,13 @@ async function importProducts(
   let updated = 0;
 
   for (const p of file.products) {
-    const fields = {
-      name: p.name,
-      price: p.price,
-      cost: p.cost,
-      unit: p.unit,
-      taxSlots: p.taxSlots,
-      trackStock: p.trackStock,
-      isActive: p.isActive,
-      category: p.category,
-      lotNumber: p.lotNumber,
-      expiresAt: p.expiresAt,
-      brand: p.brand,
-      presentation: p.presentation,
-      openPrice: p.openPrice,
-      soldByWeight: p.soldByWeight,
-    };
     const match = products.match(p.name, p.barcode);
 
     if (match) {
       refToId.set(p.ref, match.id);
-      // Sin código en el archivo se conserva el que ya tenía; tampoco se le quita a otro producto.
-      const owner = p.barcode ? products.byKey.get(p.barcode) : undefined;
-      const barcode =
-        p.barcode && (!owner || owner.id === match.id)
-          ? p.barcode
-          : match.barcode;
-      await tx.product.update({
-        where: { id: match.id },
-        data: { ...fields, barcode, stock: p.stock },
-      });
+      await updateMatchedProduct(tx, p, match, products);
       if (p.stock !== match.stock) {
-        movements.push({
-          businessId: ctx.businessId,
-          productId: match.id,
-          userId: ctx.userId,
-          quantity: p.stock - match.stock,
-          reason: IMPORT_MOVEMENT_REASON,
-          note: "Stock del archivo importado",
-          stockAfter: p.stock,
-        });
+        movements.push(importMovement(ctx, match.id, p.stock - match.stock, p.stock, "Stock del archivo importado"));
       }
       updated++;
       continue;
@@ -123,26 +144,17 @@ async function importProducts(
     const id = randomUUID();
     refToId.set(p.ref, id);
     // Si el código ya es de otro producto del negocio, el nuevo entra sin código (es único por negocio).
-    const barcode =
-      p.barcode && !products.byKey.has(p.barcode) ? p.barcode : null;
+    const barcode = p.barcode && !products.byKey.has(p.barcode) ? p.barcode : null;
     creates.push({
       id,
       businessId: ctx.businessId,
-      ...fields,
+      ...productFields(p),
       barcode,
       stock: p.stock,
       createdAt: p.createdAt,
     });
     if (p.stock > 0) {
-      movements.push({
-        businessId: ctx.businessId,
-        productId: id,
-        userId: ctx.userId,
-        quantity: p.stock,
-        reason: IMPORT_MOVEMENT_REASON,
-        note: "Stock inicial del archivo importado",
-        stockAfter: p.stock,
-      });
+      movements.push(importMovement(ctx, id, p.stock, p.stock, "Stock inicial del archivo importado"));
     }
   }
 
@@ -150,19 +162,7 @@ async function importProducts(
   if (movements.length)
     await tx.inventoryMovement.createMany({ data: movements });
   await rememberBrands(tx, ctx.businessId, file.products.map((p) => p.brand));
-
-  const max = getPlan(ctx.plan).limits.products;
-  if (max !== null) {
-    const activeAfter = await tx.product.count({
-      where: { businessId: ctx.businessId, isActive: true },
-    });
-    if (activeAfter > max && activeAfter > activeBefore) {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: `Con este archivo tendrías ${activeAfter.toLocaleString("es-CO")} productos activos y tu plan ${getPlan(ctx.plan).name} permite ${max.toLocaleString("es-CO")}. Sube de plan o desactiva productos en el archivo.`,
-      });
-    }
-  }
+  await assertProductLimit(tx, ctx, activeBefore);
 
   return { refToId, summary: { created: creates.length, updated } };
 }
@@ -213,24 +213,20 @@ async function importCustomers(
   return { refToId, summary: { created: creates.length, updated } };
 }
 
-async function importCredit(
-  tx: Prisma.TransactionClient,
-  ctx: ImportContext,
-  file: BackupFile,
-  productIds: Map<string, string>,
-  customerIds: Map<string, string>,
-) {
-  const withCredit = file.customers.filter((c) => c.credit);
-  const saleRefs = withCredit.flatMap((c) => c.credit!.sales.map((s) => s.ref));
-  const paymentRefs = withCredit.flatMap((c) =>
-    c.credit!.payments.map((p) => p.ref),
-  );
+type CreditSale = NonNullable<BackupFile["customers"][number]["credit"]>["sales"][number];
+type CreditPayment = NonNullable<BackupFile["customers"][number]["credit"]>["payments"][number];
 
-  // Ya están si el archivo salió de este mismo negocio (mismo id) o si ya se importó antes (llave).
+/** Refs de fiados y abonos que ya están: el archivo salió de este negocio (mismo id) o ya se importó (llave). */
+async function knownCreditRefs(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  saleRefs: string[],
+  paymentRefs: string[],
+) {
   const [knownSales, knownPayments] = await Promise.all([
     tx.sale.findMany({
       where: {
-        businessId: ctx.businessId,
+        businessId,
         OR: [
           { id: { in: saleRefs } },
           { idempotencyKey: { in: saleRefs.map(importKey) } },
@@ -240,7 +236,7 @@ async function importCredit(
     }),
     tx.customerPayment.findMany({
       where: {
-        businessId: ctx.businessId,
+        businessId,
         OR: [
           { id: { in: paymentRefs } },
           { idempotencyKey: { in: paymentRefs.map(importKey) } },
@@ -252,7 +248,71 @@ async function importCredit(
   const known = new Set(
     [...knownSales, ...knownPayments].flatMap((r) => [r.id, r.idempotencyKey]),
   );
-  const isKnown = (ref: string) => known.has(ref) || known.has(importKey(ref));
+  return (ref: string) => known.has(ref) || known.has(importKey(ref));
+}
+
+// El consecutivo de factura es del negocio original: se deja como referencia en la nota.
+const creditSaleNote = (s: CreditSale) =>
+  [s.note, s.invoiceNumber ? `Factura original ${s.invoiceNumber}` : null].filter(Boolean).join(" · ") || null;
+
+function creditSaleRows(ctx: ImportContext, customerId: string, s: CreditSale, productIds: Map<string, string>) {
+  const saleId = randomUUID();
+  const sale: Prisma.SaleCreateManyInput = {
+    id: saleId,
+    businessId: ctx.businessId,
+    userId: ctx.userId,
+    customerId,
+    saleType: s.saleType,
+    status: "COMPLETED",
+    paymentMethod: "CREDIT",
+    subtotal: s.subtotal,
+    taxAmount: s.taxAmount,
+    taxLines: jsonOrUndefined(s.taxLines),
+    total: s.total,
+    note: creditSaleNote(s),
+    idempotencyKey: importKey(s.ref),
+    createdAt: s.date,
+  };
+  const items: Prisma.SaleItemCreateManyInput[] = s.items.map((item) => ({
+    saleId,
+    productId: productIds.get(item.productRef)!,
+    name: item.name,
+    unit: item.unit,
+    price: item.price,
+    quantity: item.quantity,
+    subtotal: item.subtotal,
+    taxLines: jsonOrUndefined(item.taxLines),
+    // El stock ya viene en el archivo: estas ventas no descuentan inventario (ni lo devuelven al anularlas).
+    stockDeducted: 0,
+  }));
+  return { sale, items };
+}
+
+const creditPaymentRow = (ctx: ImportContext, customerId: string, p: CreditPayment): Prisma.CustomerPaymentCreateManyInput => ({
+  businessId: ctx.businessId,
+  customerId,
+  userId: ctx.userId,
+  amount: p.amount,
+  note: p.note,
+  paymentMethod: p.method,
+  idempotencyKey: importKey(p.ref),
+  createdAt: p.date,
+});
+
+async function importCredit(
+  tx: Prisma.TransactionClient,
+  ctx: ImportContext,
+  file: BackupFile,
+  productIds: Map<string, string>,
+  customerIds: Map<string, string>,
+) {
+  const withCredit = file.customers.filter((c) => c.credit);
+  const isKnown = await knownCreditRefs(
+    tx,
+    ctx.businessId,
+    withCredit.flatMap((c) => c.credit!.sales.map((s) => s.ref)),
+    withCredit.flatMap((c) => c.credit!.payments.map((p) => p.ref)),
+  );
 
   const sales: Prisma.SaleCreateManyInput[] = [];
   const items: Prisma.SaleItemCreateManyInput[] = [];
@@ -266,60 +326,13 @@ async function importCredit(
         skipped++;
         continue;
       }
-      const saleId = randomUUID();
-      sales.push({
-        id: saleId,
-        businessId: ctx.businessId,
-        userId: ctx.userId,
-        customerId,
-        saleType: s.saleType,
-        status: "COMPLETED",
-        paymentMethod: "CREDIT",
-        subtotal: s.subtotal,
-        taxAmount: s.taxAmount,
-        taxLines: jsonOrUndefined(s.taxLines),
-        total: s.total,
-        // El consecutivo de factura es del negocio original: se deja como referencia en la nota.
-        note:
-          [
-            s.note,
-            s.invoiceNumber ? `Factura original ${s.invoiceNumber}` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ") || null,
-        idempotencyKey: importKey(s.ref),
-        createdAt: s.date,
-      });
-      for (const item of s.items) {
-        items.push({
-          saleId,
-          productId: productIds.get(item.productRef)!,
-          name: item.name,
-          unit: item.unit,
-          price: item.price,
-          quantity: item.quantity,
-          subtotal: item.subtotal,
-          taxLines: jsonOrUndefined(item.taxLines),
-          // El stock ya viene en el archivo: estas ventas no descuentan inventario (ni lo devuelven al anularlas).
-          stockDeducted: 0,
-        });
-      }
+      const rows = creditSaleRows(ctx, customerId, s, productIds);
+      sales.push(rows.sale);
+      items.push(...rows.items);
     }
     for (const p of c.credit!.payments) {
-      if (isKnown(p.ref)) {
-        skipped++;
-        continue;
-      }
-      payments.push({
-        businessId: ctx.businessId,
-        customerId,
-        userId: ctx.userId,
-        amount: p.amount,
-        note: p.note,
-        paymentMethod: p.method,
-        idempotencyKey: importKey(p.ref),
-        createdAt: p.date,
-      });
+      if (isKnown(p.ref)) skipped++;
+      else payments.push(creditPaymentRow(ctx, customerId, p));
     }
   }
 

@@ -5,7 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 
 import { api } from "~/trpc/react";
 import type { BusinessInfoForPdf, TaxLine } from "~/lib/pdf/FacturaPDF";
-import { useDialog } from "~/app/_components/ui/useDialog";
+import { Modal } from "~/app/_components/ui/Modal";
 import { formatCOP } from "~/lib/format/money";
 
 const FacturaPdfActions = dynamic(
@@ -21,7 +21,7 @@ type Props = {
 };
 
 export function MesaInvoicesModal({ saleIds, business, onClose }: Readonly<Props>) {
-  const dialogRef = useDialog(onClose);
+
   // Las ventas son de hoy: salen del mismo listado que usa el historial de ventas.
   const { data: sales, isPending, isError, refetch } = api.sale.list.useQuery({});
   const invoiced = (sales ?? []).filter((s) => saleIds.includes(s.id) && s.invoiceNumber);
@@ -29,7 +29,7 @@ export function MesaInvoicesModal({ saleIds, business, onClose }: Readonly<Props
 
   let body: React.ReactNode;
   if (isPending) {
-    body = <p role="status" className="text-sm text-slate-500 dark:text-slate-400">Preparando la factura…</p>;
+    body = <output className="block text-sm text-slate-500 dark:text-slate-400">Preparando la factura…</output>;
   } else if (isError || invoiced.length === 0) {
     body = (
       <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
@@ -86,32 +86,29 @@ export function MesaInvoicesModal({ saleIds, business, onClose }: Readonly<Props
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="mesa-invoice-title"
-        className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
-      >
-        <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-          <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-        </div>
-        <h2 id="mesa-invoice-title" className="mt-3 text-lg font-bold text-slate-800 dark:text-white">
-          {many ? "Facturas emitidas" : "Factura emitida"}
-        </h2>
-        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">¿Qué quieres hacer con la factura?</p>
-
-        {body}
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-4 min-h-11 w-full rounded-xl border border-slate-200 text-center text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
-        >
-          Listo
-        </button>
+    <Modal
+      onClose={onClose}
+      overlayClassName="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+      aria-labelledby="mesa-invoice-title"
+      className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+    >
+      <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+        <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
       </div>
-    </div>
+      <h2 id="mesa-invoice-title" className="mt-3 text-lg font-bold text-slate-800 dark:text-white">
+        {many ? "Facturas emitidas" : "Factura emitida"}
+      </h2>
+      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">¿Qué quieres hacer con la factura?</p>
+
+      {body}
+
+      <button
+        type="button"
+        onClick={onClose}
+        className="mt-4 min-h-11 w-full rounded-xl border border-slate-200 text-center text-sm text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
+      >
+        Listo
+      </button>
+    </Modal>
   );
 }

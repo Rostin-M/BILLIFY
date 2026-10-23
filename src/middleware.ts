@@ -120,6 +120,58 @@ function isCrossOrigin(req: Request, requestHost: string): boolean {
   }
 }
 
+type AuthRequest = Parameters<Parameters<typeof auth>[0]>[0];
+type SessionUser = NonNullable<AuthRequest["auth"]>["user"];
+
+function crossOriginBlock(req: AuthRequest, isApi: boolean): Response | null {
+  if (!isApi || SAFE_METHODS.has(req.method)) return null;
+  const requestHost = req.headers.get("x-forwarded-host") ?? req.nextUrl.host;
+  if (!isCrossOrigin(req, requestHost)) return null;
+  return NextResponse.json({ error: "Origen no permitido" }, { status: 403 });
+}
+
+function mustChangePasswordBlock(req: AuthRequest, user: SessionUser | undefined, isApi: boolean): Response | null {
+  if (!user?.mustChangePassword || isAllowedWhileMustChangePassword(req.nextUrl.pathname)) return null;
+  if (isApi) return NextResponse.json({ error: "Debes cambiar tu contraseña" }, { status: 403 });
+  return NextResponse.redirect(new URL(CHANGE_PASSWORD_PATH, req.nextUrl.origin));
+}
+
+function loginRequired(req: AuthRequest, isApi: boolean): Response {
+  if (isApi) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const { pathname, search } = req.nextUrl;
+  const loginUrl = new URL("/auth/login", req.nextUrl.origin);
+  // Solo la ruta relativa: nunca una URL absoluta (evita open redirect).
+  loginUrl.searchParams.set("callbackUrl", `${pathname}${search}`);
+  return NextResponse.redirect(loginUrl);
+}
+
+// Separación entre el panel de la plataforma y la app de negocio.
+function platformSeparation(req: AuthRequest, user: NonNullable<SessionUser>, isApi: boolean): Response | null {
+  if (matchesPrefix(req.nextUrl.pathname, PLATFORM_ADMIN_HOME)) {
+    // Propietarios, cajeros o un SUPERADMIN fuera de la lista: no entran.
+    if (isPlatformAdmin({ role: user.role, businessId: user.businessId, email: user.email ?? null })) return null;
+    return NextResponse.redirect(new URL("/", req.nextUrl.origin));
+  }
+  // Aislamiento inverso: el administrador no usa las páginas de negocio. Las
+  // APIs no se redirigen: las rechazan sus propios guards (no tiene negocio).
+  if (user.role === PLATFORM_ADMIN_ROLE && !isApi) {
+    return NextResponse.redirect(new URL(PLATFORM_ADMIN_HOME, req.nextUrl.origin));
+  }
+  return null;
+}
+
+function guard(req: AuthRequest): Response | null {
+  const { pathname } = req.nextUrl;
+  const isApi = matchesPrefix(pathname, "/api");
+  const user = req.auth?.user;
+
+  const blocked = crossOriginBlock(req, isApi) ?? mustChangePasswordBlock(req, user, isApi);
+  if (blocked) return blocked;
+  if (isPublicPath(pathname)) return null;
+  if (!user) return loginRequired(req, isApi);
+  return platformSeparation(req, user, isApi);
+}
+
 export default auth((req) => {
   const nonce = btoa(crypto.randomUUID());
   const csp = contentSecurityPolicy(nonce);
@@ -130,58 +182,9 @@ export default auth((req) => {
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 
-  const withCsp = <T extends Response>(res: T): T => {
-    res.headers.set("Content-Security-Policy", csp);
-    return res;
-  };
-  const next = () => withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
-
-  const { pathname, search } = req.nextUrl;
-  const isApi = matchesPrefix(pathname, "/api");
-
-  if (isApi && !SAFE_METHODS.has(req.method)) {
-    const requestHost = req.headers.get("x-forwarded-host") ?? req.nextUrl.host;
-    if (isCrossOrigin(req, requestHost)) {
-      return withCsp(NextResponse.json({ error: "Origen no permitido" }, { status: 403 }));
-    }
-  }
-
-  const user = req.auth?.user;
-
-  if (user?.mustChangePassword && !isAllowedWhileMustChangePassword(pathname)) {
-    if (isApi) {
-      return withCsp(NextResponse.json({ error: "Debes cambiar tu contraseña" }, { status: 403 }));
-    }
-    return withCsp(NextResponse.redirect(new URL(CHANGE_PASSWORD_PATH, req.nextUrl.origin)));
-  }
-
-  if (isPublicPath(pathname)) return next();
-
-  if (!user) {
-    if (isApi) {
-      return withCsp(NextResponse.json({ error: "No autorizado" }, { status: 401 }));
-    }
-    const loginUrl = new URL("/auth/login", req.nextUrl.origin);
-    // Solo la ruta relativa: nunca una URL absoluta (evita open redirect).
-    loginUrl.searchParams.set("callbackUrl", `${pathname}${search}`);
-    return withCsp(NextResponse.redirect(loginUrl));
-  }
-
-  // ── Separación entre el panel de la plataforma y la app de negocio ───────
-  if (matchesPrefix(pathname, PLATFORM_ADMIN_HOME)) {
-    // Propietarios, cajeros o un SUPERADMIN fuera de la lista: no entran.
-    if (!isPlatformAdmin({ role: user.role, businessId: user.businessId, email: user.email ?? null })) {
-      return withCsp(NextResponse.redirect(new URL("/", req.nextUrl.origin)));
-    }
-    return next();
-  }
-  // Aislamiento inverso: el administrador no usa las páginas de negocio. Las
-  // APIs no se redirigen: las rechazan sus propios guards (no tiene negocio).
-  if (user.role === PLATFORM_ADMIN_ROLE && !isApi) {
-    return withCsp(NextResponse.redirect(new URL(PLATFORM_ADMIN_HOME, req.nextUrl.origin)));
-  }
-
-  return next();
+  const res = guard(req) ?? NextResponse.next({ request: { headers: requestHeaders } });
+  res.headers.set("Content-Security-Policy", csp);
+  return res;
 });
 
 export const config = {

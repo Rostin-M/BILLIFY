@@ -265,9 +265,8 @@ function ImportCard() {
       )}
 
       {result && (
-        <div
-          role="status"
-          className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-900/20 dark:text-emerald-200"
+        <output
+          className="block mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-900/20 dark:text-emerald-200"
         >
           <p className="flex items-center gap-2 font-semibold">
             <CheckCircle2 className="h-4 w-4" aria-hidden /> Respaldo cargado
@@ -289,7 +288,7 @@ function ImportCard() {
                 ` (${count(result.credit.skipped, "ya estaba y no se repitió", "ya estaban y no se repitieron")})`}
             </li>
           </ul>
-        </div>
+        </output>
       )}
     </section>
   );

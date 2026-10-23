@@ -95,7 +95,7 @@ export default function RegisterPage() {
   if (verified) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 text-slate-900 dark:bg-slate-950 dark:text-white">
-        <div role="status" className="space-y-3 text-center">
+        <output className="block space-y-3 text-center">
           <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
           <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
             ¡Cuenta verificada con éxito!
@@ -110,7 +110,7 @@ export default function RegisterPage() {
               Te llevamos al inicio de sesión para que entres con tu correo y contraseña...
             </p>
           )}
-        </div>
+        </output>
       </main>
     );
   }

@@ -61,11 +61,11 @@ export function accessLine(sub: PlatformSubscriptionSummary): string {
   const date = sub.endsAt ? formatShortDate(sub.endsAt) : null;
   switch (sub.phase) {
     case "TRIAL":
-      return `La prueba termina${date ? ` el ${date}` : ""} (${remaining(sub.daysLeft)})`;
+      return `La prueba termina${date ? " el " + date : ""} (${remaining(sub.daysLeft)})`;
     case "ACTIVE":
       return date ? `Vence el ${date} (${remaining(sub.daysLeft)})` : "Activo";
     case "PAST_DUE":
-      return `Venció${date ? ` el ${date}` : ""}, ${days(sub.graceDaysLeft)} de gracia`;
+      return `Venció${date ? " el " + date : ""}, ${days(sub.graceDaysLeft)} de gracia`;
     case "CANCELED":
       return date ? `Canceló; con acceso hasta el ${date}` : "Canceló la renovación";
     case "READ_ONLY":

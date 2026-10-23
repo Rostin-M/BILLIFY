@@ -6,7 +6,6 @@ import type { Prisma } from "@prisma/client";
 const fmtCOP = (v: number) =>
   v.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 });
 
-/** Lo que debe un cliente: ventas fiadas vigentes menos sus abonos. */
 export async function computeCustomerDebt(db: Prisma.TransactionClient, businessId: string, customerId: string) {
   const [creditTotal, paidTotal] = await Promise.all([
     db.sale.aggregate({
@@ -21,10 +20,6 @@ export async function computeCustomerDebt(db: Prisma.TransactionClient, business
   return (creditTotal._sum.total ?? 0) - (paidTotal._sum.amount ?? 0);
 }
 
-/**
- * Antes de fiarle `amount` a un cliente: si el negocio exige el acuerdo firmado, que lo haya
- * firmado; y si el cliente tiene monto máximo, que la nueva deuda no lo pase.
- */
 export async function assertCreditAllowed(
   db: Prisma.TransactionClient,
   businessId: string,

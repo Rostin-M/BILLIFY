@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 import { ArrowRight, Minus, ShoppingCart, TrendingDown, TrendingUp, Wallet, Package } from "lucide-react";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { SkeletonKpiCard } from "~/app/_components/Skeletons";
@@ -286,19 +286,19 @@ function SalesBarChart({
               const minHeightPct = hasData ? 3 : 2;
               const barHeight = chartAnimated ? `${Math.max(heightPct, minHeightPct)}%` : "0%";
               return (
-                <div
+                <button
+                  type="button"
                   key={bucket.key}
-                  tabIndex={0}
                   aria-label={`${bucket.label}: ${formatCOP(bucket.total)}, ${bucket.count} venta${bucket.count !== 1 ? "s" : ""}`}
-                  className="group relative flex flex-1 flex-col items-center gap-1 rounded outline-none"
+                  className="group relative flex flex-1 cursor-default flex-col items-center gap-1 rounded outline-none"
                 >
-                  <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden min-w-max -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-lg group-hover:block group-focus:block dark:border-white/10 dark:bg-slate-800">
-                    <p className="font-semibold text-slate-700 dark:text-white">{formatCOP(bucket.total)}</p>
-                    <p className="text-slate-500">{bucket.count} venta{bucket.count !== 1 ? "s" : ""}</p>
-                  </div>
+                  <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden min-w-max -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left text-xs shadow-lg group-hover:block group-focus:block dark:border-white/10 dark:bg-slate-800">
+                    <span className="block font-semibold text-slate-700 dark:text-white">{formatCOP(bucket.total)}</span>
+                    <span className="block text-slate-500">{bucket.count} venta{bucket.count !== 1 ? "s" : ""}</span>
+                  </span>
                   {/* Barra: posición absoluta para que el alto en % se calcule sobre la columna */}
-                  <div className="relative w-full flex-1">
-                    <div
+                  <span className="relative block w-full flex-1">
+                    <span
                       className={`absolute inset-x-0 bottom-0 rounded-t-md ${chartBarColorClass(hasData, isLatest)}`}
                       style={{
                         height: barHeight,
@@ -306,11 +306,11 @@ function SalesBarChart({
                         transitionDelay: `${index * 35}ms`,
                       }}
                     />
-                  </div>
+                  </span>
                   <span className="truncate text-[10px] text-slate-500 sm:text-xs dark:text-slate-400">
                     {bucket.label}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -562,18 +562,26 @@ function KpiCard({
     red: "text-red-600 dark:text-red-400",
     amber: "text-amber-600 dark:text-amber-400",
   };
+  const tooltipId = useId();
 
   return (
-    <div
-      tabIndex={tooltip ? 0 : undefined}
-      className="group relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5"
-    >
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+    <div className="group relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+      {tooltip ? (
+        <button
+          type="button"
+          aria-describedby={tooltipId}
+          className="block cursor-default text-left text-xs font-medium text-slate-500 outline-none dark:text-slate-400"
+        >
+          {label}
+        </button>
+      ) : (
+        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      )}
       <p className={`mt-1 break-words text-base font-bold tabular-nums sm:text-lg ${colorMap[color]}`}>{value}</p>
       {trend != null && <TrendPill value={trend} />}
       {sub && <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{sub}</p>}
       {tooltip && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-56 max-w-[80vw] -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block group-focus:block dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
+        <div id={tooltipId} role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-56 max-w-[80vw] -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-focus-within:block group-hover:block dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
           {tooltip}
         </div>
       )}

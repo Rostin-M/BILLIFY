@@ -223,6 +223,42 @@ describe("backup.import", () => {
     await expect(debtOf(shop.business.id, shop.debtor.id)).resolves.toBe(2500);
   });
 
+  it("empareja primero por código de barras, no repite códigos y conserva los datos que el archivo no trae", async () => {
+    const source = await shopWithData();
+    const backup = await callerFor(source.owner).backup.export();
+    const target = await createShop();
+    const local = await createProduct(target.business.id, { name: "Tinto", barcode: "111", stock: 1 });
+    const gaseosa = await createProduct(target.business.id, { name: "Gaseosa", barcode: "770123" });
+    const leche = await createProduct(target.business.id, { name: "Leche", barcode: "222" });
+    const jairo = await createCustomer(target.business.id, { name: "Don Jairo", document: null, phone: "1" });
+    const tinto = backup.products.find((p) => p.name === "Tinto")!;
+    const file: BackupFileInput = {
+      ...backup,
+      products: [
+        ...backup.products,
+        { ...tinto, ref: "doble", name: "Tinto doble", barcode: "111" },
+        { ...tinto, ref: "leche", name: "Leche", barcode: null },
+        { ...tinto, ref: "deslactosada", name: "Leche deslactosada", barcode: "222" },
+      ],
+      customers: backup.customers.map((c) => (c.name === "Al día" ? { ...c, document: null } : c)),
+    };
+
+    const summary = await callerFor(target.owner).backup.import({ file });
+
+    expect(summary.products).toEqual({ created: 2, updated: 3 });
+    await expect(db.product.findUniqueOrThrow({ where: { id: gaseosa.id } })).resolves.toMatchObject({ name: "Tinto", barcode: "770123" });
+    await expect(db.product.findUniqueOrThrow({ where: { id: local.id } })).resolves.toMatchObject({ name: "Tinto doble", barcode: "111" });
+    // Sin código en el archivo, "Leche" conserva el suyo; el nuevo que trae ese código entra sin código.
+    await expect(db.product.findUniqueOrThrow({ where: { id: leche.id } })).resolves.toMatchObject({ barcode: "222" });
+    await expect(
+      db.product.findFirstOrThrow({ where: { businessId: target.business.id, name: "Leche deslactosada" } }),
+    ).resolves.toMatchObject({ barcode: null });
+    await expect(db.customer.findUniqueOrThrow({ where: { id: jairo.id } })).resolves.toMatchObject({ document: "1010", phone: "3001112233" });
+    await expect(
+      db.customer.findFirstOrThrow({ where: { businessId: target.business.id, name: "Al día" } }),
+    ).resolves.toMatchObject({ document: null });
+  });
+
   it("respeta el límite de productos del plan sin dejar nada a medias", async () => {
     const target = await createShop();
     await setSubscription(target.business.id, { plan: "BASIC" });

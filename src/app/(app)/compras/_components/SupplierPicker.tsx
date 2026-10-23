@@ -14,10 +14,6 @@ type Props = {
   placeholder?: string;
 };
 
-/**
- * Proveedor de una salida o compra: busca entre los guardados (los de siempre salen al
- * escribir) y, si no está, lo crea con el nombre escrito sin salir del formulario.
- */
 export function SupplierPicker({ value, onChange, inputClassName, placeholder = "Buscar o crear proveedor..." }: Readonly<Props>) {
   const listId = useId();
   const [query, setQuery] = useState("");

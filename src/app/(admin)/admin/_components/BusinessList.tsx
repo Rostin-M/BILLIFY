@@ -81,7 +81,7 @@ export function BusinessList({
                 onClick={() => onActivate(business)}
                 className={`${buttonClass.row} sm:shrink-0`}
               >
-                Activar plan
+                <span>Activar plan</span>
                 <span className="sr-only"> a {business.name}</span>
               </button>
             )}

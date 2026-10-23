@@ -55,7 +55,6 @@ function toInput(form: SettingsForm, maxCashRegisters: number, sendBrands: boole
     cashBlindClose: form.cashBlindClose,
     cashCountByDenomination: form.cashCountByDenomination,
     creditSignatureRequired: form.creditSignatureRequired,
-    // Vacío = texto por defecto de la app.
     creditTerms: form.creditTerms.trim() || null,
   };
 }
@@ -227,11 +226,9 @@ function BusinessSettingsForm({ initial }: Readonly<{ initial: BusinessData }>) 
           />
         )}
 
-        {active === "plan" ? (
-          <PlanSection />
-        ) : active === "datos" ? (
-          <DatosSection />
-        ) : (
+        {active === "plan" && <PlanSection />}
+        {active === "datos" && <DatosSection />}
+        {active !== "plan" && active !== "datos" && (
           <SectionCard
             key={active}
             title={activeMeta.label}

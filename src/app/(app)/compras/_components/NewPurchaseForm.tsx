@@ -17,7 +17,6 @@ const PAY_METHODS: { value: PayMethod; label: string }[] = [
   { value: "CARD", label: "Tarjeta" },
 ];
 
-// Plazos rápidos para pagar el saldo; null = sin fecha (se paga en la próxima entrega).
 const DUE_PRESETS: { label: string; days: number | null }[] = [
   { label: "Próxima entrega", days: null },
   { label: "8 días", days: 8 },
@@ -49,7 +48,6 @@ const segmentClass = (active: boolean) =>
 
 const lineQty = (l: Line) => Math.max(Math.trunc(num(l.quantity)), 0);
 
-// Total, lo que se paga ahora y lo que queda debiendo.
 function purchaseTotals(p: { lines: Line[]; amountOnly: boolean; amount: string; payMode: PayMode; paidNow: string }) {
   const total = p.amountOnly ? num(p.amount) : p.lines.reduce((s, l) => s + lineQty(l) * num(l.unitCost), 0);
   const paid = p.payMode === "FULL" ? total : Math.min(num(p.paidNow), total);

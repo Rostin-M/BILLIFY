@@ -107,7 +107,7 @@ export function PaymentList({
               </span>
               {onResolveReview && p.needsReview && (
                 <button type="button" onClick={() => onResolveReview(p)} className={`${buttonClass.row} basis-full sm:basis-auto`}>
-                  Marcar como revisado
+                  <span>Marcar como revisado</span>
                   <span className="sr-only"> el pago de {p.businessName}</span>
                 </button>
               )}
@@ -117,7 +117,7 @@ export function PaymentList({
                   onClick={() => onRevoke(p)}
                   className="inline-flex min-h-11 sm:min-h-9 items-center rounded-lg px-2 text-sm font-semibold text-red-700 underline-offset-2 hover:underline dark:text-red-300"
                 >
-                  Revocar
+                  <span>Revocar</span>
                   <span className="sr-only"> la activación de {days(grant.days)}</span>
                 </button>
               )}

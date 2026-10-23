@@ -27,56 +27,68 @@ const CTA_CLASSES: Record<Tone, string> = {
   danger: "rounded-lg bg-red-600 px-3 py-1 text-white hover:bg-red-500",
 };
 
+function readOnlyBanner(owner: boolean): Banner {
+  return {
+    tone: "danger",
+    icon: LockKeyhole,
+    text: owner
+      ? "Tu cuenta está en solo lectura. Puedes ver tu historial, pero no vender."
+      : "La cuenta está en solo lectura. Pídele al propietario que renueve el plan.",
+    cta: owner ? "Pagar y reactivar" : null,
+  };
+}
+
+function pastDueBanner(status: Status, owner: boolean): Banner {
+  return {
+    tone: "warning",
+    icon: AlertTriangle,
+    text: owner
+      ? `Tu plan venció. Te quedan ${days(status.graceDaysLeft)} de gracia; después no podrás vender.`
+      : `El plan venció. Quedan ${days(status.graceDaysLeft)} de gracia: avísale al propietario.`,
+    cta: owner ? "Renovar" : null,
+  };
+}
+
+function trialBanner(status: Status, owner: boolean): Banner | null {
+  const lastDays = status.daysLeft <= 2;
+  if (!owner && !lastDays) return null;
+  const when = status.daysLeft <= 1 ? "Hoy es el último día de" : `Quedan ${days(status.daysLeft)} de`;
+  const nudge = lastDays ? " Elige un plan para seguir vendiendo." : "";
+  return {
+    tone: lastDays ? "notice" : "quiet",
+    icon: Clock,
+    text: owner ? `${when} tu prueba gratis.${nudge}` : `${when} la prueba gratis. Avísale al propietario.`,
+    cta: owner ? "Elegir plan" : null,
+  };
+}
+
+function endingBanner(status: Status, owner: boolean): Banner | null {
+  if (!owner || status.daysLeft > 7 || !status.endsAt) return null;
+  const date = formatDate(status.endsAt);
+  const canceled = status.phase === "CANCELED";
+  return {
+    tone: "quiet",
+    icon: Clock,
+    text: canceled
+      ? `Cancelaste la renovación. Tu plan termina el ${date}.`
+      : `Tu plan vence el ${date} (en ${days(status.daysLeft)}).`,
+    cta: canceled ? "Reactivar" : "Renovar",
+  };
+}
+
 /** Qué aviso mostrar según el estado. `null` = nada. Exportado para pruebas. */
 export function bannerFor(status: Status): Banner | null {
   const owner = status.isOwner;
-
   switch (status.phase) {
     case "READ_ONLY":
-      return {
-        tone: "danger",
-        icon: LockKeyhole,
-        text: owner
-          ? "Tu cuenta está en solo lectura. Puedes ver tu historial, pero no vender."
-          : "La cuenta está en solo lectura. Pídele al propietario que renueve el plan.",
-        cta: owner ? "Pagar y reactivar" : null,
-      };
+      return readOnlyBanner(owner);
     case "PAST_DUE":
-      return {
-        tone: "warning",
-        icon: AlertTriangle,
-        text: owner
-          ? `Tu plan venció. Te quedan ${days(status.graceDaysLeft)} de gracia; después no podrás vender.`
-          : `El plan venció. Quedan ${days(status.graceDaysLeft)} de gracia: avísale al propietario.`,
-        cta: owner ? "Renovar" : null,
-      };
-    case "TRIAL": {
-      const lastDays = status.daysLeft <= 2;
-      if (!owner && !lastDays) return null;
-      const when = status.daysLeft <= 1 ? "Hoy es el último día de" : `Quedan ${days(status.daysLeft)} de`;
-      return {
-        tone: lastDays ? "notice" : "quiet",
-        icon: Clock,
-        text: owner
-          ? `${when} tu prueba gratis.${lastDays ? " Elige un plan para seguir vendiendo." : ""}`
-          : `${when} la prueba gratis. Avísale al propietario.`,
-        cta: owner ? "Elegir plan" : null,
-      };
-    }
+      return pastDueBanner(status, owner);
+    case "TRIAL":
+      return trialBanner(status, owner);
     case "ACTIVE":
-    case "CANCELED": {
-      if (!owner || status.daysLeft > 7 || !status.endsAt) return null;
-      const date = formatDate(status.endsAt);
-      return {
-        tone: "quiet",
-        icon: Clock,
-        text:
-          status.phase === "CANCELED"
-            ? `Cancelaste la renovación. Tu plan termina el ${date}.`
-            : `Tu plan vence el ${date} (en ${days(status.daysLeft)}).`,
-        cta: status.phase === "CANCELED" ? "Reactivar" : "Renovar",
-      };
-    }
+    case "CANCELED":
+      return endingBanner(status, owner);
   }
 }
 

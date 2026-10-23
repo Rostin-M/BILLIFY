@@ -155,15 +155,15 @@ function MeterRow({ meter }: Readonly<{ meter: Meter }>) {
           {format(meter.used)} {meter.limit === null ? "(sin límite)" : `de ${format(meter.limit)}`}
         </span>
       </div>
-      <div
-        role="meter"
+      <meter
+        className="sr-only"
         aria-label={meter.label}
-        aria-valuemin={0}
-        aria-valuemax={meter.limit ?? meter.used}
-        aria-valuenow={meter.used}
-        aria-valuetext={`${format(meter.used)} ${meter.limit === null ? "sin límite" : `de ${format(meter.limit)}`}`}
-        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"
-      >
+        aria-valuetext={`${format(meter.used)} ${meter.limit === null ? "sin límite" : "de " + format(meter.limit)}`}
+        min={0}
+        max={meter.limit ?? meter.used}
+        value={meter.used}
+      />
+      <div aria-hidden className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
         {meter.limit !== null && (
           <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(pct, meter.used > 0 ? 2 : 0)}%` }} />
         )}

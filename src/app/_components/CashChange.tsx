@@ -52,15 +52,14 @@ export function CashChange({ total, className = "mt-3" }: Readonly<{ total: numb
         ))}
       </div>
       {hasValue && (
-        <p
-          role="status"
+        <output
           className={`mt-2 flex items-baseline justify-between text-sm font-medium ${
             change >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-400"
           }`}
         >
           <span>{change >= 0 ? "Cambio a devolver" : "Faltan"}</span>
           <span className="text-xl font-bold tabular-nums">{formatCOP(Math.abs(change))}</span>
-        </p>
+        </output>
       )}
     </div>
   );

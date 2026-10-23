@@ -24,7 +24,6 @@ async function stockOf(productId: string) {
   return (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
 }
 
-// Efectivo en la caja (no hay ventas en estas pruebas): fondo + entradas - salidas.
 async function balanceOf() {
   const movements = await db.cashMovement.findMany({ select: { type: true, amount: true } });
   return movements.reduce((s, m) => s + (m.type === "EXPENSE" ? -m.amount : m.amount), 0);
@@ -87,7 +86,6 @@ describe("compras", () => {
     expect(retry.id).toBe(result.id);
     expect(result).toMatchObject({ total: 33800, balance: 0, message: "Compra registrada y pagada." });
     expect(await stockOf(papas.id)).toBe(26);
-    // Monto libre no lleva unidades en el inventario.
     expect(await stockOf(libre.id)).toBe(0);
     await expect(db.product.findUniqueOrThrow({ where: { id: papas.id } })).resolves.toMatchObject({ cost: 1200 });
     expect(await balanceOf()).toBe(100000 - 33800);
@@ -111,7 +109,6 @@ describe("compras", () => {
     });
 
     expect(purchase.balance).toBe(30000);
-    // La transferencia no sale de la caja.
     expect(await balanceOf()).toBe(100000);
     await expect(caller.purchase.payablesSummary()).resolves.toMatchObject({ total: 30000, count: 1 });
     await expect(caller.supplier.list()).resolves.toMatchObject([{ balance: 30000, purchaseCount: 1 }]);
@@ -143,7 +140,6 @@ describe("compras", () => {
     ).rejects.toThrow("El pago no puede ser mayor al total");
     await expect(caller.purchase.create({ items: [], amount: 150000, paidNow: 150000 })).rejects.toThrow("La salida es mayor al efectivo");
 
-    // Nada quedó a medias.
     await expect(db.purchase.count()).resolves.toBe(0);
     expect(await stockOf(product.id)).toBe(10);
   });

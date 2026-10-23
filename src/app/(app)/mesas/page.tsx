@@ -71,8 +71,7 @@ export default async function MesasPage() {
           ) : (
             <>
               {!activeRegister && (
-                <div
-                  role="status"
+                <output
                   className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-200"
                 >
                   <p>
@@ -85,7 +84,7 @@ export default async function MesasPage() {
                   >
                     Ir a caja y abrir
                   </Link>
-                </div>
+                </output>
               )}
               <MesasClient business={businessInfo} invoiceBusiness={invoiceBusiness} />
             </>

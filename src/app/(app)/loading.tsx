@@ -5,7 +5,7 @@
 export default function AppLoading() {
   return (
     <main className="min-h-[calc(100dvh-3.5rem)] bg-slate-50 dark:bg-slate-950">
-      <div role="status" aria-label="Cargando la página" className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+      <output aria-label="Cargando la página" className="block mx-auto max-w-5xl space-y-6 px-4 py-6">
         <div className="animate-pulse space-y-2">
           <div className="h-7 w-48 rounded-lg bg-slate-200 dark:bg-white/10" />
           <div className="h-4 w-72 max-w-full rounded-md bg-slate-200 dark:bg-white/10" />
@@ -17,7 +17,7 @@ export default function AppLoading() {
         </div>
         <div className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5" />
         <p className="text-sm text-slate-500 dark:text-slate-400">Cargando…</p>
-      </div>
+      </output>
     </main>
   );
 }

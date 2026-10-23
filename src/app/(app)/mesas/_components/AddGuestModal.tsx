@@ -4,13 +4,13 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
-import { useDialog } from "~/app/_components/ui/useDialog";
+import { Modal } from "~/app/_components/ui/Modal";
 
 type CustomerResult = { id: string; name: string; document: string | null; phone: string | null };
 type Props = { sessionId: string; onClose: () => void; onSuccess: () => void };
 
 export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>) {
-  const dialogRef = useDialog(onClose);
+
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerResult | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -56,159 +56,157 @@ export function AddGuestModal({ sessionId, onClose, onSuccess }: Readonly<Props>
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Agregar cliente a la mesa" className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold text-slate-800 dark:text-white">Agregar cliente a la mesa</h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <Modal onClose={onClose} overlayClassName="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" aria-label="Agregar cliente a la mesa" className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-semibold text-slate-800 dark:text-white">Agregar cliente a la mesa</h2>
+        <button
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-              Vincular a cliente registrado <span className="font-normal text-slate-500">(opcional)</span>
-            </p>
-            {selectedCustomer ? (
-              <div className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-500/30 dark:bg-violet-900/20">
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium text-violet-700 dark:text-violet-300">{selectedCustomer.name}</span>
-                  {selectedCustomer.document && (
-                    <span className="ml-2 text-xs text-violet-700 dark:text-violet-300">Doc: {selectedCustomer.document}</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={clearCustomer}
-                  aria-label="Quitar cliente"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg text-violet-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <div className="relative">
-                <input
-                  aria-label="Buscar cliente registrado"
-                  type="text"
-                  placeholder="Buscar por nombre o documento..."
-                  value={customerQuery}
-                  onChange={(e) => { setCustomerQuery(e.target.value); setSearchOpen(true); }}
-                  onFocus={() => setSearchOpen(true)}
-                  onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-                  className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
-                />
-                {searchOpen && customerQuery.length >= 1 && (
-                  <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-800">
-                    {customerResults.length > 0 ? (
-                      <ul className="max-h-40 overflow-y-auto py-1">
-                        {customerResults.map((c) => (
-                          <li key={c.id}>
-                            <button
-                              type="button"
-                              onMouseDown={(e) => { e.preventDefault(); selectCustomer(c); }}
-                              className="flex min-h-11 w-full flex-col justify-center px-3 py-2 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20"
-                            >
-                              <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{c.name}</span>
-                              {(c.document ?? c.phone) && (
-                                <span className="text-xs text-slate-500">{[c.document, c.phone].filter(Boolean).join(" · ")}</span>
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
-                        Sin resultados para &quot;{customerQuery}&quot;
-                      </p>
-                    )}
-                  </div>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Vincular a cliente registrado <span className="font-normal text-slate-500">(opcional)</span>
+          </p>
+          {selectedCustomer ? (
+            <div className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-500/30 dark:bg-violet-900/20">
+              <div className="min-w-0 flex-1">
+                <span className="text-sm font-medium text-violet-700 dark:text-violet-300">{selectedCustomer.name}</span>
+                {selectedCustomer.document && (
+                  <span className="ml-2 text-xs text-violet-700 dark:text-violet-300">Doc: {selectedCustomer.document}</span>
                 )}
               </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="h-px flex-1 bg-slate-100 dark:bg-white/10" />
-            <span className="text-xs text-slate-500 dark:text-slate-400">datos en la mesa</span>
-            <div className="h-px flex-1 bg-slate-100 dark:bg-white/10" />
-          </div>
-
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-300">
-              Nombre o seña <span className="text-slate-500">(opcional; si no, queda como Cliente N)</span>
-            </span>
-            <input
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              placeholder="Ej: Carlos, Cliente 1..."
-              className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
-            />
-          </label>
-
-          <label className="block space-y-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-300">
-              Descripción <span className="text-slate-500">(ej: señor de rojo, mesa del fondo)</span>
-            </span>
-            <input
-              value={form.description}
-              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-              placeholder="Descripción para identificar..."
-              className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
-            />
-          </label>
-
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
-            <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-              Datos opcionales — si agrega cédula se guardará en el sistema de clientes
-            </p>
-            <div className="space-y-2">
-              <input
-                aria-label="Cédula o documento"
-                value={form.document}
-                onChange={(e) => setForm((p) => ({ ...p, document: e.target.value }))}
-                placeholder="Cédula / documento"
-                className="w-full rounded-lg border border-slate-200 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              />
-              <input
-                aria-label="Teléfono"
-                value={form.phone}
-                type="tel"
-                onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
-                placeholder="Teléfono"
-                className="w-full rounded-lg border border-slate-200 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              />
+              <button
+                type="button"
+                onClick={clearCustomer}
+                aria-label="Quitar cliente"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg text-violet-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+              >
+                ×
+              </button>
             </div>
-          </div>
-
-          {addGuest.error && (
-            <p className="text-xs text-red-500">{addGuest.error.message}</p>
+          ) : (
+            <div className="relative">
+              <input
+                aria-label="Buscar cliente registrado"
+                type="text"
+                placeholder="Buscar por nombre o documento..."
+                value={customerQuery}
+                onChange={(e) => { setCustomerQuery(e.target.value); setSearchOpen(true); }}
+                onFocus={() => setSearchOpen(true)}
+                onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+              />
+              {searchOpen && customerQuery.length >= 1 && (
+                <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-800">
+                  {customerResults.length > 0 ? (
+                    <ul className="max-h-40 overflow-y-auto py-1">
+                      {customerResults.map((c) => (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); selectCustomer(c); }}
+                            className="flex min-h-11 w-full flex-col justify-center px-3 py-2 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                          >
+                            <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{c.name}</span>
+                            {(c.document ?? c.phone) && (
+                              <span className="text-xs text-slate-500">{[c.document, c.phone].filter(Boolean).join(" · ")}</span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
+                      Sin resultados para &quot;{customerQuery}&quot;
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
+        </div>
 
-          <div className="flex gap-2 pt-1">
-            <button
-              type="submit"
-              disabled={addGuest.isPending}
-              aria-busy={addGuest.isPending}
-              className="min-h-11 flex-1 rounded-xl bg-violet-600 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
-            >
-              {addGuest.isPending ? "Agregando..." : "Agregar cliente"}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400"
-            >
-              Cancelar
-            </button>
+        <div className="flex items-center gap-2">
+          <div className="h-px flex-1 bg-slate-100 dark:bg-white/10" />
+          <span className="text-xs text-slate-500 dark:text-slate-400">datos en la mesa</span>
+          <div className="h-px flex-1 bg-slate-100 dark:bg-white/10" />
+        </div>
+
+        <label className="block space-y-1 text-sm">
+          <span className="text-slate-600 dark:text-slate-300">
+            Nombre o seña <span className="text-slate-500">(opcional; si no, queda como Cliente N)</span>
+          </span>
+          <input
+            value={form.name}
+            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+            placeholder="Ej: Carlos, Cliente 1..."
+            className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+          />
+        </label>
+
+        <label className="block space-y-1 text-sm">
+          <span className="text-slate-600 dark:text-slate-300">
+            Descripción <span className="text-slate-500">(ej: señor de rojo, mesa del fondo)</span>
+          </span>
+          <input
+            value={form.description}
+            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+            placeholder="Descripción para identificar..."
+            className="w-full rounded-xl border border-slate-300 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+          />
+        </label>
+
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
+          <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Datos opcionales — si agrega cédula se guardará en el sistema de clientes
+          </p>
+          <div className="space-y-2">
+            <input
+              aria-label="Cédula o documento"
+              value={form.document}
+              onChange={(e) => setForm((p) => ({ ...p, document: e.target.value }))}
+              placeholder="Cédula / documento"
+              className="w-full rounded-lg border border-slate-200 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+            />
+            <input
+              aria-label="Teléfono"
+              value={form.phone}
+              type="tel"
+              onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+              placeholder="Teléfono"
+              className="w-full rounded-lg border border-slate-200 bg-white min-h-11 px-3 text-base outline-none sm:text-sm ring-violet-400 focus:ring-2 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+            />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        {addGuest.error && (
+          <p className="text-xs text-red-500">{addGuest.error.message}</p>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={addGuest.isPending}
+            aria-busy={addGuest.isPending}
+            className="min-h-11 flex-1 rounded-xl bg-violet-600 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
+          >
+            {addGuest.isPending ? "Agregando..." : "Agregar cliente"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

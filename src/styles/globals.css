@@ -87,6 +87,20 @@
   outline-offset: 2px;
 }
 
+/* <dialog open> sin showModal() (ver Modal.tsx): el navegador le pone posición absoluta, ancho
+   ajustado, fondo y color propios; aquí vuelve a comportarse como un div y las clases mandan. */
+@layer base {
+  dialog[open]:not(:modal) {
+    position: static;
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    background-color: transparent;
+    color: inherit;
+  }
+}
+
 /* ── Estado "presionado": todo botón se hunde un poco al tocarlo, para que se note que
    el toque llegó aunque la acción no se vea de inmediato. Usa `scale` (no `transform`)
    para no pisar los translate-* de Tailwind 4; :where() deja que una clase propia mande. ── */

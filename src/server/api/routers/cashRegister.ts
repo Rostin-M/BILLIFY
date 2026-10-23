@@ -314,11 +314,6 @@ async function getRegisterActivity(
   return { voidedSales, creditSales, payments };
 }
 
-/**
- * Registra una entrada o salida en la caja del usuario (su caja abierta; el dueño, si no tiene
- * la suya, la abierta del negocio), con la caja bloqueada para validar el saldo de las salidas.
- * La usan los movimientos manuales y los pagos en efectivo a proveedores.
- */
 export async function recordCashMovement(
   tx: Prisma.TransactionClient,
   params: {
@@ -576,7 +571,6 @@ export const cashRegisterRouter = createTRPCRouter({
           .min(3, "La descripción es obligatoria (mín. 3 caracteres)")
           .max(500, "La descripción es demasiado larga (máx. 500 caracteres)"),
         note: z.string().trim().max(500, "La nota es demasiado larga (máx. 500 caracteres)").optional(),
-        // Salidas: proveedor al que se le pagó, para su historial.
         supplierId: z.string().min(1).max(64).optional(),
         idempotencyKey: idempotencyKeySchema,
       }),

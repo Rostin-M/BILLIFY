@@ -165,6 +165,90 @@ function CashCountSection({
   );
 }
 
+function CashSummarySection({ register }: Readonly<{ register: RegisterForPdf }>) {
+  return (
+    <>
+    <Text style={s.sectionTitle}>Resumen de caja</Text>
+
+    <View style={s.row}>
+      <Text style={s.label}>Fondo inicial</Text>
+      <Text style={s.value}>{formatCOP(register.openingBalance)}</Text>
+    </View>
+    <View style={s.row}>
+      <Text style={s.label}>
+        Ventas en efectivo ({register.cashSalesCount}{" "}
+        {register.cashSalesCount === 1 ? "venta" : "ventas"})
+      </Text>
+      <Text style={s.valueGreen}>+{formatCOP(register.cashSalesTotal)}</Text>
+    </View>
+    {(register.cashPaymentsCount ?? 0) > 0 ? (
+      <View style={s.row}>
+        <Text style={s.label}>
+          Abonos de fiado en efectivo ({register.cashPaymentsCount}{" "}
+          {register.cashPaymentsCount === 1 ? "abono" : "abonos"})
+        </Text>
+        <Text style={s.valueGreen}>+{formatCOP(register.cashPaymentsTotal ?? 0)}</Text>
+      </View>
+    ) : null}
+    {register.manualIncome > 0 ? (
+      <View style={s.row}>
+        <Text style={s.label}>Entradas manuales</Text>
+        <Text style={s.valueGreen}>+{formatCOP(register.manualIncome)}</Text>
+      </View>
+    ) : null}
+    {register.manualExpense > 0 ? (
+      <View style={s.row}>
+        <Text style={s.label}>Salidas manuales</Text>
+        <Text style={s.valueRed}>−{formatCOP(register.manualExpense)}</Text>
+      </View>
+    ) : null}
+
+    <View style={s.grandRow}>
+      <Text style={s.grandLabel}>{register.countedCash == null ? "Total en caja" : "Esperado en caja"}</Text>
+      <Text style={s.grandValue}>{formatCOP(register.totalBalance)}</Text>
+    </View>
+
+    {register.countedCash == null ? null : (
+      <CashCountSection
+        counted={register.countedCash}
+        expected={register.closingBalance ?? register.totalBalance}
+        breakdown={register.countedBreakdown}
+      />
+    )}
+    </>
+  );
+}
+
+function ManualMovementsSection({ movements }: Readonly<{ movements: RegisterForPdf["movements"] }>) {
+  if (movements.length === 0) return null;
+  return (
+    <>
+      <View style={[s.divider, { marginTop: 20 }]} />
+      <Text style={s.sectionTitle}>Movimientos manuales</Text>
+      <View style={s.movHeader}>
+        <Text style={[s.movTime, s.movThText]}>Hora</Text>
+        <Text style={[s.movType, s.movThText]}>Tipo</Text>
+        <Text style={[s.movDesc, s.movThText]}>Descripción</Text>
+        <Text style={[s.movAmount, s.movThText]}>Monto</Text>
+      </View>
+      {movements.map((m) => (
+        <View key={m.id} style={s.movRow}>
+          <Text style={s.movTime}>{formatTime(m.createdAt)}</Text>
+          <Text style={[s.movType, { color: m.type === "EXPENSE" ? "#dc2626" : "#059669" }]}>
+            {MOV_LABELS[m.type] ?? m.type}
+          </Text>
+          <Text style={s.movDesc}>{m.description}</Text>
+          <Text style={[s.movAmount, { color: m.type === "EXPENSE" ? "#dc2626" : "#059669" }]}>
+            {m.type === "EXPENSE" ? "−" : "+"}
+            {formatCOP(m.amount)}
+          </Text>
+        </View>
+      ))}
+    </>
+  
+  );
+}
+
 export function CierreCajaPDF({
   business,
   register,
@@ -202,53 +286,7 @@ export function CierreCajaPDF({
 
         <View style={s.divider} />
 
-        <Text style={s.sectionTitle}>Resumen de caja</Text>
-
-        <View style={s.row}>
-          <Text style={s.label}>Fondo inicial</Text>
-          <Text style={s.value}>{formatCOP(register.openingBalance)}</Text>
-        </View>
-        <View style={s.row}>
-          <Text style={s.label}>
-            Ventas en efectivo ({register.cashSalesCount}{" "}
-            {register.cashSalesCount === 1 ? "venta" : "ventas"})
-          </Text>
-          <Text style={s.valueGreen}>+{formatCOP(register.cashSalesTotal)}</Text>
-        </View>
-        {(register.cashPaymentsCount ?? 0) > 0 ? (
-          <View style={s.row}>
-            <Text style={s.label}>
-              Abonos de fiado en efectivo ({register.cashPaymentsCount}{" "}
-              {register.cashPaymentsCount === 1 ? "abono" : "abonos"})
-            </Text>
-            <Text style={s.valueGreen}>+{formatCOP(register.cashPaymentsTotal ?? 0)}</Text>
-          </View>
-        ) : null}
-        {register.manualIncome > 0 ? (
-          <View style={s.row}>
-            <Text style={s.label}>Entradas manuales</Text>
-            <Text style={s.valueGreen}>+{formatCOP(register.manualIncome)}</Text>
-          </View>
-        ) : null}
-        {register.manualExpense > 0 ? (
-          <View style={s.row}>
-            <Text style={s.label}>Salidas manuales</Text>
-            <Text style={s.valueRed}>−{formatCOP(register.manualExpense)}</Text>
-          </View>
-        ) : null}
-
-        <View style={s.grandRow}>
-          <Text style={s.grandLabel}>{register.countedCash == null ? "Total en caja" : "Esperado en caja"}</Text>
-          <Text style={s.grandValue}>{formatCOP(register.totalBalance)}</Text>
-        </View>
-
-        {register.countedCash == null ? null : (
-          <CashCountSection
-            counted={register.countedCash}
-            expected={register.closingBalance ?? register.totalBalance}
-            breakdown={register.countedBreakdown}
-          />
-        )}
+        <CashSummarySection register={register} />
 
         {register.nonCashSales.length > 0 ? (
           <>
@@ -266,31 +304,7 @@ export function CierreCajaPDF({
           </>
         ) : null}
 
-        {manualMovements.length > 0 ? (
-          <>
-            <View style={[s.divider, { marginTop: 20 }]} />
-            <Text style={s.sectionTitle}>Movimientos manuales</Text>
-            <View style={s.movHeader}>
-              <Text style={[s.movTime, s.movThText]}>Hora</Text>
-              <Text style={[s.movType, s.movThText]}>Tipo</Text>
-              <Text style={[s.movDesc, s.movThText]}>Descripción</Text>
-              <Text style={[s.movAmount, s.movThText]}>Monto</Text>
-            </View>
-            {manualMovements.map((m) => (
-              <View key={m.id} style={s.movRow}>
-                <Text style={s.movTime}>{formatTime(m.createdAt)}</Text>
-                <Text style={[s.movType, { color: m.type === "EXPENSE" ? "#dc2626" : "#059669" }]}>
-                  {MOV_LABELS[m.type] ?? m.type}
-                </Text>
-                <Text style={s.movDesc}>{m.description}</Text>
-                <Text style={[s.movAmount, { color: m.type === "EXPENSE" ? "#dc2626" : "#059669" }]}>
-                  {m.type === "EXPENSE" ? "−" : "+"}
-                  {formatCOP(m.amount)}
-                </Text>
-              </View>
-            ))}
-          </>
-        ) : null}
+        <ManualMovementsSection movements={manualMovements} />
 
         {(register.voidedSales?.length ?? 0) > 0 ? (
           <>

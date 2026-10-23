@@ -12,9 +12,9 @@ export function ActivityBar() {
   return (
     <>
       {saving && <div className="activity-bar" aria-hidden="true" />}
-      <span role="status" className="sr-only">
+      <output className="sr-only">
         {saving ? "Guardando…" : ""}
-      </span>
+      </output>
     </>
   );
 }

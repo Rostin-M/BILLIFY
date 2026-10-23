@@ -166,9 +166,8 @@ export function RevokeGrantDialog({
             onChange={(e) => setNotifyOwner(e.target.checked)}
             className="mt-0.5 h-4 w-4 shrink-0 rounded accent-blue-700"
           />
-          <span className="min-w-0 text-sm">
-            <span className="block font-semibold text-slate-900 dark:text-white">Avisar al dueño por correo</span>
-            <span className={`block break-words text-xs ${mutedText}`}>
+          <span className="min-w-0 text-sm font-semibold text-slate-900 dark:text-white">
+            Avisar al dueño por correo<span className={`block break-words text-xs font-normal ${mutedText}`}>
               {ownerEmail
                 ? `Si la marcas, se le avisa a ${ownerEmail}. Si no, no se le envía nada.`
                 : "No se puede: este negocio no tiene un dueño activo con correo."}

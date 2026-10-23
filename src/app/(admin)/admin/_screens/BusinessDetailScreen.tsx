@@ -27,7 +27,7 @@ function BackLink() {
 
 function DetailSkeleton() {
   return (
-    <div role="status" aria-label="Cargando el negocio" className="animate-pulse motion-reduce:animate-none">
+    <output aria-label="Cargando el negocio" className="block animate-pulse motion-reduce:animate-none">
       <div className="h-8 w-2/3 max-w-md rounded-md bg-slate-200 dark:bg-white/10" />
       <div className="mt-2 h-4 w-48 rounded-md bg-slate-200 dark:bg-white/10" />
       <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -40,7 +40,7 @@ function DetailSkeleton() {
           <div className={`${cardClass} h-48`} />
         </div>
       </div>
-    </div>
+    </output>
   );
 }
 

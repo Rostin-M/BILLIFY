@@ -8,14 +8,13 @@ import { AlertTriangle, CreditCard, KeyRound, Loader2, LogOut } from "lucide-rea
 import { pendingSalesBeforeSignOut, signOutAndClear } from "~/lib/clientSignOut";
 import { api } from "~/trpc/react";
 import { NewPasswordFields, newPasswordReady } from "~/app/_components/NewPasswordFields";
-import { useDialog } from "~/app/_components/ui/useDialog";
+import { Modal } from "~/app/_components/ui/Modal";
 
 type Props = { name: string | null; role: string };
 
 export function UserMenu({ name, role }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const dialogRef = useDialog(closeModal, showModal);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -201,80 +200,78 @@ export function UserMenu({ name, role }: Readonly<Props>) {
 
       {/* Modal cambio de contraseña — portal para evitar el containing block del backdrop-blur del header */}
       {showModal && createPortal(
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
-          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="change-password-title" className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-            <h2 id="change-password-title" className="mb-1 text-lg font-bold text-slate-800 dark:text-white">
-              Cambiar contraseña
-            </h2>
-            <p className="mb-5 text-sm text-slate-500 dark:text-slate-400">
-              Elige una contraseña nueva segura para tu cuenta.
-            </p>
+        <Modal onClose={closeModal} overlayClassName="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" aria-labelledby="change-password-title" className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+          <h2 id="change-password-title" className="mb-1 text-lg font-bold text-slate-800 dark:text-white">
+            Cambiar contraseña
+          </h2>
+          <p className="mb-5 text-sm text-slate-500 dark:text-slate-400">
+            Elige una contraseña nueva segura para tu cuenta.
+          </p>
 
-            {success ? (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center dark:border-emerald-500/30 dark:bg-emerald-900/20">
-                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                    Contraseña actualizada correctamente.
-                  </p>
-                </div>
+          {success ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center dark:border-emerald-500/30 dark:bg-emerald-900/20">
+                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                  Contraseña actualizada correctamente.
+                </p>
+              </div>
+              <button
+                onClick={closeModal}
+                className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+              >
+                Listo
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <label className="block space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-300">Contraseña actual</span>
+                <input
+                  type="password"
+                  required
+                  value={current}
+                  onChange={(e) => setCurrent(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+                />
+              </label>
+
+              <NewPasswordFields
+                label="Nueva contraseña"
+                confirmLabel="Confirmar nueva contraseña"
+                password={next}
+                onPasswordChange={setNext}
+                confirm={confirm}
+                onConfirmChange={setConfirm}
+                inputClassName="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
+                labelClassName="font-medium text-slate-700 dark:text-slate-300"
+              />
+
+              {changePassword.error && (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-400">
+                  {changePassword.error.message}
+                </p>
+              )}
+
+              <div className="flex gap-2 pt-1">
                 <button
-                  onClick={closeModal}
-                  className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+                  type="submit"
+                  disabled={!ready || changePassword.isPending}
+                  aria-busy={changePassword.isPending}
+                  className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
                 >
-                  Listo
+                  {changePassword.isPending ? "Actualizando..." : "Actualizar contraseña"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+                >
+                  Cancelar
                 </button>
               </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <label className="block space-y-1 text-sm">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Contraseña actual</span>
-                  <input
-                    type="password"
-                    required
-                    value={current}
-                    onChange={(e) => setCurrent(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
-                  />
-                </label>
-
-                <NewPasswordFields
-                  label="Nueva contraseña"
-                  confirmLabel="Confirmar nueva contraseña"
-                  password={next}
-                  onPasswordChange={setNext}
-                  confirm={confirm}
-                  onConfirmChange={setConfirm}
-                  inputClassName="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-violet-400 transition focus:ring-2 dark:border-white/15 dark:bg-slate-800 dark:text-white"
-                  labelClassName="font-medium text-slate-700 dark:text-slate-300"
-                />
-
-                {changePassword.error && (
-                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-400">
-                    {changePassword.error.message}
-                  </p>
-                )}
-
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="submit"
-                    disabled={!ready || changePassword.isPending}
-                    aria-busy={changePassword.isPending}
-                    className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
-                  >
-                    {changePassword.isPending ? "Actualizando..." : "Actualizar contraseña"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>,
+            </form>
+          )}
+        </Modal>,
         document.body
       )}
     </>

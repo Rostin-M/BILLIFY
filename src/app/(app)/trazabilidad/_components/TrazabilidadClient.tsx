@@ -25,7 +25,6 @@ const ACTION_META: Record<string, { label: string; color: string }> = {
 
 type Fmt = (v: unknown) => string;
 
-// Compras, pagos a proveedores, rondas de mesa y acuerdos de fiado (null = otra acción).
 function comprasYMesasSummary(action: string, d: Record<string, unknown>, cop: Fmt, str: Fmt): string | null {
   switch (action) {
     case "CREATE_PURCHASE": {

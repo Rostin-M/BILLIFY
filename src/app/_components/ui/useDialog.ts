@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -14,18 +14,19 @@ const stack: HTMLElement[] = [];
  * mueve el foco al diálogo y lo mantiene dentro (Tab / Shift+Tab), bloquea el
  * scroll del fondo y, al cerrar, devuelve el foco a lo que lo abrió.
  *
- * Uso: `const ref = useDialog(onClose)` y `<div ref={ref} role="dialog" aria-modal="true">`.
+ * Se usa a través de `<Modal>`.
  */
-export function useDialog<T extends HTMLElement = HTMLDivElement>(onClose: () => void, enabled = true) {
+export function useDialog<T extends HTMLElement = HTMLDivElement>(onClose: () => void) {
   const ref = useRef<T>(null);
+  // Se toma al renderizar: cuando corre el efecto, un autoFocus del diálogo ya movió el foco.
+  const [opener] = useState(() => (typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null)));
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
     const el = ref.current;
-    if (!enabled || !el) return;
+    if (!el) return;
 
-    const previous = document.activeElement as HTMLElement | null;
     stack.push(el);
 
     // Respeta el autoFocus de un campo; si no hay, enfoca el primer control o el diálogo.
@@ -68,9 +69,9 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(onClose: () =>
       const i = stack.lastIndexOf(el);
       if (i >= 0) stack.splice(i, 1);
       if (stack.length === 0) document.body.style.overflow = prevOverflow;
-      if (previous?.isConnected) previous.focus();
+      if (opener?.isConnected) opener.focus();
     };
-  }, [enabled]);
+  }, [opener]);
 
   return ref;
 }

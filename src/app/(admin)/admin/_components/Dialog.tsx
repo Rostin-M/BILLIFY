@@ -36,15 +36,25 @@ export function Dialog({
 }>) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (!el.open) el.showModal();
+    // Clic en el fondo oscuro (el propio <dialog>, fuera del contenido). Con teclado se cierra con Escape.
+    const onBackdropClick = (e: MouseEvent) => {
+      if (e.target === el && !busyRef.current) onCloseRef.current();
+    };
+    el.addEventListener("click", onBackdropClick);
     const root = document.documentElement;
     const previousOverflow = root.style.overflow;
     root.style.overflow = "hidden";
     return () => {
+      el.removeEventListener("click", onBackdropClick);
       root.style.overflow = previousOverflow;
       if (el.open) el.close();
     };
@@ -63,10 +73,6 @@ export function Dialog({
         // Escape: se cierra por estado de React, no por el navegador.
         e.preventDefault();
         if (!busy) onClose();
-      }}
-      onClick={(e) => {
-        // Clic en el fondo oscuro (el propio <dialog>, fuera del contenido).
-        if (e.target === e.currentTarget && !busy) onClose();
       }}
       className={`${shape} overflow-hidden border-slate-200 bg-white p-0 text-slate-900 shadow-2xl dark:border-white/10 dark:bg-[#0b1230] dark:text-slate-100`}
     >

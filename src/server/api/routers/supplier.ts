@@ -16,7 +16,6 @@ const orNull = (value: string | undefined) => (value?.length ? value : null);
 type SupplierStats = { supplierId: string; purchaseCount: number; lastPurchaseAt: Date | null; balance: number };
 
 export const supplierRouter = createTRPCRouter({
-  // Proveedores activos con lo que se les debe y su última compra (los de saldo pendiente primero).
   list: businessProcedure.query(async ({ ctx }) => {
     const { businessId } = ctx.session.user;
 
@@ -52,7 +51,6 @@ export const supplierRouter = createTRPCRouter({
     });
   }),
 
-  // Ambos roles: el cajero recibe los pedidos y puede crear al proveedor al vuelo.
   create: businessProcedure.input(supplierSchema).mutation(async ({ ctx, input }) => {
     const { businessId, id: userId } = ctx.session.user;
 
@@ -110,7 +108,6 @@ export const supplierRouter = createTRPCRouter({
       return { message: "Proveedor actualizado." };
     }),
 
-  // Archivar: deja de salir en las listas, su historial se conserva.
   setActive: ownerProcedure
     .input(z.object({ id: z.string().min(1).max(64), isActive: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
@@ -123,7 +120,6 @@ export const supplierRouter = createTRPCRouter({
       return { message: input.isActive ? "Proveedor reactivado." : "Proveedor archivado." };
     }),
 
-  // Compras y salidas de caja a un proveedor, de la más reciente a la más antigua.
   history: businessProcedure
     .input(z.object({ supplierId: z.string().min(1).max(64) }))
     .query(async ({ ctx, input }) => {
@@ -146,7 +142,6 @@ export const supplierRouter = createTRPCRouter({
           orderBy: { createdAt: "desc" },
           take: 50,
         }),
-        // Salidas de caja sueltas (no son el pago de una compra registrada).
         ctx.db.cashMovement.findMany({
           where: { businessId, supplierId: supplier.id, supplierPayment: null },
           select: { id: true, amount: true, description: true, note: true, createdAt: true, user: { select: { name: true } } },

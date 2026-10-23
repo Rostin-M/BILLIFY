@@ -133,9 +133,9 @@ export function MesasClient({ business, invoiceBusiness }: Readonly<Props>) {
       )}
 
       {refreshFailed && (
-        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-200">
+        <output className="block rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-200">
           No se pudieron actualizar las mesas. Revisa la conexión; se reintentará solo.
-        </p>
+        </output>
       )}
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">

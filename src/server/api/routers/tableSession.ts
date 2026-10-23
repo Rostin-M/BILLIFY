@@ -136,7 +136,6 @@ function aggregateGroupOrders(group: CheckoutGroupInput, guestMap: Map<string, C
   return { itemsMap, groupSubtotal, taxLines, groupTaxAmount, groupTotal: groupSubtotal + groupTaxAmount };
 }
 
-// Un grupo fiado no puede pasar el monto máximo del cliente ni fiarse sin el acuerdo firmado (si se exige).
 async function assertGroupCreditAllowed(
   tx: Prisma.TransactionClient,
   businessId: string,
@@ -312,7 +311,6 @@ type EditedLine = {
   productId: string; name: string; unit: string; price: number; quantity: number; taxSlots: number[]; stockDeducted: number;
 };
 
-// Una línea que sigue en la ronda: ajusta el stock por la diferencia de cantidad.
 async function keepOrderLine(
   tx: Prisma.TransactionClient,
   ctx: { businessId: string; userId: string; note: string },
@@ -336,10 +334,6 @@ async function keepOrderLine(
   return { productId: item.productId, name: item.name, unit: item.unit, price: item.price, quantity, taxSlots: item.product.taxSlots, stockDeducted: newDeducted };
 }
 
-/**
- * Líneas finales de una ronda editada: las que siguen (con su precio original), las nuevas
- * (al precio actual) y el stock ajustado — lo quitado vuelve, lo agregado se descuenta.
- */
 async function rebuildOrderLines(
   tx: Prisma.TransactionClient,
   params: {
@@ -441,7 +435,6 @@ export const tableSessionRouter = createTRPCRouter({
   create: businessProcedure
     .input(z.object({
       name: z.string().trim().min(1, "El nombre de la mesa es obligatorio").max(120),
-      // Cada comensal: un nombre suelto, o un cliente ya guardado (customerId) para llevar su historial.
       guests: z.array(z.union([
         z.string().trim().max(120),
         z.object({ name: z.string().trim().max(120), customerId: z.string().min(1).max(64).optional() }),
@@ -555,8 +548,7 @@ export const tableSessionRouter = createTRPCRouter({
     .input(z.object({
       guestId: z.string().min(1).max(64),
       name: z.string().trim().min(1, "El nombre no puede estar vacío").max(120),
-      // Con customerId se identifica al comensal con un cliente guardado; null lo desvincula;
-      // sin el campo, el vínculo no cambia.
+      // null desvincula al cliente guardado; sin el campo no cambia.
       customerId: z.string().min(1).max(64).nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -737,10 +729,7 @@ export const tableSessionRouter = createTRPCRouter({
       return { message: `Pedido movido a ${toGuest.name}.` };
     }),
 
-  // Edit a round (the guest changed their mind): `keep` lists the lines that stay with their
-  // new quantity (lines not listed are removed) and `add` the new products. The stock is
-  // adjusted only by the difference. The request describes the final state, so a retry
-  // does not apply the change twice.
+  // Edit a round: `keep` = lines that stay (new quantity), `add` = new products; stock moves by the difference
   updateOrder: businessProcedure
     .input(z.object({
       orderId: z.string().min(1).max(64),

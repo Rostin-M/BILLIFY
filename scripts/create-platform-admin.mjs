@@ -22,7 +22,6 @@ const BCRYPT_COST = 12;
 const MIN_PASSWORD_LENGTH = 14;
 // bcrypt ignora lo que pase de 72 bytes; el login acepta máximo 128 caracteres.
 const MAX_PASSWORD_BYTES = 72;
-// Misma regla que isSimpleEmail (src/lib/simpleEmail.ts): sin regex con cuantificadores encadenados.
 function isSimpleEmail(value) {
   const at = value.indexOf("@");
   if (at <= 0 || at !== value.lastIndexOf("@") || /\s/.test(value)) return false;
@@ -75,6 +74,22 @@ function passwordProblem(password, email) {
 
 // ─── Entrada ──────────────────────────────────────────────────────────────────
 
+/** Aplica una tecla a lo escrito; devuelve "enter", "abort" (Ctrl+C) o null. */
+function typeKey(typed, char, hidden) {
+  if (char === "\r" || char === "\n") return "enter";
+  if (char === "\u0003") return "abort";
+  if (char === "\u007f" || char === "\b") {
+    if (typed.value.length > 0) {
+      typed.value = typed.value.slice(0, -1);
+      if (!hidden) process.stdout.write("\b \b");
+    }
+    return null;
+  }
+  typed.value += char;
+  if (!hidden) process.stdout.write(char);
+  return null;
+}
+
 /** Lee una línea de la terminal; con `hidden` no se muestra lo que se escribe. */
 function ask(question, { hidden = false } = {}) {
   return new Promise((resolve) => {
@@ -83,32 +98,23 @@ function ask(question, { hidden = false } = {}) {
     stdin.setRawMode(true);
     stdin.resume();
     stdin.setEncoding("utf8");
-    let value = "";
+    const typed = { value: "" };
     const onData = (chunk) => {
       for (const char of chunk) {
-        if (char === "\r" || char === "\n") {
-          stdin.setRawMode(false);
-          stdin.pause();
-          stdin.off("data", onData);
-          stdout.write("\n");
-          resolve(value);
-          return;
-        }
-        if (char === "\u0003") {
-          // Ctrl+C
+        const key = typeKey(typed, char, hidden);
+        if (key === "abort") {
           stdin.setRawMode(false);
           stdout.write("\n");
           process.exit(130);
         }
-        if (char === "\u007f" || char === "\b") {
-          if (value.length > 0) {
-            value = value.slice(0, -1);
-            if (!hidden) stdout.write("\b \b");
-          }
-          continue;
+        if (key === "enter") {
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.off("data", onData);
+          stdout.write("\n");
+          resolve(typed.value);
+          return;
         }
-        value += char;
-        if (!hidden) stdout.write(char);
       }
     };
     stdin.on("data", onData);
@@ -146,7 +152,8 @@ function databaseTarget() {
   if (!raw) fail("DATABASE_URL no está definida.");
   try {
     const url = new URL(raw);
-    return `${url.hostname}${url.port ? `:${url.port}` : ""}${url.pathname}`;
+    const port = url.port ? ":" + url.port : "";
+    return `${url.hostname}${port}${url.pathname}`;
   } catch {
     return fail("DATABASE_URL no es una URL válida.");
   }

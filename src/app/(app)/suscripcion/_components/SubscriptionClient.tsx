@@ -12,7 +12,7 @@ export function SubscriptionClient() {
   const { data: status, isPending } = api.billing.status.useQuery();
 
   if (isPending) {
-    return <p role="status" className="text-sm text-slate-500 dark:text-slate-400">Cargando tu plan…</p>;
+    return <output className="block text-sm text-slate-500 dark:text-slate-400">Cargando tu plan…</output>;
   }
   if (!status) {
     return (

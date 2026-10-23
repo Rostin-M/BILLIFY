@@ -4,20 +4,17 @@ import { Eraser } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 type Props = {
-  /** PNG en data URL con la firma, o null si está vacía. */
   onChange: (dataUrl: string | null) => void;
 };
 
 const HEIGHT = 180;
 
-/** Recuadro para firmar con el dedo, el lápiz o el mouse. */
 export function SignaturePad({ onChange }: Readonly<Props>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
   const [empty, setEmpty] = useState(true);
 
-  // Tamaño real según el ancho disponible y la densidad de la pantalla (trazo nítido).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;

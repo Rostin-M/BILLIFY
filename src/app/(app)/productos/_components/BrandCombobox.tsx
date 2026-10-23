@@ -92,40 +92,36 @@ export function BrandCombobox({
         placeholder="Ej: Diana"
       />
       {showList && (
-        <ul
-          id={listId}
-          role="listbox"
-          aria-label="Marcas guardadas"
-          className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-white/10 dark:bg-slate-900"
-        >
-          {matches.map((brand, i) => {
-            const selected = exact === brand;
-            return (
-              <li
-                key={brand}
-                id={`${listId}-${i}`}
-                role="option"
-                aria-selected={i === highlighted}
-                // mousedown + preventDefault: el clic llega antes de que el campo pierda el foco.
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  choose(brand);
-                }}
-                onMouseEnter={() => setHighlighted(i)}
-                className={`flex min-h-10 cursor-pointer items-center justify-between gap-2 px-3 ${
-                  i === highlighted
-                    ? "bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-200"
-                    : "text-slate-700 dark:text-slate-200"
-                }`}
-              >
-                <span className="truncate">{brand}</span>
-                {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-300" />}
-              </li>
-            );
-          })}
+        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-white/10 dark:bg-slate-900">
+          <ul id={listId} role="listbox" aria-label="Marcas guardadas">
+            {matches.map((brand, i) => {
+              const selected = exact === brand;
+              return (
+                <li
+                  key={brand}
+                  id={`${listId}-${i}`}
+                  role="option"
+                  aria-selected={i === highlighted}
+                  // mousedown + preventDefault: el clic llega antes de que el campo pierda el foco.
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    choose(brand);
+                  }}
+                  onMouseEnter={() => setHighlighted(i)}
+                  className={`flex min-h-10 cursor-pointer items-center justify-between gap-2 px-3 ${
+                    i === highlighted
+                      ? "bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-200"
+                      : "text-slate-700 dark:text-slate-200"
+                  }`}
+                >
+                  <span className="truncate">{brand}</span>
+                  {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-300" />}
+                </li>
+              );
+            })}
+          </ul>
           {isNew && (
-            <li
-              role="presentation"
+            <p
               className={`flex items-center gap-2 px-3 py-2 text-xs text-slate-500 dark:text-slate-400 ${
                 matches.length > 0 ? "border-t border-slate-100 dark:border-white/10" : ""
               }`}
@@ -134,9 +130,9 @@ export function BrandCombobox({
               <span className="min-w-0 break-words">
                 «{value.trim()}» es nueva: se agregará a tus marcas al guardar.
               </span>
-            </li>
+            </p>
           )}
-        </ul>
+        </div>
       )}
     </div>
   );
