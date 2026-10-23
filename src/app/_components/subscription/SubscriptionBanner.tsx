@@ -107,8 +107,8 @@ export function SubscriptionBanner() {
   const Icon = banner.icon;
 
   return (
-    <div
-      role={banner.tone === "danger" || banner.tone === "warning" ? "alert" : "status"}
+    <output
+      role={banner.tone === "danger" || banner.tone === "warning" ? "alert" : undefined}
       className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-4 py-2 text-sm ${TONE_CLASSES[banner.tone]}`}
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden />
@@ -118,6 +118,6 @@ export function SubscriptionBanner() {
           {banner.cta}
         </Link>
       )}
-    </div>
+    </output>
   );
 }

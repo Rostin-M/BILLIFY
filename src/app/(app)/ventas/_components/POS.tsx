@@ -417,16 +417,16 @@ function TotalsAndPayment({
       )}
 
       {statusMessage && (
-        <div
-          role={statusMessage.type === "error" ? "alert" : "status"}
-          className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+        <output
+          role={statusMessage.type === "error" ? "alert" : undefined}
+          className={`block rounded-xl border px-4 py-3 text-sm font-medium ${
             statusMessage.type === "success"
               ? "border-green-200 bg-green-50 text-green-700 dark:border-green-500/30 dark:bg-green-900/20 dark:text-green-300"
               : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300"
           }`}
         >
           {statusMessage.text}
-        </div>
+        </output>
       )}
 
       <button
